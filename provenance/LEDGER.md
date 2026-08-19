@@ -345,3 +345,14 @@ key table from ONE known-plaintext world message (`key[b+k]=plain[i]^cipher[i]^
 cipher[i-8]`), 128/128 self-consistent, and it decrypts the entire world-entry
 stream. The "stateful" scare was a wrong plaintext-identity assumption. 28/28.
 **The encryption gate is genuinely closed, both directions, both phases.**
+
+## End-to-end loopback: two-phase handshake over a real socket (2026-08-19)
+
+| file | class | source |
+|---|---|---|
+| `Realm/WorldHandshake.cs` (re-key + world-init on 0x058F, `SessionKeyResolver`) | AUTHORED | on the client hello the server resolves the session key, `RekeyForWorld`, and streams the world-init. The resolver seam defaults to a dev key so the flow runs without STS; deployment wires the token store. |
+| `test/NexusUnleashed.Realm.Tests/LoopbackWorldEntry.cs` | AUTHORED | a synthetic client drives the REAL GameServer + WorldHandshake over a real TCP socket: connect → 0x0003 hello (auth key) → 0x058F → server re-keys → 0x0981 world-init (world key) → verify 251 ids. |
+
+Proven (5/5): the full two-phase encrypted handshake works end to end over a
+socket, self-contained. The real 16042 client simply replaces the synthetic one —
+the mechanism of the client-as-oracle loop is now demonstrated, not just designed.

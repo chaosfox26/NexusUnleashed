@@ -33,6 +33,20 @@ public static class WorldHandshake
     private const string HelloBodyHex =
         "aa3e0000010000001500000000000000000000000000000000000b14332f0100000000000000000000000000000000";
 
+    /// <summary>
+    /// Resolves the 16-byte SRP session key for the account entering the world,
+    /// from the token carried in the 0x058F client hello. The real path looks the
+    /// token up against STS-issued sessions; the default returns a fixed dev key
+    /// so the engine (and the loopback self-test) can exercise the full two-phase
+    /// re-key without STS wired. Replace in deployment with the token store.
+    /// </summary>
+    public static Func<byte[] /*helloBody*/, byte[] /*sessionKey16*/> SessionKeyResolver { get; set; }
+        = _ => DevSessionKey;
+
+    /// <summary>A deterministic 16-byte dev session key (both ends know it).</summary>
+    public static readonly byte[] DevSessionKey =
+        { 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 };
+
     public static void Register(GameServer world)
     {
         world.OnConnected = async session =>
@@ -41,25 +55,38 @@ public static class WorldHandshake
             await session.SendGameMessageAsync(ServerHello, Hex(HelloBodyHex));
         };
 
-        world.On(ClientHello, (s, body) =>
+        world.On(ClientHello, async (s, body) =>
         {
             Log.Info($"world: <- 0x058F client hello ({body.Length}B) {Preview(body)}");
-            // The client hello carries the game token from STS login. The flow:
-            //   1. read the token from this body (layout pinned from the capture),
-            //   2. look up the account + its 16-byte SRP session key by token,
-            //   3. s.RekeyForWorld(sessionKey) — switch to the WORLD cipher, so
-            //      every message after this is enciphered with the ticket key
-            //      (two-phase keying, proven against the captured world stream),
-            //   4. send the character list.
-            // Steps 1/4 are pinned as those payloads are decoded; the re-key
-            // mechanism (step 3) is in place (GameSession.RekeyForWorld).
-            return Task.CompletedTask;
+            // The client hello carries the STS game token. Resolve the session key
+            // it maps to, then RE-KEY to the WORLD cipher (two-phase keying): every
+            // message after this is enciphered with GetKeyFromTicket(sessionKey).
+            byte[] sessionKey = SessionKeyResolver(body);
+            s.RekeyForWorld(sessionKey);
+            Log.Info("world: re-keyed to the world cipher; streaming world entry.");
+            // Begin the world-entry sequence (spec/protocol/world-entry.md). First
+            // the world-init id list; the remaining blobs (0x0988/0x098B/0x0117/
+            // 0x0262) are pinned and appended as each payload is generated for the
+            // live session.
+            await s.SendGameMessageAsync(0x0981, BuildWorldInit());
         });
 
         world.On(Client07E0, (s, body) => { Log.Info($"world: <- 0x07E0 ({body.Length}B)"); return Task.CompletedTask; });
         world.On(Client038C, (s, body) => { Log.Info($"world: <- 0x038C ({body.Length}B)"); return Task.CompletedTask; });
         world.On(Client082D, (s, body) => { Log.Info($"world: <- 0x082D ({body.Length}B)"); return Task.CompletedTask; });
         world.On(ClientState, (s, body) => { Log.Info($"world: <- 0x0000 State ({body.Length}B)"); return Task.CompletedTask; });
+    }
+
+    // World-init body (WITHOUT the opcode; SendGameMessageAsync prepends it):
+    // [u32 count][count × u32 id]. The captured shape is a near-sequential set;
+    // the id domain is generated for the live session as it is pinned.
+    private static byte[] BuildWorldInit()
+    {
+        var w = new PacketWriter();
+        const uint count = 251;
+        w.WriteBits(count, 32);
+        for (uint i = 1; i <= count; i++) w.WriteBits(i, 32);
+        return w.ToArray();
     }
 
     private static byte[] Hex(string h)

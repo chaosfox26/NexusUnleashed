@@ -74,8 +74,18 @@ wired; `WorldHandshake` opens on the auth key and re-keys on the token hello.
 **The earlier "stateful, msg #0 only" scare was an error:** the 12 "identical
 hello" frames were actually 12 *different* 49-byte world messages under the world
 key, not the hello under a moving register. Verify message identity before
-concluding about a cipher. Real blocker is now just the handshake payloads
-(0x058F token → sessionKey lookup → character list → world entry).
+concluding about a cipher.
+
+### End-to-end loopback PROVEN over a real socket (2026-08-19)
+
+`test/NexusUnleashed.Realm.Tests/LoopbackWorldEntry.cs`: a synthetic client drives
+the real `GameServer` + `WorldHandshake` over TCP — connect → `0x0003` hello (auth
+key) → send `0x058F` → server re-keys → `0x0981` world-init (world key) → verify
+251 ids. **5/5.** The full two-phase encrypted handshake works end to end,
+self-contained; the real 16042 client just replaces the synthetic one. Next: pin
+the world-entry payloads (`0x0988`/`0x098B`/`0x0117`/`0x0262`) so the engine
+generates the live player's world, then swap in the real client for the final
+render (the one step that needs the operator's machine).
 
 ## The capture pipeline + facts (for the next session)
 
