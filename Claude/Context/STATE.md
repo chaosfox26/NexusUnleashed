@@ -1,5 +1,15 @@
 # NexusUnleashed Engine — State of the Build
 
+> **RESUME HERE (2026-08-19, later): read `Claude/Context/SESSION-2026-08-19-login-and-tools.md` FIRST.**
+> It has the live thread — the STS **login RE** (client hits our engine, throws
+> "Unhandled NC Platform Error 15"; next step = RE the exact `<Reply type="…">`
+> envelope + KeyData encoding from the client, no more guess-retries) — plus the
+> two baked-in laws (No-NF, Privacy, both guards green), the hardware-first tool
+> suite, the PUBLIC `github.com/chaosfox26/NU-deconstruct` DB (push everything we
+> deconstruct there), the native-Linux-client plan, and the RUNNING STATE (our
+> engine + a standalone MariaDB are UP on the standard ports; the frozen realm is
+> DOWN — operator can't play until it's restarted and our engine/DB freed).
+
 _Updated 2026-08-19 (ENCRYPTION GATE CLOSED). Read `ARCHITECTURE.md` first._
 
 ## The situation

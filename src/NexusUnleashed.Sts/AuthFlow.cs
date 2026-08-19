@@ -58,9 +58,16 @@ public static class AuthFlow
             // internal layout (salt/B delimiting) is a CANDIDATE here (length-
             // prefixed), to be CONFIRMED from the client's own KeyData request that
             // this reply provokes - the capture reveals the true packing.
-            byte[] blob = KeyDataBlob.Pack(salt, B);
-            await s.SendAsync(StsReply.Ok(r.Sequence,
-                "<Content><KeyData>" + Convert.ToBase64String(blob) + "</KeyData></Content>"));
+            // STS uses STANDARD OpenSSL SRP: bignums are BIG-ENDIAN (BN_bin2bn),
+            // and the client validates B < N (error 15 otherwise). Our SrpServer
+            // is WildStar's game-channel variant (little-endian). Emit B big-endian
+            // for the STS channel. (CONFIRMATION TEST of the RE finding; the full
+            // standard-SRP path follows once verified.)
+            byte[] saltField = creds.Value.Salt;               // raw DB salt bytes
+            byte[] bBig = (byte[])B.Clone(); System.Array.Reverse(bBig);   // big-endian (OpenSSL)
+            byte[] blob = KeyDataBlob.Pack(saltField, bBig);
+            // KeyData is RAW BYTES in the XML (not base64) — RE'd from the client.
+            await s.SendAsync(StsReply.OkRaw(r.Sequence, KeyDataBody(blob)));
         });
 
         server.On("/Auth/KeyData", async (s, r) =>
@@ -89,8 +96,7 @@ public static class AuthFlow
             s.State[KeyAuthed] = true;
 
             byte[] m2blob = KeyDataBlob.Pack(result.ServerProof);
-            await s.SendAsync(StsReply.Ok(r.Sequence,
-                "<Content><KeyData>" + Convert.ToBase64String(m2blob) + "</KeyData></Content>"));
+            await s.SendAsync(StsReply.OkRaw(r.Sequence, KeyDataBody(m2blob)));
         });
 
         server.On("/Auth/RequestGameToken", async (s, r) =>
@@ -108,6 +114,19 @@ public static class AuthFlow
                 await s.SendAsync(StsReply.Error(r.Sequence, 401));   // not authenticated
             }
         });
+    }
+
+    /// <summary>Build the STS reply body bytes: &lt;Content&gt;&lt;KeyData&gt;RAW
+    /// BLOB&lt;/KeyData&gt;&lt;/Content&gt; — the KeyData value embedded as raw bytes.</summary>
+    private static byte[] KeyDataBody(byte[] blob)
+    {
+        byte[] open = System.Text.Encoding.ASCII.GetBytes("<Content><KeyData>");
+        byte[] close = System.Text.Encoding.ASCII.GetBytes("</KeyData></Content>");
+        var body = new byte[open.Length + blob.Length + close.Length];
+        open.CopyTo(body, 0);
+        blob.CopyTo(body, open.Length);
+        close.CopyTo(body, open.Length + blob.Length);
+        return body;
     }
 
     private static Guid NewToken()

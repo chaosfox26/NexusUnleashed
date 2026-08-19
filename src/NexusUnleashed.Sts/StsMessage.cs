@@ -29,14 +29,21 @@ public static class StsReply
     public const string Version = "STS/1.0";   // measured client token
 
     public static byte[] Ok(int sequence, string xmlBody)
-        => Build($"{Version} 200 OK", sequence, xmlBody);
+        => Build($"{Version} 200 OK", sequence, Encoding.UTF8.GetBytes(xmlBody));
+
+    /// <summary>
+    /// 200 OK with a RAW byte body — for replies whose XML carries binary field
+    /// values verbatim (the STS &lt;KeyData&gt; SRP blob is raw bytes, not base64;
+    /// RE'd from the client, which reads the node value as the bytes directly).
+    /// </summary>
+    public static byte[] OkRaw(int sequence, byte[] body)
+        => Build($"{Version} 200 OK", sequence, body);
 
     public static byte[] Error(int sequence, int code, string xmlBody = "")
-        => Build($"{Version} {code} ERROR", sequence, xmlBody);
+        => Build($"{Version} {code} ERROR", sequence, Encoding.UTF8.GetBytes(xmlBody));
 
-    private static byte[] Build(string statusLine, int sequence, string xmlBody)
+    private static byte[] Build(string statusLine, int sequence, byte[] body)
     {
-        byte[] body = Encoding.UTF8.GetBytes(xmlBody);
         var sb = new StringBuilder();
         sb.Append(statusLine).Append("\r\n");
         sb.Append("l:").Append(body.Length).Append("\r\n");
