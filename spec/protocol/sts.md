@@ -85,7 +85,43 @@ Also present: `Salt`, `Verifier`, `Password`, `M1`, `M2` (the SRP terms). The
 client's SRP is standard **OpenSSL SRP** (`crypto/srp/srp_lib.c`, `ssl/tls_srp.c`
 in the library's own paths) — matches our `SRP6a`.
 
-## STILL UNPINNED (awaiting one clean login capture)
+## Reply format — RE'd from the CLIENT (2026-08-19, clean, zero NF)
+
+Derived by disassembling `StsConnLib64.MT.dll` with our own tool
+(`tools/client-re/sts_re.py`, capstone+pefile, MIT) — analysis of Carbine's
+client (source #1). No emulator/NF source consulted. The **request** formats are
+also confirmed from a live capture of the client against our own STS server (the
+client's own bytes):
+
+- **`/Sts/Connect` (req):** `<Connect><ConnType>…</ConnType><Address>…</Address>
+  <ProductType>…</ProductType><AppIndex>…</AppIndex><Epoch>…</Epoch>
+  <Program>…</Program><Build>…</Build><Process>…</Process></Connect>`. Server
+  replies with an empty `200 OK` (the client proceeds on it — confirmed).
+- **`/Auth/LoginStart` (req):** `<Request><LoginName>…</LoginName>
+  <NetAddress>…</NetAddress></Request>`, with a `p:` header of session params.
+- **`/Auth/LoginStart` (reply):** carries a **`<KeyData>` element, base64**. The
+  client's handler (at `.text` 0x0A360) does `GetField("KeyData")` →
+  **base64-decode into a ≤256-byte buffer** → feeds the SRP setup. So the reply
+  body is `…<KeyData>base64(blob)</KeyData>…` where the blob is the SRP salt+B.
+- **`/Auth/KeyData` (req):** the same handler then **builds** a
+  `<Request><KeyData>base64(A+M1 blob)</KeyData></Request>` — symmetric encoding.
+- A **second auth path** exists (fields `ServerRand`, `ServerPublicKey`,
+  `ServerSignature`) — the token/signed-challenge variant (LoginTokenStart),
+  separate from the SRP email/password path.
+
+The full STS field dictionary is a literal table in `.rdata` (0x1801243B0+):
+KeyData, LoginName, NetAddress, Salt, Verifier, ServerRand, ClientRand, Token,
+UserId, UserName, UserCenter, LocationId, AccessMask, PasswordHash, Content,
+Request, Reply, … — the message vocabulary, straight from the client.
+
+## STILL being pinned (RE in progress)
+
+- **The KeyData blob's internal byte layout** — how salt and B are delimited
+  inside the base64 blob (length-prefixing width/order). Being traced through the
+  client's SRP/SocketCrypt setup; will be stated from the client, not guessed and
+  not from NF. (Values in any example use placeholders — see PRIVACY.md.)
+
+## Historical UNPINNED note
 
 The **exact wire shape** around those field names is not a static string and is
 the last piece:
