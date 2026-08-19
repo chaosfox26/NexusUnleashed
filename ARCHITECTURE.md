@@ -102,6 +102,34 @@ public commit history doubles as the provenance defense (timestamped, immutable
 evidence that every piece came in clean) and as the standing rebuttal to a
 culture that controlled the flow. A change that is not pushed is not done.
 
+## 1c. Built for Emulation AND Production Multiplayer (operator directive, 2026-08-19)
+
+**Designed for both, on purpose.** NexusForever is a fine emulator — a faithful
+recreation for preservation and study — and it did host a joinable private
+server. But its *design goal* was emulation; running a live realm was a thing it
+could do. NexusUnleashed is designed, from line one, for **both**: emulation
+fidelity *and* a production-grade multiplayer game server that people actually
+play on together. That dual intent is the distinction — not a claim that anyone
+else's work is lesser.
+
+So many players connected at once is a design point here, not an edge case. Every
+system is built for N concurrent players from the start:
+
+- **Non-blocking, per-session I/O** (System.IO.Pipelines): one slow or hostile
+  client never stalls another; connection count scales with the OS, not threads.
+- **Interest management is the scaling primitive** — the spatial grid means each
+  player only ever touches the handful of entities near them, so a crowded zone
+  stays cheap. Per-player vision sets, never a global scan.
+- **No global locks on the hot path** — world state is partitioned (per-world,
+  per-grid-cell); the tick fans out in parallel. Shared structures are
+  concurrent or sharded, never a single mutex the whole realm waits on.
+- **Robustness is a feature** — a malformed packet, a disconnect mid-handshake,
+  or a flood from one session is contained to that session and never takes the
+  realm down.
+
+"As functional as the current engine" is the floor; a rock-solid live realm for
+many players is the goal we designed toward from the start.
+
 ## 1b. The Full-Load / Optimize-Underneath Law (operator directive, 2026-08-19)
 
 **The whole game stays loaded — always — and every layer underneath it is

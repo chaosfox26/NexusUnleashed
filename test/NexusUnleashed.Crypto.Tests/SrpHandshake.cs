@@ -58,5 +58,27 @@ using (var server = new SrpServer(saltHex, name, verifierHex))
     Check("tampered M1 REJECTED", !server.Verify(c.PublicA, tampered).Success);
 }
 
+
+// --- PacketCrypt (game channel) ---
+Console.WriteLine("-- packet crypt --");
+{
+    // symmetric round trip: two streams with the same key cancel out.
+    ulong key = 0x0123456789ABCDEFul;
+    var enc = new PacketCrypt(key);
+    var dec = new PacketCrypt(key);
+    byte[] msg = System.Text.Encoding.ASCII.GetBytes("NexusUnleashed world packet payload, arbitrary length 12345");
+    byte[] buf = (byte[])msg.Clone();
+    enc.Encrypt(buf);
+    Check("ciphertext differs from plaintext", !buf.AsSpan().SequenceEqual(msg));
+    dec.Decrypt(buf);
+    Check("decrypt(encrypt(x)) == x (continuous stream)", buf.AsSpan().SequenceEqual(msg));
+
+    // stream continuity: a second message uses advanced state, still reversible.
+    byte[] m2 = System.Text.Encoding.ASCII.GetBytes("second message on the same stream");
+    byte[] b2 = (byte[])m2.Clone();
+    enc.Encrypt(b2); dec.Decrypt(b2);
+    Check("second message on advanced stream round-trips", b2.AsSpan().SequenceEqual(m2));
+}
+
 Console.WriteLine($"{pass} pass / {fail} fail");
 return fail == 0 ? 0 : 1;

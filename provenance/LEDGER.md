@@ -269,3 +269,14 @@ it EXACTLY from real bytes: (-804.80, -925.40, -2387.10) - an actual Everstar
 world coordinate (the player loaded at -764,-905,-2277). ServerEntityCreate now
 returns guid + position. Remaining body fields (creatureId, faction, display,
 type-specific variants) are task #47.
+
+## Encryption model cracked + PacketCrypt (2026-08-19)
+
+Observing the oracle established: static build-derived key (set before SRP, never
+re-keyed), standard ARC4, one continuous stream per connection, 0x03DC wrapper =
+4-byte header + ciphertext. `PacketCrypt.cs` (our code over MIT ARC4) implements
+it - round-trip + continuous-stream proven (12/12). The 8-byte key value is
+OBSERVED at runtime (staged packet-key.log tap), never lifted from NF's
+derivation; then ARC4(key) is verified against a real captured keystream.
+`ARCHITECTURE.md` gains the concurrent-multiplayer law (designed for emulation
+AND a production multiplayer realm).
