@@ -35,3 +35,14 @@ a non-NF source wherever possible.
 
 No emulator source was consulted for this layer. The one non-client input is
 our own SRP6a (MIT Arctium seed, already ledgered under Cryptography).
+
+## src/NexusUnleashed.Content/ + content/ (2026-08-19)
+
+| file | class | source |
+|---|---|---|
+| `Tsv.cs`, `WorldContent.cs` | AUTHORED | our own native content format and loader, written fresh |
+| `content/spawns.tsv` | OUR DATA | exported read-only from the running realm's worlddb (263,756 rows) — the restoration campaign's own work product (client-derived placements, zone-forge, NUSE, hand-built casts) |
+| `content/patrols.tsv` | OUR DATA | entity→Spline2 patrol wires (8,059), authored by the restoration's patrol passes; spline nodes themselves live in the client tables |
+| `content/kits.tsv` | OUR DATA | 20,020 creature-spell entries from the retail-kit restoration (Jabbithole/wiki/patch-note derivation, boss-kit-mapper) |
+
+The loader proof requires the load to equal the live DB's own counts exactly.
