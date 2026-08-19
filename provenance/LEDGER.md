@@ -362,6 +362,19 @@ The framing, models, and channel are all clean; only the per-session world-key
 
 The guard catches NF *text*; *derivation* is caught by discipline + this ledger.
 
+## FOUNDATION PROVENANCE — the two stack roots are NF-free (operator, 2026-08-19)
+
+The operator confirmed the origin of the two things the whole stack stands on.
+Both route around NexusForever entirely:
+
+| foundation | class | source | note |
+|---|---|---|---|
+| The CDN data / our datamine / tables / creature names | 1-client | The operator's own complete set of ~200,000 CDN `.bin` blobs (Carbine's 16042 client data), assembled into the operator's own installer | The CDN deconstruct + everything the GameTable/RE layers derive traces to **the client itself** — the supreme source (class 1), never NF. The whole 16042 client is present locally, so protocol/schema RE can be taken to certainty against the authoritative binary. |
+| The NU Launcher (client patch/redirect) | 4-permissive | Arctium's WildStar.exe | Arctium is MIT — our second permitted permissive primitive (already ledgered under Cryptography). The launch/connect-redirect path is **Arctium-derived, not NF**. Practical note for the login RE: the client's connect/auth-redirect behavior follows Arctium's conventions, not something bespoke — reconcile against that when matching what the client sends our STS. |
+
+Neither foundation touches NexusForever. This is baked into the ledger so the
+clean-room story rests on named, NF-free roots, not on memory.
+
 ## End-to-end loopback: two-phase handshake over a real socket (2026-08-19)
 
 | file | class | source |
