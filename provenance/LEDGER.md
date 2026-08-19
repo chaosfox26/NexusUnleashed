@@ -186,3 +186,16 @@ Proven: splines 8/8 (crash modes guarded, 5000-tick follower zero NaN). All
 worlds resident: 2,729 World.tbl worlds instantiated at once (1 ms), all 263,756
 spawns placed, 10 global ticks in 2 ms (0.2 ms/tick), ~98 MB. Exceeds the frozen
 realm's 1,767-world sweep - the "all worlds at the same time" architecture.
+
+## Faction system + creature aggro (2026-08-19)
+
+| file | class | source |
+|---|---|---|
+| `FactionSystem.cs` | AUTHORED | faction relationships straight from the client's Faction2Relationship table (factionId0/1/level) with Faction2 parent inheritance. Raw client value is authority; no invented relationships. |
+| `CreatureAI.cs` | AUTHORED | aggro state machine with the frozen realm's rule (hostile OR aggressive, in range, leash from home) and the operator's Mystpaw law (neutral non-aggressive wildlife left alone); rooted creatures face but never chase. |
+
+Proven (9/9) against the real client tables: 219->165 = level 10 Beloved (not
+hostile); level-0 relationships read hostile; hostile/aggressive engage,
+neutral-nonaggressive does not, rooted faces only, leash returns. ARCHITECTURE.md
+gains the Full-Load/Optimize-Underneath law with the runtime-portability clause
+(must load flawlessly on ANY hardware; Starlight is dev-time only).

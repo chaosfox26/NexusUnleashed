@@ -112,5 +112,7 @@ int sp = SplineTests.Run();
 Console.WriteLine("-- all worlds resident --");
 string tblDir = args.Length > 1 ? args[1] : "assets/tbl";
 int aw = AllWorldsTests.Run(tblDir, contentRoot);
+Console.WriteLine("-- aggro / faction --");
+int ag = AggroTests.Run(tblDir);
 Console.WriteLine($"{pass} pass / {fail} fail (world)");
-return (fail == 0 && mv == 0 && sp == 0 && aw == 0) ? 0 : 1;
+return (fail == 0 && mv == 0 && sp == 0 && aw == 0 && ag == 0) ? 0 : 1;

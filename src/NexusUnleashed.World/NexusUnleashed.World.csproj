@@ -6,5 +6,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\NexusUnleashed.Content\NexusUnleashed.Content.csproj" />
+    <ProjectReference Include="../NexusUnleashed.GameData.Generated/NexusUnleashed.GameData.Generated.csproj" />
   </ItemGroup>
 </Project>

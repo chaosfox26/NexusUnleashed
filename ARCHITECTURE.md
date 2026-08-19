@@ -102,6 +102,37 @@ public commit history doubles as the provenance defense (timestamped, immutable
 evidence that every piece came in clean) and as the standing rebuttal to a
 culture that controlled the flow. A change that is not pushed is not done.
 
+## 1b. The Full-Load / Optimize-Underneath Law (operator directive, 2026-08-19)
+
+**The whole game stays loaded — always — and every layer underneath it is
+optimized relentlessly.** We never trade "the whole game resident" for speed;
+instead we make the resident whole game *be* fast. A clean-room rewrite is the
+one chance to pick the right data structure at every layer from line one, and we
+take it: a spatial hash instead of nested grid walks, parallel world ticks by
+default, zero-copy pipelined networking, struct-friendly hot paths, the GPU and
+all cores assumed available (the Starlight protocol as an engine principle).
+
+This is already visible: the clean engine holds **all 2,729 worlds resident in
+~98 MB, ticking every one in 0.2 ms**, where the frozen realm needed **8.2 GB
+and ~12.5 minutes** to sweep 1,767. Optimization here is measured, not claimed —
+every load-bearing brick reports its number (worlds resident, entities/sec, tick
+time, bytes) so a regression is visible immediately. The rule is simple: load in
+full, and beat the old engine on every axis while doing it.
+
+**Runtime portability clause (operator directive, 2026-08-19): the shipped
+engine must load flawlessly on ANY hardware.** The server never *requires* the
+GPU, a specific core count, or large RAM — it must run on a modest VPS, a single
+core, no GPU. Parallelism is **opportunistic**, not mandatory: `Parallel.ForEach`
+uses whatever cores exist and produces identical results sequentially on one
+core; there is no GPU dependency anywhere in the runtime; "full load" scales down
+(all worlds already fit in ~98 MB). Missing hardware degrades performance, never
+correctness, and never crashes. This preserves the frozen realm's founding value
+— unzip on a bare box and play. The **Starlight protocol (32 cores + the 5090)
+is a dev-time and tooling principle** for our searches, sweeps, and batch
+analysis on the operator's machine; it must never become a runtime requirement of
+the engine we ship. Two machines, two rules: tools assume Starlight; the server
+assumes nothing.
+
 ## 2. What carries over on day one (already clean)
 
 Measured by `provenance-audit.py` against the frozen tree (151,021 engine lines):
