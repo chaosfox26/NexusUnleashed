@@ -229,3 +229,11 @@ The frozen-realm side of the tap (a `packetdump=1` toggle in our own diagnostics
 + two funnel hooks) lives in the separate realm-source tree (that realm is AGPL);
 it records the wire before the realm's handlers, so a WIP oracle does not limit
 coverage. This analyzer + the pinned message models are the clean-engine half.
+
+## GameMessageOpcode enum (2026-08-19)
+
+| file | class | source |
+|---|---|---|
+| `Network/GameMessageOpcode.cs` | GENERATED from capture | 157 opcodes observed on the oracle's wire (41 C->S + 116 S->C), both directions decrypted. Numbers are protocol facts (Carbine's client); names are ours (inferred roles or Op_0xNNNN). The message identity table. |
+
+Captured live via our own diagnostics tap; no emulator source read.
