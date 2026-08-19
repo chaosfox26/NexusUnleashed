@@ -58,7 +58,7 @@ public static class AuthFlow
             // So STS is STANDARD SRP-6a (big-endian), not the game variant. B is
             // emitted big-endian by StsSrp itself; the reply is base64 KeyData
             // inside <Content>.
-            var srp = new StsSrp(creds.Value.Salt, creds.Value.Verifier);
+            var srp = new StsSrp(creds.Value.Salt, creds.Value.Verifier, login);
             byte[] B = srp.StartHandshake();                  // big-endian, |N| wide
             s.State[KeySrp] = srp;
 
@@ -81,12 +81,22 @@ public static class AuthFlow
             byte[] a = parts.Length > 0 ? parts[0] : Array.Empty<byte>();
             byte[] m1 = parts.Length > 1 ? parts[1] : Array.Empty<byte>();
 
-            // Standard SRP step 2: verify the client proof, derive the session key.
+            // Standard SRP step 2: verify the client proof (searching the M1-recipe
+            // variants against the client's own M1), derive the session key.
             if (!srp.Verify(a, m1, out byte[] m2, out byte[] sessionKey))
             {
-                await s.SendAsync(StsReply.Error(r.Sequence, 403));   // bad proof / wrong hash-variant
+                // Dump everything needed to solve the recipe OFFLINE against the
+                // client's real M1 (no re-login required): b, salt, v, A, M1.
+                Console.WriteLine("[STS-SRP] KeyData proof did NOT match any variant. SOLVE-DUMP:");
+                Console.WriteLine($"[STS-SRP]   b={Convert.ToHexString(srp.SecretB)}");
+                Console.WriteLine($"[STS-SRP]   salt={Convert.ToHexString(srp.Salt)}");
+                Console.WriteLine($"[STS-SRP]   v={Convert.ToHexString(srp.Verifier)}");
+                Console.WriteLine($"[STS-SRP]   A={Convert.ToHexString(a)}");
+                Console.WriteLine($"[STS-SRP]   M1={Convert.ToHexString(m1)}");
+                await s.SendAsync(StsReply.Error(r.Sequence, 403));   // bad proof / recipe not yet matched
                 return;
             }
+            Console.WriteLine($"[STS-SRP] proof VERIFIED — variant: {srp.MatchedVariant}");
             s.State[KeyAuthed] = true;
             s.State[KeySession] = sessionKey;
 

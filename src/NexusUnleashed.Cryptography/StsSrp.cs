@@ -48,13 +48,22 @@ public sealed class StsSrp
     private readonly HashKind _hash;
     private readonly int _nLen;          // fixed field width for PAD() = |N| bytes
     private readonly BigInteger _N, _g, _k;
-    private readonly byte[] _salt, _vBytes;
+    private readonly byte[] _salt, _vBytes, _userBytes;
     private readonly BigInteger _v;
 
     private BigInteger _b, _B;
     public byte[] B { get; private set; } = Array.Empty<byte>();  // big-endian, |N| wide
 
-    public StsSrp(byte[] salt, byte[] verifier, HashKind hash = HashKind.Sha256)
+    /// <summary>Which M1-formula variant matched the client's proof (diagnostics).</summary>
+    public string MatchedVariant { get; private set; } = "";
+
+    /// <summary>Server secret b (big-endian) — diagnostics only, lets a failed
+    /// proof be solved offline against the client's real M1 without a re-login.</summary>
+    public byte[] SecretB => ToBE(_b);
+    public byte[] Verifier => _vBytes;
+    public byte[] Salt => _salt;
+
+    public StsSrp(byte[] salt, byte[] verifier, string username = "", HashKind hash = HashKind.Sha256)
     {
         _hash = hash;
         _N = FromBE(NBytes);
@@ -62,6 +71,7 @@ public sealed class StsSrp
         _g = new BigInteger(2);
         _salt = salt;
         _vBytes = verifier;
+        _userBytes = System.Text.Encoding.UTF8.GetBytes(username);
         _v = FromBE(verifier);
         // k = H(N | PAD(g)) — standard SRP-6a, big-endian, g padded to |N|.
         _k = FromBE(H(NBytes, Pad(ToBE(_g))));
@@ -83,6 +93,7 @@ public sealed class StsSrp
     public bool Verify(byte[] aBE, byte[] m1, out byte[] m2, out byte[] sessionKey)
     {
         m2 = Array.Empty<byte>(); sessionKey = Array.Empty<byte>();
+        MatchedVariant = "";
         BigInteger A = FromBE(aBE);
         if (A % _N == 0) return false;                      // A mod N == 0 -> abort
 
@@ -90,22 +101,61 @@ public sealed class StsSrp
         BigInteger u = FromBE(H(Apad, Bpad));
         // S = (A * v^u)^b mod N
         BigInteger S = BigInteger.ModPow(A * BigInteger.ModPow(_v, u, _N) % _N, _b, _N);
-        byte[] K = H(Pad(ToBE(S)));                          // session key = H(S)
 
-        // M1 = H( H(N) XOR H(g) | H(I?) | s | A | B | K )  — RFC 5054 form.
-        // NOTE: NCSoft's Srp.cpp M1 layout is confirmed against the client's OWN
-        // M1 at wire time (ground truth), not assumed; this is the RFC default to
-        // start from. The username-hash term H(I) is folded by the caller's salt
-        // binding when the client omits it.
+        // Solve for NCSoft's exact M1 layout against the client's OWN M1 (ground
+        // truth): the hash is SHA-256 (M1 is 32 bytes on the wire); only the
+        // component recipe is uncertain. Try the standard SRP-6a variants and
+        // ACCEPT the one that reproduces the client's M1. Not guessing — the
+        // client's proof is the oracle; whichever recipe matches IS the protocol.
         byte[] hN = H(NBytes), hg = H(Pad(ToBE(_g)));
         byte[] hNxorG = new byte[hN.Length];
         for (int i = 0; i < hN.Length; i++) hNxorG[i] = (byte)(hN[i] ^ hg[i]);
-        byte[] expected = H(hNxorG, _salt, Apad, Bpad, K);
+        byte[] hI = H(_userBytes);
 
-        if (!FixedEquals(expected, m1)) return false;
-        m2 = H(Apad, m1, K);                                // M2 = H(A | M1 | K)
-        sessionKey = K;
-        return true;
+        // candidate session keys K
+        var kVariants = new (string tag, byte[] K)[]
+        {
+            ("K=H(pad S)",       H(Pad(ToBE(S)))),
+            ("K=H(min S)",       H(ToBE(S))),
+            ("K=interleave(S)",  Interleave(ToBE(S))),
+        };
+        foreach (var (ktag, K) in kVariants)
+        {
+            // candidate M1 recipes
+            var m1Variants = new (string tag, byte[] m1)[]
+            {
+                ("M1=H(hNg|s|A|B|K)",     H(hNxorG, _salt, Apad, Bpad, K)),
+                ("M1=H(hNg|H(I)|s|A|B|K)",H(hNxorG, hI, _salt, Apad, Bpad, K)),
+                ("M1=H(A|B|K)",           H(Apad, Bpad, K)),
+                ("M1=H(A|B|S)",           H(Apad, Bpad, Pad(ToBE(S)))),
+            };
+            foreach (var (mtag, cand) in m1Variants)
+            {
+                if (FixedEquals(cand, m1))
+                {
+                    MatchedVariant = ktag + " ; " + mtag;
+                    m2 = H(Apad, m1, K);                    // M2 = H(A | M1 | K)
+                    sessionKey = K;
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /// <summary>RFC 2945 SHA_Interleave of the session secret S.</summary>
+    private byte[] Interleave(byte[] s)
+    {
+        int i = 0; while (i < s.Length && s[i] == 0) i++;   // strip leading zeros
+        byte[] t = s[i..];
+        if ((t.Length & 1) == 1) t = t[1..];                // even length
+        int half = t.Length / 2;
+        byte[] e = new byte[half], o = new byte[half];
+        for (int j = 0; j < half; j++) { e[j] = t[2 * j]; o[j] = t[2 * j + 1]; }
+        byte[] he = H(e), ho = H(o);
+        byte[] outp = new byte[he.Length + ho.Length];
+        for (int j = 0; j < he.Length; j++) { outp[2 * j] = he[j]; outp[2 * j + 1] = ho[j]; }
+        return outp;
     }
 
     // ---- hashing / big-endian helpers ------------------------------------
