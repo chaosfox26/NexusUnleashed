@@ -75,6 +75,16 @@ we both obey the same client — never because we copied how NF achieved it.
 
 ---
 
+## 1a. The Openness Law (operator directive, 2026-08-19)
+
+Everything implemented, from the foundation onward, is **documented and pushed
+to the public repository** — every update, every system, every fix, in the open.
+No private stashes, no "shared when it's clean," no DM-tier hoarding, no gating
+of any kind. This is not a courtesy; it is the reason the project exists. The
+public commit history doubles as the provenance defense (timestamped, immutable
+evidence that every piece came in clean) and as the standing rebuttal to a
+culture that controlled the flow. A change that is not pushed is not done.
+
 ## 2. What carries over on day one (already clean)
 
 Measured by `provenance-audit.py` against the frozen tree (151,021 engine lines):
