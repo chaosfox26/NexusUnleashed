@@ -137,6 +137,39 @@ public sealed record ServerEntityValue(uint Guid, uint Value) : IServerMessage
     }
 }
 
+/// <summary>
+/// 0x0981: a world-init id list sent one-shot at world entry - a u32 count then
+/// that many u32 ids (byte-aligned, not bit-packed). Pinned from the captured
+/// world-entry stream: count 251, ids a near-sequential 1..252 set. The exact
+/// id domain (what the list enumerates) is semantic work; the WIRE STRUCTURE is
+/// pinned and reproduced byte-for-byte. The server both parses and BUILDS it -
+/// Build reproduces the captured bytes exactly (real-wire test).
+/// </summary>
+public sealed record ServerWorldInit(uint[] Ids) : IServerMessage
+{
+    public GameMessageOpcode Opcode => (GameMessageOpcode)0x0981;
+
+    public static ServerWorldInit Parse(byte[] payload)
+    {
+        var r = new PacketReader(payload);
+        r.ReadBits(16);                       // opcode
+        uint count = r.ReadUInt32();
+        var ids = new uint[count];
+        for (uint i = 0; i < count; i++) ids[i] = r.ReadUInt32();
+        return new ServerWorldInit(ids);
+    }
+
+    /// <summary>Full payload ([u16 op][u32 count][ids]) ready to send.</summary>
+    public byte[] Build()
+    {
+        var w = new PacketWriter();
+        w.WriteBits(0x0981, 16);
+        w.WriteBits((uint)Ids.Length, 32);
+        foreach (uint id in Ids) w.WriteBits(id, 32);
+        return w.ToArray();
+    }
+}
+
 /// <summary>0x07FE: a single u32 (a counter/index; the smallest server message).</summary>
 public sealed record ServerCounter(uint Value) : IServerMessage
 {

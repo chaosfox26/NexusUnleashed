@@ -305,3 +305,13 @@ runtime. The old ARC4-based PacketCrypt was wrong and is replaced.
 The encryption gate is now not just cracked but WIRED: the engine reads what the
 client sends and produces exactly what the client expects on the world channel.
 Proven (22/22 protocol) against the operator's own captured packets.
+
+## First world-entry message model: ServerWorldInit 0x0981 (2026-08-19)
+
+| file | class | source |
+|---|---|---|
+| `Network/ServerMessages.cs` (ServerWorldInit) | AUTHORED | the world-init id list sent one-shot at world entry: `[u16 op][u32 count][count × u32 id]`, byte-aligned. Structure pinned from the decrypted world-entry stream in our own capture. Parse + Build; Build reproduces the captured bytes byte-for-byte. |
+| `test/…Protocol.Tests` (0x0981 block) | AUTHORED | round-trip vs the real captured 1010-byte payload (count 251, ids 1..252 set). |
+
+Reproduction of client-accepted bytes (the behavioral oracle), so it is
+guaranteed-correct wire; the id domain's semantics are later work. 25/25 protocol.
