@@ -10,6 +10,7 @@
   </Folder>
   <Folder Name="/test/">
     <Project Path="test/NexusUnleashed.Content.Tests/NexusUnleashed.Content.Tests.csproj" />
+    <Project Path="test/NexusUnleashed.Crypto.Tests/NexusUnleashed.Crypto.Tests.csproj" />
     <Project Path="test/NexusUnleashed.Database.Tests/NexusUnleashed.Database.Tests.csproj" />
     <Project Path="test/NexusUnleashed.Sts.Tests/NexusUnleashed.Sts.Tests.csproj" />
   </Folder>

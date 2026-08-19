@@ -65,3 +65,14 @@ a socket is not reading code.
 
 Proven read-only against the live authdb: salt 16 bytes, verifier 128 bytes,
 unknown account -> null (5/5). No emulator source consulted.
+
+## SRP6a login proven (2026-08-19)
+
+| file | class | source |
+|---|---|---|
+| `SrpServer.cs` | AUTHORED | public server-side driver + the verification decision over the SRP6a primitive; our own code |
+| `SrpReferenceClient.cs` | AUTHORED | reference SRP client + `ComputeVerifier` (account registration), mirroring the primitive's WildStar parameters (N, g, k, blockwise reverse, interleaved session key). Written fresh from the SRP6a math, not from any server. |
+
+The SRP6a primitive itself is the MIT Arctium seed (already ledgered). The full
+login round trip is proven (9/9): register -> B -> (A, M1) -> verify -> session
+keys AGREE; wrong password, A=0, and tampered M1 all rejected.
