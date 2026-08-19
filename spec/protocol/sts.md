@@ -1,6 +1,7 @@
 # Spec: STS login protocol (auth handshake)
 
-**Status: framing + message set PINNED from the client binary; body schemas UNPINNED.**
+**Status: framing + message set + body FIELD NAMES PINNED from the client binary;
+only the exact XML shape / KeyData binary layout await one clean login capture.**
 
 ## Provenance (the derivation — reproducible)
 
@@ -65,14 +66,40 @@ Additional transactions present in the client (not needed for first login):
 The SRP implementation is compiled in (`Services\Srp\Srp.cpp` in the library's
 own PDB paths) — SRP6a, matching our `NexusUnleashed.Cryptography.SRP6a`.
 
-## UNPINNED (awaiting one oracle capture)
+## Body field names — PINNED from the client binary (2026-08-19, clean)
 
-- **XML body schemas** — element/attribute names inside `<Content>` for each
-  message. Not recoverable from static strings (built dynamically); one capture
-  of a login against the frozen realm pins them.
-- **Reply status codes** — `200 OK` shape assumed from the HTTP form; confirm.
-- **Whether `l:` counts body bytes only** — confirm from a captured frame.
+The message field names ARE present as static string literals in
+`StsConnLib64.MT.dll` (the client's reply parser references the element names it
+reads). Extracted by `grep -aoE` over the library — clean source #1, no NF:
 
-Pin procedure: capture client→realm STS traffic at login (the STS port is
-clear-text before SRP completes), transcribe the first session here, flip the
-markers. The ledger entry names the capture file, not any source code.
+| message | fields (client string literals) |
+|---|---|
+| `LoginStart` (req) | `LoginName` / `email` (the account identifier) |
+| `LoginStart` (reply) | `KeyData` (carries the SRP salt + B) |
+| `KeyData` (req) | `KeyData` (carries the client A + proof M1) |
+| `KeyData` (reply) | `KeyData` (carries the SRP server proof M2) |
+| `LoginFinish` (reply) | `LocationId`, `UserId`, `UserCenter`, `UserName`, `AccessMask` |
+| `RequestGameToken` (reply) | `Token` |
+
+Also present: `Salt`, `Verifier`, `Password`, `M1`, `M2` (the SRP terms). The
+client's SRP is standard **OpenSSL SRP** (`crypto/srp/srp_lib.c`, `ssl/tls_srp.c`
+in the library's own paths) — matches our `SRP6a`.
+
+## STILL UNPINNED (awaiting one clean login capture)
+
+The **exact wire shape** around those field names is not a static string and is
+the last piece:
+
+- Are the fields XML child elements of `<Content>` or attributes?
+- The **binary encoding inside `KeyData`** — the SRP values are carried in one
+  `KeyData` blob (very likely base64 of length-prefixed binary), but the exact
+  layout (length width/endianness, salt-then-B order) must come from the client's
+  bytes, not guessed.
+- Reply status shape (`200 OK`), and whether `l:` counts body bytes only.
+
+**Pin procedure (clean):** the STS port is clear-text before SRP completes, so
+either (a) point the client at OUR STS — `StsServer.RequestObserver` logs every
+request to `sts-capture.log` — or (b) capture a normal login on 6600. Transcribe
+here, flip the markers. The ledger names the capture file, never any NF source.
+The recovered/NF STS handler is OFF LIMITS for this (No-NF law) even though it
+would show the same shape — we take it from the client's bytes.
