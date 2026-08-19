@@ -6,3 +6,10 @@ canon-private/
 /publish/
 captures/
 packet-dump*.log
+# Capture/session logs may contain personal info (account/character names, IPs) -
+# never commit them. See provenance/PRIVACY.md.
+*.log
+sts-capture*.log
+clean-engine*.log
+# The private-terms list the privacy guard scans for - names must never enter the repo.
+provenance/.private-terms
