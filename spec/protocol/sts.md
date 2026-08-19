@@ -13,6 +13,14 @@ No emulator source was consulted. The strings are facts about the protocol the
 client speaks; RTTI names (`CLoginStart`, `CKeyDataTxnNotify`, ...) are the
 client's own transaction classes, embedded by Carbine's compiler.
 
+## Confirmed live (2026-08-19, oracle serving, operator in-game)
+
+Re-measured against the running realm while a client was logged in: auth :23115
+opens `size=53 op=0x0003`, world :24000 opens `size=59 op=0x03DC` (both
+byte-identical to the first capture), and **STS :6600 is client-speaks-first**
+(no server hello — the client sends the first STS request). AuthFlow is built for
+exactly that (client sends LoginStart first).
+
 ## Framing (PINNED)
 
 STS is a **text protocol, HTTP-shaped**. Measured tokens: `STS/1.0`, `POST`,
