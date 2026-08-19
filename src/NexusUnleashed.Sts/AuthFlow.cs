@@ -30,24 +30,6 @@ public static class AuthFlow
     private const string KeyAuthed = "auth.ok";
     private const string KeySession = "auth.sessionkey";
 
-    // The SRP k-mode rotates one step per LoginStart, PERSISTED to a file so that
-    // rebuilds/restarts don't reset it — each real login keeps probing the next
-    // candidate k until the client's proof verifies.
-    private static readonly object _kLock = new();
-    private static readonly string _kFile =
-        System.IO.Path.Combine(AppContext.BaseDirectory, "sts-kprobe.txt");
-    private static int NextKMode()
-    {
-        lock (_kLock)
-        {
-            int n = 0;
-            try { if (System.IO.File.Exists(_kFile)) int.TryParse(System.IO.File.ReadAllText(_kFile).Trim(), out n); } catch { }
-            int next = n + 1;
-            try { System.IO.File.WriteAllText(_kFile, next.ToString()); } catch { }
-            return (next & 0x7fffffff) % StsSrp.KModeCount;
-        }
-    }
-
     public static void Register(StsServer server, IAccountStore accounts)
     {
         server.On("/Sts/Connect", (s, r) => s.SendAsync(StsReply.Ok(r.Sequence, "")));
@@ -76,14 +58,11 @@ public static class AuthFlow
             // So STS is STANDARD SRP-6a (big-endian), not the game variant. B is
             // emitted big-endian by StsSrp itself; the reply is base64 KeyData
             // inside <Content>.
-            // The client retries LoginStart several times per login attempt; rotate
-            // the SRP k-mode across those retries so one login session probes every
-            // candidate k, and the KeyData proof search identifies the right one.
-            int kMode = NextKMode();
-            var srp = new StsSrp(creds.Value.Salt, creds.Value.Verifier, login, kMode);
-            byte[] B = srp.StartHandshake();                  // big-endian, |N| wide
+            // WildStar game SRP (little-endian) — CRACKED against the bot verifier.
+            var srp = new StsSrp(creds.Value.Salt, creds.Value.Verifier, login);
+            byte[] B = srp.StartHandshake();                  // 128-byte little-endian
             s.State[KeySrp] = srp;
-            Console.WriteLine($"[STS-SRP] LoginStart: trying {srp.KLabel}");
+            Console.WriteLine("[STS-SRP] LoginStart: game-SRP (little-endian)");
 
             byte[] blob = KeyDataBlob.Pack(creds.Value.Salt, B);
             await s.SendAsync(StsReply.Ok(r.Sequence, KeyDataBody(blob)));
@@ -108,15 +87,8 @@ public static class AuthFlow
             // variants against the client's own M1), derive the session key.
             if (!srp.Verify(a, m1, out byte[] m2, out byte[] sessionKey))
             {
-                // Dump everything needed to solve the recipe OFFLINE against the
-                // client's real M1 (no re-login required): b, salt, v, A, M1.
-                Console.WriteLine("[STS-SRP] KeyData proof did NOT match any variant. SOLVE-DUMP:");
-                Console.WriteLine($"[STS-SRP]   b={Convert.ToHexString(srp.SecretB)}");
-                Console.WriteLine($"[STS-SRP]   salt={Convert.ToHexString(srp.Salt)}");
-                Console.WriteLine($"[STS-SRP]   v={Convert.ToHexString(srp.Verifier)}");
-                Console.WriteLine($"[STS-SRP]   A={Convert.ToHexString(a)}");
-                Console.WriteLine($"[STS-SRP]   M1={Convert.ToHexString(m1)}");
-                await s.SendAsync(StsReply.Error(r.Sequence, 403));   // bad proof / recipe not yet matched
+                Console.WriteLine($"[STS-SRP] KeyData proof did NOT verify (A={a.Length}B, M1={Convert.ToHexString(m1)})");
+                await s.SendAsync(StsReply.Error(r.Sequence, 403));   // bad password / proof
                 return;
             }
             Console.WriteLine($"[STS-SRP] proof VERIFIED — variant: {srp.MatchedVariant}");
