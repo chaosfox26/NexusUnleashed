@@ -27,12 +27,42 @@
 > - **PRIVACY:** the 0x0592 body carries the login email + machine hardware — NEVER
 >   commit a capture of it. Code changes hardcode nothing private (login comes from
 >   the client at runtime).
-> - **NEXT: reply to `0x0592` → CHARACTER LIST → select → world entry.** No model
->   exists yet; needs RE (opcode + field layout). `HasReceivedCharacterList` (Lua)
->   confirms the message. Our world-entry capture SKIPPED char-select (it was a
->   reconnect), so `world-entry.md`'s 0x0988/0x0981/0x0117/0x0262 sequence is
->   POST-select. The realm must also read the account's real characters from
->   characterdb — the engine does not read that DB yet.
+> - **CHARACTER-LIST OPCODE = `0x0117` (CRACKED from the client dispatch tree).**
+>   WildStar64.exe dispatch: `opcode 0x117 → case 0x140021167 → handler
+>   0x140021540`. That handler sets the received-list flag (`this->[0x168]=1`),
+>   parses characters at **stride 0x330**, and fires the `CharacterList` Lua event.
+>   **`0x0117` is already in our capture (833B, one-shot) — we had MISLABELED it
+>   "player self block"; it is the character list.** (RE method: `HasReceivedCharacterList`
+>   Lua fn → reads global `0x140C66DA8`+0x168 → the one writer is the handler → its
+>   sole .text xref is the dispatch case → walk the compare tree to the opcode.)
+> - **MILESTONE (proven live): the client AUTHENTICATES END TO END and ACCEPTS a
+>   character list.** Sending `0x0117` after `0x0592` (auth key on 23115) took the
+>   client from the grayscale error-15 screen to the FULL-COLOR login with "Network
+>   Status: Retrieving Account Information". The whole login stack works. Bootstrap
+>   used a captured `0x0117` body (local `charlist-replay.bin`, gitignored — carries
+>   a character name; NEVER commit it).
+> - **TARGET CHARACTER (operator-specified):** characterdb `character` id 22
+>   (sex 0, race 4, class 3, level 0) on the test account (accountId 2) — the same
+>   account we log in as, so its own list shows the target once the generator reads
+>   account 2. An earlier capture body was used only as a FORMAT REFERENCE and held
+>   a different character's bytes (retired now — see the no-NF note below).
+> - **0x0117 body layout (partly decoded from the capture):** `[u64 guid LE][u32]
+>   [u32=0x1b][u32=0]​[u8 nameByteLen][UTF-16LE name]…` then appearance/level/etc.
+>   Looks byte-aligned, not bit-packed (verify). Char stride in the client struct is
+>   0x330.
+> - **IMMEDIATE BLOCKER: the client is stuck at "Retrieving Account Information".**
+>   Char-list alone doesn't paint character-select; the client wants account-info /
+>   entitlement message(s) first. NEXT: RE what clears that status string (same
+>   method as the char-list: find the status string → the code that clears it →
+>   the message/opcode). Then generate `0x0117` from characterdb for the target
+>   character → char select → select handling → world entry.
+> - **NO NF PROTOCOL (operator, hardened):** opcodes/formats come from Carbine's
+>   CLIENT (its dispatch + deserializers) and our own DB — never from NF source or
+>   NF-server captures. The captured `0x0117` replay was a diagnostic only and is
+>   RETIRED; the real `0x0117` is generated from the client-derived layout + our
+>   characterdb. Keying resolved: the channel stays on the AUTH key after 0x0592
+>   (proven — the client's post-enter 0x0000 decodes with it), so no world re-key
+>   is needed at the character-select stage.
 >
 > ---------- (prior) THE LOGIN IS ALMOST CRACKED. ----------
 > The STS login broke through "NC Platform Error 15": the real 16042 client now

@@ -75,8 +75,14 @@ public static class WorldHandshake
         // 0x0592 (our earlier capture read 0x058F; the live client is authority).
         world.On(0x0592, async (s, body) =>
         {
-            Log.Info($"realm: <- 0x0592 realm-enter ({body.Length}B) FULL={Convert.ToHexString(body)}");
-            // (reply pending: validate token -> character list)
+            Log.Info($"realm: <- 0x0592 realm-enter ({body.Length}B)");
+            // The realm reply chain (all client-derived, generated from our DB):
+            //   account-info message(s) that clear "Retrieving Account Information"
+            //   -> 0x0117 character list -> character select.
+            // 0x0117 is the character list (cracked from the client dispatch:
+            // 0x117 -> case 0x140021167 -> handler 0x140021540, char stride 0x330).
+            // Generator lands next: read the account's characters from characterdb
+            // and serialize the client-derived 0x0117 layout. No NF captures.
             await Task.CompletedTask;
         });
 

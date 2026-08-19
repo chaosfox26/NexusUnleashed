@@ -81,3 +81,63 @@ frozen realm before an unrelated in-world crash).
 - `GetKeyFromTicket` (world key derivation) — re-source from the CLIENT (quarantined).
 - World-entry payloads (0x0988/0x098B/0x0117/0x0262) — decoded in the capture, models pending (session earlier this day). `spec/protocol/world-entry.md`.
 - The login (§5) is the gate to everything downstream.
+
+---
+
+## 8. LOGIN CRACKED END TO END — the client authenticates and reaches the realm (later 2026-08-19)
+
+The real 16042 client now goes from the STS login all the way to the realm channel
+and the "Retrieving Account Information" phase (full-color login screen — no more
+error 15). Every step below is client-derived (its dispatch + its parsers) and our
+DB; ZERO NexusForever source or NF-server captures (operator: "no NF servers", "no
+NF protocol").
+
+### 8.1 STS transaction chain (all working)
+- `/Sts/Connect` → `/Auth/LoginStart` → `/Auth/KeyData` (SRP proof VERIFIES,
+  game-SRP little-endian) → `/Auth/LoginFinish` → `/GameAccount/ListMyAccounts` →
+  `/Auth/RequestGameToken` (`<Token>`). Post-SRP channel is ARC4(sessionKey).
+- **ListMyAccounts FIX:** records are direct children of `<Reply>` — NO
+  `<Items>`/type="array" wrapper (those strings don't exist in StsConnLib; its
+  parser is `[reply+0x60]`=first record, `[item+0xc0]`=field). Enriched the
+  GameAccount to the FULL field set the client reads (GameAccountId, AccountId,
+  LoginName, UserId, UserName, Email, Alias, AccountAlias, GameCode, AppId,
+  UserCenter, State, Status, Roles). A missing string field made WildStar64.exe
+  `strlen(null)` → AccessViolation at RVA 0xB3885. Fixed → token issued.
+- LoginFinish `AuthType` is the enum string `Password` (not `"1"`).
+
+### 8.2 Realm channel (port 23115)
+- Opens with a CLEAR `0x0003` hello (client accepts it), then speaks the auth-key
+  encrypted container (`0x0244` in / `0x03DC` out). `WorldHandshake` bootstraps
+  clear-then-container off `Crypt==null`.
+- The client's `0x0244` decodes to inner op **`0x0592`** = realm-enter:
+  `[build 16042][8B][login-name UTF-16][fields][client system survey]`. The live
+  client uses `0x0592`, NOT the `0x058F` our earlier capture read.
+- **Keying: the channel stays on the AUTH key after 0x0592** — the client's
+  post-enter `0x0000` decodes with it, so no world re-key at character-select.
+
+### 8.3 Character-list opcode = 0x0117 (cracked from the client dispatch)
+- RE chain: Lua `HasReceivedCharacterList` → reads global `0x140C66DA8`+0x168 →
+  the sole writer is the handler `0x140021540` (sets `[this+0x168]=1`, parses
+  characters at STRIDE 0x330, fires the `CharacterList` Lua event) → its only
+  `.text` xref is dispatch case `0x140021167` → walking the compare tree
+  (`cmp r8d,0xe7; ja 0x210ce; sub 0x116; dec; je 0x21167`) gives opcode **0x117**.
+- The dispatch function is `0x140020EA0`; opcode switch head at `0x140020EF1`.
+  (Linear cumulative-sub enumeration of the tree is WRONG — subtractions are
+  per-branch; trace each path.)
+- `0x0117` is ALSO in our (retired) capture at 833B — it had been MISLABELED
+  "player self block" in observed-opcodes.md; it is the character list.
+
+### 8.4 Milestone proof + the current blocker
+- Sending `0x0117` after `0x0592` took the client from the grayscale error-15
+  screen to the full-color login with "Retrieving Account Information".
+- BLOCKER: the client waits at that status for ACCOUNT-INFO message(s) before it
+  paints character-select. One such message is `MaxCharacterLevelAchieved`
+  (dispatch case `0x140020FF7`, writes `[G+0x16c]`), a sibling of the char-list
+  case. NEXT: identify the account-info message(s) that clear the status (client
+  dispatch), then generate `0x0117` from the client-derived layout + characterdb
+  (target character = `character` id 22 on the test account, accountId 2).
+
+### 8.5 Provenance discipline applied
+- The captured `0x0117` body was a DIAGNOSTIC replay only, now RETIRED
+  (`charlist-replay.bin` deleted, gitignored). The real path derives the layout
+  from the client's parser and fills it from our characterdb.
