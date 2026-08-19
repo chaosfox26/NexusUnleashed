@@ -110,3 +110,15 @@ Prerequisite 32,131, Quest2, World, WorldZone, MapZone, Creature2DisplayInfo,
 TaxiNode) are CELL-FOR-CELL EQUIVALENT to tbl_reader.py. The 62 model-bound
 tables (WorldSky/WorldWater*/ColorShift/Item2/...) are the SAME class our proven
 Python reader also skips without a model - not a defect, a documented limit.
+
+## TextTable + GameDataService (2026-08-19)
+
+| file | class | source |
+|---|---|---|
+| `GameData/TextTable.cs` | AUTHORED | reads Carbine's localization .bin (id->string), format ported from our own tbl_reader.read_text_table. **539,251 strings, byte-for-byte equivalent to the proven reader.** |
+| `GameData.Generated/GameDataService.cs` | AUTHORED | loads + indexes the core tables and text, typed lookups (CreatureName etc.) for the world layer |
+
+Proven (6/6): 53,137 creatures / 66,383 spells / 2,729 worlds indexed; text
+resolution EXACTLY matches tbl_reader+read_text_table (49,603/53,131 named
+creatures resolve; the rest carry empty client strings). The engine names
+"Firestorm Bomber", "Eldan Teleporter", etc. from the client alone.
