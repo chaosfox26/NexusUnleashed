@@ -157,6 +157,12 @@ public sealed class StsSrp
                     ("H(A|B|S)",          H(Apad, Bpad, Spad)),
                     ("H(s|A|B|K)",        H(salt, Apad, Bpad, K)),
                     ("H(hI|s|A|B|K)",     H(hI, salt, Apad, Bpad, K)),
+                    // WildStar game-SRP M1: H( (H(N)^H(g)) | H(I) | S | A | B | K ),
+                    // includes the raw shared secret S; I = H(username). (The DB
+                    // verifier is game-format, so the STS may share this recipe.)
+                    ("H(hNg|hI|S|A|B|K)", H(hNxorG, hI, Spad, Apad, Bpad, K)),
+                    ("H(hNg|S|A|B|K)",    H(hNxorG, Spad, Apad, Bpad, K)),
+                    ("H(hNg|hI|s|S|A|B|K)", H(hNxorG, hI, salt, Spad, Apad, Bpad, K)),
                 };
                 foreach (var (mtag, cand) in m1Variants)
                 {

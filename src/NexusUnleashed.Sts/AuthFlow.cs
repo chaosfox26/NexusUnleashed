@@ -29,7 +29,24 @@ public static class AuthFlow
     private const string KeySrp = "auth.srp";
     private const string KeyAuthed = "auth.ok";
     private const string KeySession = "auth.sessionkey";
-    private static int _kProbe = -1;   // rotates the SRP k-mode across LoginStart retries
+
+    // The SRP k-mode rotates one step per LoginStart, PERSISTED to a file so that
+    // rebuilds/restarts don't reset it — each real login keeps probing the next
+    // candidate k until the client's proof verifies.
+    private static readonly object _kLock = new();
+    private static readonly string _kFile =
+        System.IO.Path.Combine(AppContext.BaseDirectory, "sts-kprobe.txt");
+    private static int NextKMode()
+    {
+        lock (_kLock)
+        {
+            int n = 0;
+            try { if (System.IO.File.Exists(_kFile)) int.TryParse(System.IO.File.ReadAllText(_kFile).Trim(), out n); } catch { }
+            int next = n + 1;
+            try { System.IO.File.WriteAllText(_kFile, next.ToString()); } catch { }
+            return (next & 0x7fffffff) % StsSrp.KModeCount;
+        }
+    }
 
     public static void Register(StsServer server, IAccountStore accounts)
     {
@@ -62,7 +79,7 @@ public static class AuthFlow
             // The client retries LoginStart several times per login attempt; rotate
             // the SRP k-mode across those retries so one login session probes every
             // candidate k, and the KeyData proof search identifies the right one.
-            int kMode = (System.Threading.Interlocked.Increment(ref _kProbe) & 0x7fffffff) % StsSrp.KModeCount;
+            int kMode = NextKMode();
             var srp = new StsSrp(creds.Value.Salt, creds.Value.Verifier, login, kMode);
             byte[] B = srp.StartHandshake();                  // big-endian, |N| wide
             s.State[KeySrp] = srp;
