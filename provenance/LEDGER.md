@@ -260,3 +260,12 @@ count 1 / target 5076; buff remove buffId 3 / target 5076; small-update guid
 1836 / flag 1; entity-update guid 5076 / fieldA 15; position guid 5076. The
 layout is a protocol fact from Carbine's wire; field-inference tool + capture
 found it, no emulator source read.
+
+## Entity-create POSITION cracked (2026-08-19)
+
+The bit-packed 0x0262 body's position was recovered by a bit-shift search over
+the capture (Starlight): 3x float32 at bit offset 289. Our PacketReader decodes
+it EXACTLY from real bytes: (-804.80, -925.40, -2387.10) - an actual Everstar
+world coordinate (the player loaded at -764,-905,-2277). ServerEntityCreate now
+returns guid + position. Remaining body fields (creatureId, faction, display,
+type-specific variants) are task #47.

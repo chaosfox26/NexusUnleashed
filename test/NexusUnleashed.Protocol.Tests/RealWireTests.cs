@@ -56,8 +56,8 @@ Console.WriteLine("-- message models vs real bytes --");
 
 // 0x0262 entity-create header (guid pinned; body bit-packed, pending)
 {
-    var ec = ServerEntityCreate.Parse(Hex("6202e606000040b51c07004611000000f0"));
-    Check("0x0262 entity-create: guid header pinned", ec.Guid == 1766, $"(guid={ec.Guid}, body {ec.Body.Length}B bit-packed)");
+    var ec = ServerEntityCreate.Parse(Hex("6202f0070000c04c2d0000431100000000a0010000a0d000000000000000a000000000206666928835b3ce8835632a8a29"));
+    Check("0x0262 entity-create: guid + position", ec.Guid == 2032 && Math.Abs(ec.Y - (-925.4f)) < 0.5f, $"(guid={ec.Guid} pos=({ec.X:F0},{ec.Y:F0},{ec.Z:F0}))");
 }
 
 
@@ -69,6 +69,23 @@ Console.WriteLine("-- message models vs real bytes --");
     Check("0x092F value: guid + value 1200", val.Guid == 5076 && val.Value == 1200, $"(guid={val.Guid} val={val.Value})");
     var cnt = ServerCounter.Parse(Hex("fe0704000000"));
     Check("0x07FE counter: single u32", cnt.Value == 4, $"({cnt.Value})");
+}
+
+
+// entity-create POSITION decode (bit offset 289 = 3x float32), cracked by the
+// bit-shift search and cross-checked against the operator's world coords.
+{
+    byte[] p = Hex("6202f0070000c04c2d0000431100000000a0010000a0d000000000000000a000000000206666928835b3ce8835632a8a29");
+    var r = new PacketReader(p);
+    Check("entity-create opcode", (ushort)r.ReadBits(16) == 0x0262);
+    uint guid = r.ReadUInt32();
+    Check("entity-create guid 2032", guid == 2032, $"({guid})");
+    int skip = 289 - 48;                   // skip to the position field
+    while (skip > 0) { int c = Math.Min(32, skip); r.ReadBits(c); skip -= c; }
+    float x = r.ReadSingle(), y = r.ReadSingle(), z = r.ReadSingle();
+    Console.WriteLine($"    decoded position: ({x:F2}, {y:F2}, {z:F2})");
+    bool ok = Math.Abs(x - (-804.80f)) < 0.5f && Math.Abs(y - (-925.40f)) < 0.5f && Math.Abs(z - (-2387.10f)) < 0.5f;
+    Check("entity-create POSITION decodes to real world coords", ok);
 }
 
 Console.WriteLine($"{pass} pass / {fail} fail");

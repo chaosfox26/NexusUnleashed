@@ -90,16 +90,25 @@ public sealed record ServerEntityPositionUpdate(uint Guid, uint MovementData, by
 /// with known worlddb entities - a focused effort, not a byte scan. Marked here
 /// so the next pass does not repeat the byte-aligned dead end.
 /// </summary>
-public sealed record ServerEntityCreate(uint Guid, byte[] Body) : IServerMessage
+public sealed record ServerEntityCreate(uint Guid, float X, float Y, float Z) : IServerMessage
 {
     public GameMessageOpcode Opcode => GameMessageOpcode.ServerEntityCreate;
+
+    // Position sits at bit offset 289 of the payload (3x float32), recovered by a
+    // bit-shift search over the capture and validated against real world coords
+    // (decoded -804.80/-925.40/-2387.10, an actual Everstar spot). Confirmed for
+    // the common entity layout; type-specific variants are the remaining decode
+    // work (task #47) - creatureId, faction, display still pending.
+    private const int PositionBit = 289;
+
     public static ServerEntityCreate Parse(byte[] payload)
     {
         var r = new PacketReader(payload);
         r.ReadBits(16);                       // opcode (pinned)
         uint guid = r.ReadUInt32();           // guid (pinned, validated)
-        byte[] body = r.ReadBytes(r.BytesRemaining);   // bit-packed, pending decode
-        return new ServerEntityCreate(guid, body);
+        int skip = PositionBit - 48;          // advance to the position field
+        while (skip > 0) { int c = System.Math.Min(32, skip); r.ReadBits(c); skip -= c; }
+        return new ServerEntityCreate(guid, r.ReadSingle(), r.ReadSingle(), r.ReadSingle());
     }
 }
 
