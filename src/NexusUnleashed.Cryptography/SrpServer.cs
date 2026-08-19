@@ -77,7 +77,7 @@ public sealed class SrpServer : IDisposable
         };
     }
 
-    private static bool FixedTimeEquals(byte[]? a, byte[]? b)
+    private static bool FixedTimeEquals(byte[] a, byte[] b)
     {
         if (a is null || b is null || a.Length != b.Length) return false;
         int diff = 0;
