@@ -86,3 +86,16 @@ layout still UNPINNED (SRP values carried as hex in <Content> until one oracle
 capture); the flow and crypto are real. Proven over a live TCP socket end to
 end (7/7): a real client ran SRP against the STS server, got M2 and a token;
 wrong password rejected over the wire.
+
+## src/NexusUnleashed.GameData.Gen + .Generated (2026-08-19)
+
+| file | class | source |
+|---|---|---|
+| `GameData.Gen/TableCodeGen.cs`, `Program.cs` | AUTHORED | code generator: reads a client `.tbl` schema (a fact) and emits a typed C# record + reader. Our own code. |
+| `GameData.Generated/*.g.cs` (384 files) | GENERATED | one typed model per client table, produced mechanically from Carbine's own column definitions. Not hand authored; regenerate from the client. |
+
+`GameTableReader.ReadSchema` added (schema-only, immune to row-layout quirks).
+All 384 tables generate (1.9s) and compile; typed load proven on the core
+tables (Creature2 53,137 / Spell4 66,383 / World 2,729 incl. 990 + 3335 /
+Quest2 5,194). This is the architecture's "facts -> generated" path: the whole
+GameTable layer is now typed, from the client, zero NF.

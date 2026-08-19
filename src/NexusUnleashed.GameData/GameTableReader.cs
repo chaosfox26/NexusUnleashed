@@ -44,6 +44,47 @@ public static class GameTableReader
     private const int HeaderSize = 96;
     private const int FieldSize = 24;
 
+    /// <summary>
+    /// Read only the table's schema (name + typed field definitions), skipping
+    /// all row parsing. This is what the code generator needs, and it is immune
+    /// to row-layout quirks (e.g. the string-column padding) that only affect
+    /// value reads.
+    /// </summary>
+    public static GameTable ReadSchema(string path)
+    {
+        byte[] data = File.ReadAllBytes(path);
+        var s = new SpanCursor(data);
+        if (s.U32(0) != Signature)
+            throw new InvalidDataException($"{Path.GetFileName(path)}: bad signature");
+
+        ulong fieldCount = s.U64(32);
+        ulong fieldOffset = s.U64(40);
+        var cols = ReadFields(data, s, (int)fieldOffset, (int)fieldCount);
+        return new GameTable { Name = Path.GetFileNameWithoutExtension(path), Fields = cols };
+    }
+
+    private static List<GameField> ReadFields(byte[] data, SpanCursor s, int fieldOffset, int fieldCount)
+    {
+        var defs = new List<(int nameLen, int nameOff, FieldType type)>();
+        int pos = HeaderSize + fieldOffset;
+        for (int i = 0; i < fieldCount; i++)
+        {
+            defs.Add(((int)s.U64(pos), (int)s.U64(pos + 8), (FieldType)s.U16(pos + 16)));
+            pos += FieldSize;
+        }
+        int namesStart = (HeaderSize + fieldOffset + FieldSize * fieldCount + 15) & ~15;
+        var cols = new List<GameField>(fieldCount);
+        for (int i = 0; i < defs.Count; i++)
+        {
+            var (nameLen, nameOff, ftype) = defs[i];
+            string name = nameLen > 1
+                ? Encoding.Unicode.GetString(data, namesStart + nameOff, (nameLen - 1) * 2)
+                : $"col{i}";
+            cols.Add(new GameField { Name = name, Type = ftype });
+        }
+        return cols;
+    }
+
     public static GameTable Read(string path)
     {
         byte[] data = File.ReadAllBytes(path);
@@ -93,12 +134,17 @@ public static class GameTableReader
         int stOff = HeaderSize + (int)recordOffset + (int)recordsBytes;
         int stLen = (int)((long)totalRecordSize - recordsBytes);
 
+        int stEnd = stOff + stLen;
         string StringAt(int off)
         {
-            // UTF-16LE, double-null terminated, char-aligned
+            // UTF-16LE, double-null terminated, char-aligned. Offsets are clamped
+            // to the string-table bounds (matching the proven tbl_reader.py, whose
+            // slice semantics clamp rather than throw) so a stray offset yields ""
+            // instead of crashing the whole table read.
             int p = stOff + off;
+            if (off < 0 || p >= stEnd) return "";
             int end = p;
-            while (end + 1 < stOff + stLen && !(data[end] == 0 && data[end + 1] == 0))
+            while (end + 1 < stEnd && !(data[end] == 0 && data[end + 1] == 0))
                 end += 2;
             return Encoding.Unicode.GetString(data, p, end - p);
         }

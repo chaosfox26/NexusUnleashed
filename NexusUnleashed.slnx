@@ -3,6 +3,8 @@
     <Project Path="src/NexusUnleashed.Content/NexusUnleashed.Content.csproj" />
     <Project Path="src/NexusUnleashed.Cryptography/NexusUnleashed.Cryptography.csproj" />
     <Project Path="src/NexusUnleashed.Database/NexusUnleashed.Database.csproj" />
+    <Project Path="src/NexusUnleashed.GameData.Gen/NexusUnleashed.GameData.Gen.csproj" />
+    <Project Path="src/NexusUnleashed.GameData.Generated/NexusUnleashed.GameData.Generated.csproj" />
     <Project Path="src/NexusUnleashed.GameData/NexusUnleashed.GameData.csproj" />
     <Project Path="src/NexusUnleashed.Network/NexusUnleashed.Network.csproj" />
     <Project Path="src/NexusUnleashed.Realm/NexusUnleashed.Realm.csproj" />
@@ -12,6 +14,7 @@
     <Project Path="test/NexusUnleashed.Content.Tests/NexusUnleashed.Content.Tests.csproj" />
     <Project Path="test/NexusUnleashed.Crypto.Tests/NexusUnleashed.Crypto.Tests.csproj" />
     <Project Path="test/NexusUnleashed.Database.Tests/NexusUnleashed.Database.Tests.csproj" />
+    <Project Path="test/NexusUnleashed.GameData.Tests/NexusUnleashed.GameData.Tests.csproj" />
     <Project Path="test/NexusUnleashed.Sts.Tests/NexusUnleashed.Sts.Tests.csproj" />
   </Folder>
 </Solution>
