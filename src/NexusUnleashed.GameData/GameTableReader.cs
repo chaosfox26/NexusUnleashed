@@ -149,10 +149,52 @@ public static class GameTableReader
             return Encoding.Unicode.GetString(data, p, end - p);
         }
 
+        // Structural pad mask (file-true, ported from our own tbl_reader.py which
+        // is equivalence-gated to the engine's dumps). The engine pads 4 bytes
+        // after SOME string columns; the condition is model-bound and invisible to
+        // a model-free reader, so we recover it from record arithmetic: base field
+        // widths + 4*pads must equal recordSize exactly. Candidate pad columns are
+        // string columns whose row-0 first offset is 0 and whose next field is not
+        // a string; trailing candidates are dropped until the arithmetic closes,
+        // which reproduces the engine's suppression byte-for-byte.
+        int[] widths = new int[fields.Count];
+        int baseWidth = 0;
+        for (int f = 0; f < fields.Count; f++)
+        {
+            widths[f] = (fields[f].type == FieldType.ULong || fields[f].type == FieldType.String) ? 8 : 4;
+            baseWidth += widths[f];
+        }
+
+        var candidates = new List<int>();
+        if (recordCount > 0)
+        {
+            int cp = HeaderSize + (int)recordOffset;
+            for (int f = 0; f < fields.Count; f++)
+            {
+                if (fields[f].type == FieldType.String)
+                {
+                    uint a0 = s.U32(cp);
+                    if (a0 == 0 && f < fields.Count - 1 && fields[f + 1].type != FieldType.String)
+                        candidates.Add(f);
+                }
+                cp += widths[f];
+            }
+        }
+
+        int extra = (int)recordSize - baseWidth;
+        if (extra < 0 || extra % 4 != 0)
+            throw new InvalidDataException($"{Path.GetFileName(path)}: record arithmetic broken (size {recordSize}, base {baseWidth})");
+        while (candidates.Count > 0 && candidates.Count * 4 > extra)
+            candidates.RemoveAt(candidates.Count - 1);
+        if (candidates.Count * 4 != extra)
+            throw new InvalidDataException($"{Path.GetFileName(path)}: cannot close record arithmetic (extra {extra}, pads {candidates.Count})");
+        var padAfter = new HashSet<int>(candidates);
+
         var rows = new List<object[]>((int)recordCount);
         for (ulong j = 0; j < recordCount; j++)
         {
-            int rp = HeaderSize + (int)recordOffset + (int)recordSize * (int)j;
+            int start = HeaderSize + (int)recordOffset + (int)recordSize * (int)j;
+            int rp = start;
             var row = new object[fields.Count];
             for (int f = 0; f < fields.Count; f++)
             {
@@ -173,7 +215,10 @@ public static class GameTableReader
                     default:
                         row[f] = s.U32(rp); rp += 4; break;
                 }
+                if (padAfter.Contains(f)) rp += 4;
             }
+            if (rp - start != (int)recordSize)
+                throw new InvalidDataException($"{Path.GetFileName(path)}: row {j} consumed {rp - start} of {recordSize} bytes");
             rows.Add(row);
         }
 

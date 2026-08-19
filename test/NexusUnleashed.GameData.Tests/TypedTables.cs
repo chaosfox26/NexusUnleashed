@@ -5,6 +5,9 @@ using System.Linq;
 using NexusUnleashed.GameData.Generated;
 
 string tblDir = args.Length > 0 ? args[0] : ".";
+if (args.Length > 1 && args[1] == "--all") return ReadAll.Run(args[0]);
+if (args.Length > 1 && args[1] == "--dump") return Dump.Run(args[0]);
+
 string P(string t) => System.IO.Path.Combine(tblDir, t + ".tbl");
 
 int pass = 0, fail = 0;

@@ -99,3 +99,14 @@ All 384 tables generate (1.9s) and compile; typed load proven on the core
 tables (Creature2 53,137 / Spell4 66,383 / World 2,729 incl. 990 + 3335 /
 Quest2 5,194). This is the architecture's "facts -> generated" path: the whole
 GameTable layer is now typed, from the client, zero NF.
+
+## GameTableReader value reads file-true (2026-08-19)
+
+`GameTableReader.Read` now applies the structural string-pad mask ported from
+our own `tbl_reader.py` (equivalence-gated to the engine's dumps), with a
+per-row record-arithmetic assertion. Proven: 322 tables read model-free
+(1,946,807 rows), and 10 core tables (Creature2, Spell4, Spell4Effects 131,010,
+Prerequisite 32,131, Quest2, World, WorldZone, MapZone, Creature2DisplayInfo,
+TaxiNode) are CELL-FOR-CELL EQUIVALENT to tbl_reader.py. The 62 model-bound
+tables (WorldSky/WorldWater*/ColorShift/Item2/...) are the SAME class our proven
+Python reader also skips without a model - not a defect, a documented limit.
