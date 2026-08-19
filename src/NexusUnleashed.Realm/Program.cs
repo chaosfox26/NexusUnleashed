@@ -24,8 +24,11 @@ internal static class Program
 
         // STS login server - flow pinned from the client, bodies UNPINNED.
         var sts = new StsServer(cfg.BindAddress, cfg.StsPort);
-        AuthFlow.Register(sts, new InMemoryAccountStore());
-        Log.Info("sts login server listening (body schemas pending oracle capture).");
+        IAccountStore accounts = string.IsNullOrWhiteSpace(cfg.AuthDatabase)
+            ? new InMemoryAccountStore()
+            : new NexusUnleashed.Database.DbAccountStore(cfg.AuthDatabase);
+        AuthFlow.Register(sts, accounts);
+        Log.Info($"sts login server listening ({accounts.GetType().Name}; body schemas pending oracle capture).");
 
         // World game server - handlers register as messages are pinned.
         var world = new GameServer(cfg.BindAddress, cfg.WorldPort);

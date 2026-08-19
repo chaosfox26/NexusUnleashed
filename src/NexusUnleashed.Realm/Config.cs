@@ -12,6 +12,9 @@ public sealed class RealmConfig
     public int AuthPort { get; set; } = 23115;   // UNPINNED: real ports from oracle
     public int WorldPort { get; set; } = 24000;
     public string Database { get; set; } = "Server=127.0.0.1;Port=3307;User=root;Database=worlddb";
+    /// <summary>authdb connection; when empty, the host uses the in-memory dev store.</summary>
+    public string AuthDatabase { get; set; } = "";
+    public string ContentRoot { get; set; } = "./content";
     public string AssetPath { get; set; } = "./assets";
 
     public static RealmConfig Load(string path)

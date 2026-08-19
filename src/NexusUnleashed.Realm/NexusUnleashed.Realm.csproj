@@ -9,5 +9,7 @@
     <ProjectReference Include="..\NexusUnleashed.Network\NexusUnleashed.Network.csproj" />
     <ProjectReference Include="..\NexusUnleashed.GameData\NexusUnleashed.GameData.csproj" />
     <ProjectReference Include="..\NexusUnleashed.Sts\NexusUnleashed.Sts.csproj" />
+    <ProjectReference Include="..\NexusUnleashed.Database\NexusUnleashed.Database.csproj" />
+    <ProjectReference Include="..\NexusUnleashed.Content\NexusUnleashed.Content.csproj" />
   </ItemGroup>
 </Project>

@@ -55,3 +55,13 @@ behavioral oracle (the running frozen realm), not from any source. Auth port
 LE opcode; two independent frames agreed byte-for-byte with the layout. Raw
 captures preserved in the spec. This is a wire measurement — observing bytes on
 a socket is not reading code.
+
+## src/NexusUnleashed.Database/ (2026-08-19)
+
+| file | class | source |
+|---|---|---|
+| `DbAccountStore.cs` | AUTHORED | our own `IAccountStore` over the authdb `account` table (id/email/s/v/gameToken/sessionKey) — schema is our own DB, SQL and hex handling written fresh |
+| dependency: MySqlConnector 2.3.7 | THIRD-PARTY (MIT) | permissive async MySQL driver |
+
+Proven read-only against the live authdb: salt 16 bytes, verifier 128 bytes,
+unknown account -> null (5/5). No emulator source consulted.

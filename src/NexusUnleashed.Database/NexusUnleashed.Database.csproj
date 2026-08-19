@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- MySqlConnector: MIT-licensed async MySQL driver. -->
+    <PackageReference Include="MySqlConnector" Version="2.3.7" />
+    <ProjectReference Include="..\NexusUnleashed.Sts\NexusUnleashed.Sts.csproj" />
+  </ItemGroup>
+</Project>
