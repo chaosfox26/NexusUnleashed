@@ -5,7 +5,13 @@
 // multiply-chains, then each byte is XORed with an 8-byte feedback register and
 // a rotating key block, with ciphertext fed back (a CFB-style stream cipher).
 // The seed itself is a static value from the client build (observed at runtime).
-// Verified byte-for-byte against a real captured keystream from the wire.
+//
+// SCOPE (corrected 2026-08-19): this reproduces the FIRST message on a connection
+// byte-for-byte (the register starts at the static `a`). It does NOT yet
+// reproduce later messages: the cipher is stateful across the connection (the
+// same hello plaintext yields different ciphertexts per send). The per-message
+// register evolution is unsolved — see spec/protocol/cipher-state.md. Do not
+// treat this as a closed general-purpose channel cipher until that is resolved.
 using System;
 
 namespace NexusUnleashed.Cryptography;

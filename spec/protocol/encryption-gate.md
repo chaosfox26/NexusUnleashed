@@ -1,16 +1,19 @@
 # Spec: the encryption gate (the road to "in the world")
 
-**Status: CLOSED (2026-08-19) — superseded by `spec/protocol/containers.md`.**
+**Status: PARTIALLY CLOSED — framing done; per-message cipher state OPEN. See
+`spec/protocol/cipher-state.md` (the live problem) and `containers.md` (framing).**
 
-> The gate is shut. There is **no SRP-derived channel key and no ARC4** on the
-> packet channel: the world channel wraps every game message in a packed
-> container (`0x03DC` S→C / `0x0244` C→S) and enciphers the inner message with
-> `PacketCrypt(0xD283F5B34A8DC685)`, a static build-derived seed. Proven
-> byte-for-byte against the real captured ServerHello (decode → inner opcode
-> `0x0003`; encode → the exact captured wire bytes;
-> `test/NexusUnleashed.Protocol.Tests`). The container codec is wired into the
-> session (`WorldPacket` + `GameSession.Crypt`). See `containers.md`. The text
-> below is the historical record of the open problem.
+> Settled: there is **no SRP-derived channel key and no ARC4**. The world channel
+> wraps every game message in a packed container (`0x03DC` S→C / `0x0244` C→S)
+> and enciphers the inner message with `PacketCrypt` from the build seed
+> `0xD283F5B34A8DC685`. The container FRAMING is proven byte-for-byte and wired
+> (`WorldPacket` + `GameSession.Crypt`).
+>
+> **Still open (corrected 2026-08-19):** the cipher is stateful across the
+> connection — the same hello plaintext gave 12 distinct ciphertexts — and
+> `PacketCrypt` reproduces only message #0. The per-message state evolution is
+> unsolved; that is the real gate. Details + rejected models + levers in
+> `cipher-state.md`. The text below is the original open-problem record.
 
 ---
 

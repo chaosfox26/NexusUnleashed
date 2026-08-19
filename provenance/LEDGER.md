@@ -315,3 +315,16 @@ Proven (22/22 protocol) against the operator's own captured packets.
 
 Reproduction of client-accepted bytes (the behavioral oracle), so it is
 guaranteed-correct wire; the id domain's semantics are later work. 25/25 protocol.
+
+## CORRECTION: cipher is stateful, only msg #0 reproduced (2026-08-19)
+
+| file | class | source |
+|---|---|---|
+| `spec/protocol/cipher-state.md` | spec | measured correction: the same hello plaintext gives 12 distinct ciphertexts → the cipher is stateful across the connection; `PacketCrypt` reproduces only message #0. Rejected models + recovered per-message registers recorded. From our own capture. |
+
+The earlier "ENCRYPTION GATE CLOSED byte-for-byte (13/13)" was validated only on
+the FIRST message. Container framing + the cipher algorithm/key table stand; the
+per-message register evolution is the true remaining gate. Docs corrected
+(containers.md, encryption-gate.md, PacketCrypt.cs, STATE.md). Discipline note:
+"verified byte-for-byte" against ONE message did not generalize — exactly the
+over-claim class the project's own rules warn about.

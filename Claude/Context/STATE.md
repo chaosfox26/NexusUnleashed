@@ -34,35 +34,45 @@ fidelity AND a production multiplayer realm. Zero NF source; two MIT primitives
 ## THE ROAD (task #48 = NORTH STAR: operator stands in the world on our engine)
 
 DONE: crypto/login, wire codec, framing, protocol capture, message models,
-ENCRYPTION, **encrypted channel WIRED**. NEXT: **the 0x058F client hello / token
-verify -> character list -> character select -> world entry (world-state blobs
-0x0988/0x0981/0x098B + entity spawns 0x0262) -> the client renders**. Built
-iteratively with the client as oracle.
+container framing, cipher for msg #0. **TRUE NEXT BLOCKER: the per-message cipher
+state** (`spec/protocol/cipher-state.md`) — then 0x058F client hello / token
+verify -> character list -> character select -> world entry -> the client renders.
 
-### Encrypted channel is now wired (2026-08-19, this session)
+### Container framing wired; cipher partially reproduced (2026-08-19, this session)
 
 The world channel's real structure was decoded byte-for-byte from our own login
 capture and built into the engine:
 
 - **`0x03DC` (S→C) / `0x0244` (C→S) are packed containers**:
   `[u32 innerLen self-inclusive][encrypted inner]`, inner = `[u16 op][body]`,
-  enciphered with the static-seeded `PacketCrypt`. The auth channel (port 23115)
+  enciphered with the build-seeded `PacketCrypt`. The auth channel (port 23115)
   is CLEAR direct frames; the world channel (24000) is the encrypted container.
 - `Network/WorldPacket.cs` encodes/decodes it; `GameSession.Crypt` +
   container-aware dispatch + `SendGameMessageAsync` wire it into the transport;
   `GameServer(worldChannel:true)` seeds each session; `Realm/WorldHandshake.cs`
   sends the `0x0003` hello on connect and routes the client's login opcodes.
-- **Proven (22/22 protocol tests):** DecodeContainer(real captured ServerHello)
-  → inner opcode `0x0003` + exact body; EncodeServer reproduces the captured
-  wire byte-for-byte. Spec: `spec/protocol/containers.md`.
+- **Proven (22/22 protocol):** DecodeContainer(real ServerHello) → inner `0x0003`
+  + exact body; EncodeServer reproduces the captured wire byte-for-byte **for the
+  first message**. Framing spec: `spec/protocol/containers.md`.
 
-### The oracle-loop test the operator can run now
+### CORRECTION: the cipher is NOT fully closed (2026-08-19)
 
-Point a real 16042 client's world connection at this engine (host it, aim the
-client at our world port). It should receive the `0x0003` hello over the
-encrypted channel and send its `0x058F` hello back — which our handshake logs.
-That log is the next capture: it tells us the token/enter layout to pin the
-character-list step. This is the client-as-oracle loop from here to world entry.
+The earlier "ENCRYPTION GATE CLOSED, 13/13 byte-for-byte" was validated only
+against the FIRST message. **The cipher is stateful across the connection**: the
+same 49-byte hello plaintext produced **12 distinct ciphertexts** in one session.
+`PacketCrypt` reproduces only message #0 (it starts from the static register `a`,
+which msg #0 recovers exactly). Continuous-CFB carry, per-message chain-advance,
+and shared-duplex models were all tested and REJECTED (`cipher-state.md` has the
+evidence + the 12 known-plaintext levers). So the wired channel sends a correct
+FIRST hello, then would encipher the rest wrong — a real client accepts the hello
+and rejects the stream. **This per-message state rule is now the true task-#48
+blocker**, ahead of char list / world entry. Framing + message models + the world
+sim are all ready to plug in the moment the cipher stream is reproduced.
+
+Leading next attacks (see cipher-state.md): raw duplex-interleave with the C→S
+ciphertext (needs a tap that logs C→S BEFORE decrypt), or the client binary's
+`GetKeyFromAuthBuildAndMessage` key setup (source 1). We hold 12 known-plaintext
+hello pairs + recovered per-message registers as the cryptanalytic lever.
 
 ## The capture pipeline + facts (for the next session)
 

@@ -1,12 +1,17 @@
 # Spec: the encrypted packed container (world channel)
 
-**Status: PINNED — decoded byte-for-byte from a real login capture 2026-08-19.**
+**Status: FRAMING PINNED byte-for-byte; CIPHER proven for message #0 only.**
 
-This is the structure that carries every game message on the world channel, and
-the concrete form of "the encrypted channel." It supersedes the open questions in
-`encryption-gate.md` (now CLOSED): there is no SRP-derived channel key and no ARC4;
-the world channel wraps each game message in a container and encrypts the inner
-message with the static build-seeded `PacketCrypt`.
+> **Correction (2026-08-19):** the container FRAMING below is fully proven, but
+> the per-message CIPHER STATE is NOT closed — see `spec/protocol/cipher-state.md`.
+> The same hello plaintext produces 12 different ciphertexts, so the cipher is
+> stateful across the connection; `PacketCrypt` reproduces only the first message.
+> There is no SRP-derived channel key and no ARC4 (those are settled); the open
+> piece is how the cipher's register evolves per message.
+
+This is the structure that carries every game message on the world channel: the
+world wraps each game message in a container and encrypts the inner message with
+the build-seeded `PacketCrypt`.
 
 ## The two channels
 
@@ -47,9 +52,10 @@ S->C 0x03DC payload = 35000000 1a57c0cbff79ba9c87080349bf63806df50021ea5e4a2918f
   seen post-decryption in session 2 (0300aa3e0000010000001500...).
 ```
 
-`Encrypt` of that plaintext reproduces the captured ciphertext byte-for-byte, so
-the engine can both **read** what the client sends and **produce** exactly what the
-client expects. Verified in `test/NexusUnleashed.Protocol.Tests` (real-wire).
+`Encrypt` of that plaintext reproduces the captured ciphertext byte-for-byte **for
+this first message**. Verified in `test/NexusUnleashed.Protocol.Tests` (real-wire).
+Subsequent messages use an evolved register (`cipher-state.md`) — the framing here
+is correct, but reproducing message #N needs the state rule first.
 
 ## Client→server direction
 
