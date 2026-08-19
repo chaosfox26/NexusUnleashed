@@ -122,3 +122,13 @@ Proven (6/6): 53,137 creatures / 66,383 spells / 2,729 worlds indexed; text
 resolution EXACTLY matches tbl_reader+read_text_table (49,603/53,131 named
 creatures resolve; the rest carry empty client strings). The engine names
 "Firestorm Bomber", "Eldan Teleporter", etc. from the client alone.
+
+## tools/NexusUnleashed.CaptureProxy (2026-08-19)
+
+| file | class | source |
+|---|---|---|
+| `Program.cs` | AUTHORED | passive capture proxy - forwards client<->oracle bytes untouched, logs the framed opcode stream. Our own code; the frame envelope is PINNED from the oracle. |
+
+The clean method for pinning world-entry protocol: the operator plays a real
+client through the proxy, we observe the wire (a fact). Frame parsing proven
+against a mock oracle (both directions, exact opcode + length).
