@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/NexusUnleashed.Cryptography/NexusUnleashed.Cryptography.csproj" />
+    <Project Path="src/NexusUnleashed.Network/NexusUnleashed.Network.csproj" />
   </Folder>
 </Solution>
