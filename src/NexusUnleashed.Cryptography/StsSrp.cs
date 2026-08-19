@@ -63,7 +63,9 @@ public sealed class StsSrp
     public byte[] Verifier => _vBytes;
     public byte[] Salt => _salt;
 
-    public StsSrp(byte[] salt, byte[] verifier, string username = "", HashKind hash = HashKind.Sha256)
+    public string KLabel { get; private set; } = "";
+
+    public StsSrp(byte[] salt, byte[] verifier, string username = "", int kMode = 0, HashKind hash = HashKind.Sha256)
     {
         _hash = hash;
         _N = FromBE(NBytes);
@@ -73,9 +75,23 @@ public sealed class StsSrp
         _vBytes = verifier;
         _userBytes = System.Text.Encoding.UTF8.GetBytes(username);
         _v = FromBE(verifier);
-        // k = H(N | PAD(g)) — standard SRP-6a, big-endian, g padded to |N|.
-        _k = FromBE(H(NBytes, Pad(ToBE(_g))));
+        // The SRP multiplier k. RFC-5054 H(N|PAD(g)) did not reproduce the
+        // client's shared secret, so k is one of the common variants below; the
+        // right one is identified when the client's own M1 verifies.
+        (_k, KLabel) = kMode switch
+        {
+            1 => (new BigInteger(3), "k=3"),
+            2 => (BigInteger.One, "k=1(SRP3: B=v+g^b)"),
+            3 => (FromBE(H(NBytes, ToBE(_g))), "k=H(N|g-minimal)"),
+            4 => (FromBE(H(Pad(ToBE(_g)), NBytes)), "k=H(PAD(g)|N)"),
+            5 => (FromBE(H(NBytes)), "k=H(N)"),
+            6 => (FromBE(H(ToBE(_g), NBytes)), "k=H(g-min|N)"),
+            _ => (FromBE(H(NBytes, Pad(ToBE(_g)))), "k=H(N|PAD(g)) RFC5054"),
+        };
     }
+
+    /// <summary>Number of distinct k-modes to rotate through across retries.</summary>
+    public const int KModeCount = 7;
 
     /// <summary>Pick b and compute B = (k*v + g^b) mod N. Returns B big-endian.</summary>
     public byte[] StartHandshake()
@@ -98,45 +114,56 @@ public sealed class StsSrp
         if (A % _N == 0) return false;                      // A mod N == 0 -> abort
 
         byte[] Apad = Pad(ToBE(A)), Bpad = Pad(ToBE(_B));
-        BigInteger u = FromBE(H(Apad, Bpad));
-        // S = (A * v^u)^b mod N
-        BigInteger S = BigInteger.ModPow(A * BigInteger.ModPow(_v, u, _N) % _N, _b, _N);
 
-        // Solve for NCSoft's exact M1 layout against the client's OWN M1 (ground
-        // truth): the hash is SHA-256 (M1 is 32 bytes on the wire); only the
-        // component recipe is uncertain. Try the standard SRP-6a variants and
-        // ACCEPT the one that reproduces the client's M1. Not guessing — the
-        // client's proof is the oracle; whichever recipe matches IS the protocol.
+        // Solve NCSoft's exact SRP recipe against the client's OWN M1 (ground
+        // truth): SHA-256 (M1 is 32B on the wire); k comes from this session's
+        // rotated mode; only u / K / M1 layout remain. Accept the combination
+        // that reproduces the client's M1 — the proof is the oracle, not a guess.
         byte[] hN = H(NBytes), hg = H(Pad(ToBE(_g)));
         byte[] hNxorG = new byte[hN.Length];
         for (int i = 0; i < hN.Length; i++) hNxorG[i] = (byte)(hN[i] ^ hg[i]);
         byte[] hI = H(_userBytes);
+        byte[] saltHexU = System.Text.Encoding.ASCII.GetBytes(Convert.ToHexString(_salt));
+        byte[] saltHexL = System.Text.Encoding.ASCII.GetBytes(Convert.ToHexString(_salt).ToLowerInvariant());
 
-        // candidate session keys K
-        var kVariants = new (string tag, byte[] K)[]
+        var uVariants = new (string tag, BigInteger u)[]
         {
-            ("K=H(pad S)",       H(Pad(ToBE(S)))),
-            ("K=H(min S)",       H(ToBE(S))),
-            ("K=interleave(S)",  Interleave(ToBE(S))),
+            ("u=H(A|B)",     FromBE(H(Apad, Bpad))),
+            ("u=H(B)",       FromBE(H(Bpad))),
+            ("u=H(A|B)[:4]", FromBE(H(Apad, Bpad)[..4])),
         };
-        foreach (var (ktag, K) in kVariants)
+        foreach (var (utag, u) in uVariants)
         {
-            // candidate M1 recipes
-            var m1Variants = new (string tag, byte[] m1)[]
+            BigInteger S = BigInteger.ModPow(A * BigInteger.ModPow(_v, u, _N) % _N, _b, _N);
+            byte[] Spad = Pad(ToBE(S)), Smin = ToBE(S);
+            var kVariants = new (string tag, byte[] K)[]
             {
-                ("M1=H(hNg|s|A|B|K)",     H(hNxorG, _salt, Apad, Bpad, K)),
-                ("M1=H(hNg|H(I)|s|A|B|K)",H(hNxorG, hI, _salt, Apad, Bpad, K)),
-                ("M1=H(A|B|K)",           H(Apad, Bpad, K)),
-                ("M1=H(A|B|S)",           H(Apad, Bpad, Pad(ToBE(S)))),
+                ("K=H(padS)",      H(Spad)),
+                ("K=H(minS)",      H(Smin)),
+                ("K=interleave",   Interleave(Smin)),
+                ("K=padS",         Spad),
             };
-            foreach (var (mtag, cand) in m1Variants)
+            foreach (var (ktag, K) in kVariants)
+            foreach (var (stag, salt) in new[] { ("s", _salt), ("sHexU", saltHexU), ("sHexL", saltHexL) })
             {
-                if (FixedEquals(cand, m1))
+                var m1Variants = new (string tag, byte[] m1)[]
                 {
-                    MatchedVariant = ktag + " ; " + mtag;
-                    m2 = H(Apad, m1, K);                    // M2 = H(A | M1 | K)
-                    sessionKey = K;
-                    return true;
+                    ("H(hNg|hI|s|A|B|K)", H(hNxorG, hI, salt, Apad, Bpad, K)),
+                    ("H(hNg|s|A|B|K)",    H(hNxorG, salt, Apad, Bpad, K)),
+                    ("H(A|B|K)",          H(Apad, Bpad, K)),
+                    ("H(A|B|S)",          H(Apad, Bpad, Spad)),
+                    ("H(s|A|B|K)",        H(salt, Apad, Bpad, K)),
+                    ("H(hI|s|A|B|K)",     H(hI, salt, Apad, Bpad, K)),
+                };
+                foreach (var (mtag, cand) in m1Variants)
+                {
+                    if (FixedEquals(cand, m1))
+                    {
+                        MatchedVariant = $"{KLabel} ; {utag} ; {ktag} ; salt={stag} ; M1={mtag}";
+                        m2 = H(Apad, m1, K);                // M2 = H(A | M1 | K)
+                        sessionKey = K;
+                        return true;
+                    }
                 }
             }
         }

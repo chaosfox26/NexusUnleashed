@@ -29,6 +29,7 @@ public static class AuthFlow
     private const string KeySrp = "auth.srp";
     private const string KeyAuthed = "auth.ok";
     private const string KeySession = "auth.sessionkey";
+    private static int _kProbe = -1;   // rotates the SRP k-mode across LoginStart retries
 
     public static void Register(StsServer server, IAccountStore accounts)
     {
@@ -58,9 +59,14 @@ public static class AuthFlow
             // So STS is STANDARD SRP-6a (big-endian), not the game variant. B is
             // emitted big-endian by StsSrp itself; the reply is base64 KeyData
             // inside <Content>.
-            var srp = new StsSrp(creds.Value.Salt, creds.Value.Verifier, login);
+            // The client retries LoginStart several times per login attempt; rotate
+            // the SRP k-mode across those retries so one login session probes every
+            // candidate k, and the KeyData proof search identifies the right one.
+            int kMode = (System.Threading.Interlocked.Increment(ref _kProbe) & 0x7fffffff) % StsSrp.KModeCount;
+            var srp = new StsSrp(creds.Value.Salt, creds.Value.Verifier, login, kMode);
             byte[] B = srp.StartHandshake();                  // big-endian, |N| wide
             s.State[KeySrp] = srp;
+            Console.WriteLine($"[STS-SRP] LoginStart: trying {srp.KLabel}");
 
             byte[] blob = KeyDataBlob.Pack(creds.Value.Salt, B);
             await s.SendAsync(StsReply.Ok(r.Sequence, KeyDataBody(blob)));
