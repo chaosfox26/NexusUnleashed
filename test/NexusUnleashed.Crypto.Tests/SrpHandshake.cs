@@ -93,4 +93,8 @@ Console.WriteLine("-- packet cipher vs real wire --");
 }
 
 Console.WriteLine($"{pass} pass / {fail} fail");
-return fail == 0 ? 0 : 1;
+
+Console.WriteLine("\n== STS standard SRP-6a (login channel) ==");
+int stsFail = StsSrpChecks.Run();
+
+return (fail == 0 && stsFail == 0) ? 0 : 1;

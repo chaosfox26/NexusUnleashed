@@ -28,6 +28,7 @@ public static class AuthFlow
     private const string KeyLogin = "auth.login";
     private const string KeySrp = "auth.srp";
     private const string KeyAuthed = "auth.ok";
+    private const string KeySession = "auth.sessionkey";
 
     public static void Register(StsServer server, IAccountStore accounts)
     {
@@ -48,55 +49,49 @@ public static class AuthFlow
                 return;
             }
 
-            // REAL SRP step 1: compute B from salt + verifier.
-            var srp = new SrpServer(creds.Value.Salt, login, creds.Value.Verifier);
-            var (salt, B) = srp.StartHandshake();
+            // SCHEMA CONFIRMED from the stock client's StsConnLib64.MT.dll
+            // (NU-deconstruct/StsConnLib64.MT.dll/login-protocol.md). The
+            // LoginStart-reply parser at 0x18002d4e0:
+            //   - reads the <KeyData> field (GetField, base64-decoded to binary),
+            //   - parses [u32 LE saltLen][salt][u32 LE BLen][B], EXACT-consume,
+            //   - validates B < N as a BIG-ENDIAN bignum (error 15 otherwise).
+            // So STS is STANDARD SRP-6a (big-endian), not the game variant. B is
+            // emitted big-endian by StsSrp itself; the reply is base64 KeyData
+            // inside <Content>.
+            var srp = new StsSrp(creds.Value.Salt, creds.Value.Verifier);
+            byte[] B = srp.StartHandshake();                  // big-endian, |N| wide
             s.State[KeySrp] = srp;
 
-            // Reply shape RE'd from the client: a <KeyData> element, base64. The
-            // client GetField("KeyData") -> base64-decode -> SRP setup. The blob's
-            // internal layout (salt/B delimiting) is a CANDIDATE here (length-
-            // prefixed), to be CONFIRMED from the client's own KeyData request that
-            // this reply provokes - the capture reveals the true packing.
-            // STS uses STANDARD OpenSSL SRP: bignums are BIG-ENDIAN (BN_bin2bn),
-            // and the client validates B < N (error 15 otherwise). Our SrpServer
-            // is WildStar's game-channel variant (little-endian). Emit B big-endian
-            // for the STS channel. (CONFIRMATION TEST of the RE finding; the full
-            // standard-SRP path follows once verified.)
-            byte[] saltField = creds.Value.Salt;               // raw DB salt bytes
-            byte[] bBig = (byte[])B.Clone(); System.Array.Reverse(bBig);   // big-endian (OpenSSL)
-            byte[] blob = KeyDataBlob.Pack(saltField, bBig);
-            // KeyData is RAW BYTES in the XML (not base64) — RE'd from the client.
-            await s.SendAsync(StsReply.OkRaw(r.Sequence, KeyDataBody(blob)));
+            byte[] blob = KeyDataBlob.Pack(creds.Value.Salt, B);
+            await s.SendAsync(StsReply.Ok(r.Sequence, KeyDataBody(blob)));
         });
 
         server.On("/Auth/KeyData", async (s, r) =>
         {
-            if (s.State[KeySrp] is not SrpServer srp)
+            if (s.State[KeySrp] is not StsSrp srp)
             {
                 await s.SendAsync(StsReply.Error(r.Sequence, 409));   // KeyData before LoginStart
                 return;
             }
 
-            // Request shape RE'd from the client: <Request><KeyData>base64(blob)
-            // </KeyData></Request>, blob = client A + proof M1 (same packing the
-            // reply uses for salt+B). Decode with the candidate layout.
+            // Client request: <Request><KeyData>base64([u32 LE ALen][A][u32 LE
+            // M1Len][M1])</KeyData></Request> — same packing the reply uses.
             byte[] clientBlob = Convert.FromBase64String(XmlBody.Field(r.BodyText, "KeyData"));
             var parts = KeyDataBlob.Unpack(clientBlob);
             byte[] a = parts.Length > 0 ? parts[0] : Array.Empty<byte>();
             byte[] m1 = parts.Length > 1 ? parts[1] : Array.Empty<byte>();
 
-            // REAL SRP step 2: verify the client proof, derive the session key.
-            SrpServerResult result = srp.Verify(a, m1);
-            if (!result.Success)
+            // Standard SRP step 2: verify the client proof, derive the session key.
+            if (!srp.Verify(a, m1, out byte[] m2, out byte[] sessionKey))
             {
-                await s.SendAsync(StsReply.Error(r.Sequence, 403));   // bad password / wrong layout
+                await s.SendAsync(StsReply.Error(r.Sequence, 403));   // bad proof / wrong hash-variant
                 return;
             }
             s.State[KeyAuthed] = true;
+            s.State[KeySession] = sessionKey;
 
-            byte[] m2blob = KeyDataBlob.Pack(result.ServerProof);
-            await s.SendAsync(StsReply.OkRaw(r.Sequence, KeyDataBody(m2blob)));
+            byte[] blob = KeyDataBlob.Pack(m2);
+            await s.SendAsync(StsReply.Ok(r.Sequence, KeyDataBody(blob)));
         });
 
         server.On("/Auth/RequestGameToken", async (s, r) =>
@@ -116,18 +111,14 @@ public static class AuthFlow
         });
     }
 
-    /// <summary>Build the STS reply body bytes: &lt;Content&gt;&lt;KeyData&gt;RAW
-    /// BLOB&lt;/KeyData&gt;&lt;/Content&gt; — the KeyData value embedded as raw bytes.</summary>
-    private static byte[] KeyDataBody(byte[] blob)
-    {
-        byte[] open = System.Text.Encoding.ASCII.GetBytes("<Content><KeyData>");
-        byte[] close = System.Text.Encoding.ASCII.GetBytes("</KeyData></Content>");
-        var body = new byte[open.Length + blob.Length + close.Length];
-        open.CopyTo(body, 0);
-        blob.CopyTo(body, open.Length);
-        close.CopyTo(body, open.Length + blob.Length);
-        return body;
-    }
+    /// <summary>Build the STS reply body:
+    /// &lt;Content&gt;&lt;KeyData&gt;BASE64(blob)&lt;/KeyData&gt;&lt;/Content&gt;.
+    /// Envelope + field + encoding RE'd from the client: the reply parser fetches
+    /// a content object (null =&gt; error), reads GetField("KeyData"), and
+    /// base64-decodes it to the binary SRP blob. Standard base64 alphabet
+    /// (ABC..xyz0..9+/), confirmed present in the client.</summary>
+    private static string KeyDataBody(byte[] blob)
+        => "<Content><KeyData>" + Convert.ToBase64String(blob) + "</KeyData></Content>";
 
     private static Guid NewToken()
     {

@@ -1,0 +1,144 @@
+// NexusUnleashed — clean-room authored. STANDARD SRP-6a server for the STS
+// (login) channel. This is a DIFFERENT variant from the game-channel SRP6a:
+//
+//   game SRP6a  : Carbine's own — ReverseUInt32 on every hash, little-endian
+//                 BigInteger, block-reversed byte output. (SHA-256.)
+//   STS SRP     : the stock client's Services/Srp/Srp.cpp — plain RFC-5054-style
+//                 SRP-6a over OpenSSL bignums: big-endian BN_bin2bn values, the
+//                 client validates B < N as a big-endian bignum.
+//
+// Provenance: the SRP FLOW and byte order are FACTS reverse-engineered from the
+// stock client's own StsConnLib64.MT.dll (the LoginStart reply parser at
+// 0x18002d4e0: reads [u32 LE saltLen][salt][u32 LE BLen][B] and checks B<N
+// big-endian). The math is textbook SRP-6a, authored fresh here. The group
+// (N, g=2) is the WildStar SRP prime already carried by the game SRP6a (MIT
+// Arctium seed, ledgered). Owes the forbidden tree nothing.
+//
+// The hash is a single swappable parameter: SHA-256 by default (matches the
+// game channel and modern practice); a one-line switch to SHA-1 if the client's
+// M1 shows the STS uses OpenSSL's historical SHA-1. Which one is correct is
+// decided by the client's OWN M1 (ground truth), never guessed.
+using System;
+using System.Numerics;
+using System.Security.Cryptography;
+
+namespace NexusUnleashed.Cryptography;
+
+/// <summary>Standard SRP-6a server, big-endian, for the STS login channel.</summary>
+public sealed class StsSrp
+{
+    // WildStar SRP group (1024-bit N, g = 2), big-endian. Same prime the game
+    // SRP6a carries; here it is used the STANDARD way (big-endian, no reversal).
+    private static readonly byte[] NBytes =
+    {
+        0xE3,0x06,0xEB,0xC0,0x2F,0x1D,0xC6,0x9F,0x5B,0x43,0x76,0x83,0xFE,0x38,0x51,0xFD,
+        0x9A,0xAA,0x6E,0x97,0xF4,0xCB,0xD4,0x2F,0xC0,0x6C,0x72,0x05,0x3C,0xBC,0xED,0x68,
+        0xEC,0x57,0x0E,0x66,0x66,0xF5,0x29,0xC5,0x85,0x18,0xCF,0x7B,0x29,0x9B,0x55,0x82,
+        0x49,0x5D,0xB1,0x69,0xAD,0xF4,0x8E,0xCE,0xB6,0xD6,0x54,0x61,0xB4,0xD7,0xC7,0x5D,
+        0xD1,0xDA,0x89,0x60,0x1D,0x5C,0x49,0x8E,0xE4,0x8B,0xB9,0x50,0xE2,0xD8,0xD5,0xE0,
+        0xE0,0xC6,0x92,0xD6,0x13,0x48,0x3B,0x38,0xD3,0x81,0xEA,0x96,0x74,0xDF,0x74,0xD6,
+        0x76,0x65,0x25,0x9C,0x4C,0x31,0xA2,0x9E,0x0B,0x3C,0xFF,0x75,0x87,0x61,0x72,0x60,
+        0xE8,0xC5,0x8F,0xFA,0x0A,0xF8,0x33,0x9C,0xD6,0x8D,0xB3,0xAD,0xB9,0x0A,0xAF,0xEE
+    };
+
+    /// <summary>Hash used for k, x, u, M1, M2, K. STS candidate = SHA-256; switch
+    /// to SHA-1 if the client's M1 proves OpenSSL's historical choice.</summary>
+    public enum HashKind { Sha256, Sha1 }
+
+    private readonly HashKind _hash;
+    private readonly int _nLen;          // fixed field width for PAD() = |N| bytes
+    private readonly BigInteger _N, _g, _k;
+    private readonly byte[] _salt, _vBytes;
+    private readonly BigInteger _v;
+
+    private BigInteger _b, _B;
+    public byte[] B { get; private set; } = Array.Empty<byte>();  // big-endian, |N| wide
+
+    public StsSrp(byte[] salt, byte[] verifier, HashKind hash = HashKind.Sha256)
+    {
+        _hash = hash;
+        _N = FromBE(NBytes);
+        _nLen = NBytes.Length;
+        _g = new BigInteger(2);
+        _salt = salt;
+        _vBytes = verifier;
+        _v = FromBE(verifier);
+        // k = H(N | PAD(g)) — standard SRP-6a, big-endian, g padded to |N|.
+        _k = FromBE(H(NBytes, Pad(ToBE(_g))));
+    }
+
+    /// <summary>Pick b and compute B = (k*v + g^b) mod N. Returns B big-endian.</summary>
+    public byte[] StartHandshake()
+    {
+        _b = FromBE(Rng.GenerateRandomKey(32));            // 256-bit secret
+        _B = (_k * _v + BigInteger.ModPow(_g, _b, _N)) % _N;
+        B = Pad(ToBE(_B));
+        return B;
+    }
+
+    /// <summary>
+    /// Verify the client's proof. A and M1 are big-endian (as sent in KeyData).
+    /// On success returns the server proof M2 (big-endian) and the session key K.
+    /// </summary>
+    public bool Verify(byte[] aBE, byte[] m1, out byte[] m2, out byte[] sessionKey)
+    {
+        m2 = Array.Empty<byte>(); sessionKey = Array.Empty<byte>();
+        BigInteger A = FromBE(aBE);
+        if (A % _N == 0) return false;                      // A mod N == 0 -> abort
+
+        byte[] Apad = Pad(ToBE(A)), Bpad = Pad(ToBE(_B));
+        BigInteger u = FromBE(H(Apad, Bpad));
+        // S = (A * v^u)^b mod N
+        BigInteger S = BigInteger.ModPow(A * BigInteger.ModPow(_v, u, _N) % _N, _b, _N);
+        byte[] K = H(Pad(ToBE(S)));                          // session key = H(S)
+
+        // M1 = H( H(N) XOR H(g) | H(I?) | s | A | B | K )  — RFC 5054 form.
+        // NOTE: NCSoft's Srp.cpp M1 layout is confirmed against the client's OWN
+        // M1 at wire time (ground truth), not assumed; this is the RFC default to
+        // start from. The username-hash term H(I) is folded by the caller's salt
+        // binding when the client omits it.
+        byte[] hN = H(NBytes), hg = H(Pad(ToBE(_g)));
+        byte[] hNxorG = new byte[hN.Length];
+        for (int i = 0; i < hN.Length; i++) hNxorG[i] = (byte)(hN[i] ^ hg[i]);
+        byte[] expected = H(hNxorG, _salt, Apad, Bpad, K);
+
+        if (!FixedEquals(expected, m1)) return false;
+        m2 = H(Apad, m1, K);                                // M2 = H(A | M1 | K)
+        sessionKey = K;
+        return true;
+    }
+
+    // ---- hashing / big-endian helpers ------------------------------------
+
+    private byte[] H(params byte[][] parts)
+    {
+        using HashAlgorithm h = _hash == HashKind.Sha1 ? SHA1.Create() : SHA256.Create();
+        int n = 0; foreach (var p in parts) n += p.Length;
+        var buf = new byte[n]; int o = 0;
+        foreach (var p in parts) { p.CopyTo(buf, o); o += p.Length; }
+        return h.ComputeHash(buf);
+    }
+
+    /// <summary>Big-endian unsigned bytes -> BigInteger.</summary>
+    private static BigInteger FromBE(byte[] be)
+        => new BigInteger(be, isUnsigned: true, isBigEndian: true);
+
+    /// <summary>BigInteger -> big-endian unsigned bytes (minimal length).</summary>
+    private static byte[] ToBE(BigInteger v)
+        => v.ToByteArray(isUnsigned: true, isBigEndian: true);
+
+    /// <summary>Left-pad big-endian bytes to |N| width.</summary>
+    private byte[] Pad(byte[] be)
+    {
+        if (be.Length == _nLen) return be;
+        if (be.Length > _nLen) { var t = new byte[_nLen]; Array.Copy(be, be.Length - _nLen, t, 0, _nLen); return t; }
+        var o = new byte[_nLen]; Array.Copy(be, 0, o, _nLen - be.Length, be.Length); return o;
+    }
+
+    private static bool FixedEquals(byte[] a, byte[] b)
+    {
+        if (a.Length != b.Length) return false;
+        int d = 0; for (int i = 0; i < a.Length; i++) d |= a[i] ^ b[i];
+        return d == 0;
+    }
+}
