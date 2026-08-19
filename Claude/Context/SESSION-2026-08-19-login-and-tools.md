@@ -141,3 +141,44 @@ NF protocol").
 - The captured `0x0117` body was a DIAGNOSTIC replay only, now RETIRED
   (`charlist-replay.bin` deleted, gitignored). The real path derives the layout
   from the client's parser and fills it from our characterdb.
+
+---
+
+## 9. Login-message dispatch MAP + dynamic-analysis tooling (later 2026-08-19)
+
+### 9.1 The realm/account/character message dispatch (client-derived)
+`WildStar64.exe` fn `0x140020EA0` = the realm-message handler `G::OnMessage(this,
+arg, opcode(r8d), msg(r9))`; opcode switch head at `0x140020EF1`. A CFG trace
+(tracking per-branch `sub`/`dec`/`cmp` on r8d — LINEAR cumulative-sub is wrong)
+gives the full opcode → case → Lua-event map. All S->C messages the client
+processes at login (validated: `0x117 → case 0x21167 → handler 0x21540`):
+
+| opcode | Lua events / role |
+|---|---|
+| 0x036 | MaxCharacterLevelAchieved, CharacterDisabled, CharacterSelectFail (account+char constraints) |
+| 0x0AD | SubscriptionExpired, GameTimeHoursRemaining, RealmTransferFlags |
+| 0x0E7 | CharacterDisabled, CharacterSelectFail |
+| 0x116 | (no strings) |
+| **0x117** | **CHARACTER LIST** (handler 0x140021540, char stride 0x330) |
+| 0x14B | (no strings) |
+| 0x33D | SubscriptionExpired, GameTimeHoursRemaining, RealmTransferFlags |
+| 0x36A | QueueFinished, TransferDestinationRealmList |
+| 0x3E1 | RealmBroadcast, QueueFinished, TransferDestinationRealmList |
+| 0x594/0x715/0x717/0x761/0x765/0x862 | (further realm msgs) |
+
+The account-info messages gating "Retrieving Account Information" are in the
+0x036/0x0AD/0x33D family. The char-list is a DESERIALIZED struct when the handler
+runs (fixed offsets: +0x8 char vector, +0x18/+0x20 a string, +0x38, +0x40/+0x48,
++0x50, +0x5c), so the wire parse happens in the pump BEFORE dispatch (the dispatch
+is a vtable method; ptr at .data 0x140C66D58).
+
+### 9.2 Dynamic analysis: Frida tracer (the tool for the remaining formats)
+Installed frida 17.17; `Project Resources\Tools-Working\Tools\re\ws-trace.py`
+attaches to WildStar64.exe and hooks the dispatch (0x20EA0) + char-list handler
+(0x21540) — VALIDATED (attaches, resolves base, installs hooks). Frida 17 API:
+`Process.getModuleByName(name).base` (getBaseAddress removed). NEXT: a recv+Stalker
+bootstrap (hook ws2_32!WSARecv, Stalker-trace the parse of a message that DOES
+succeed — the 0x0003 hello — to locate the pump + the bit-reader), then trace the
+0x117 deserializer's bit-reads = the exact wire layout, and GENERATE 0x117 from
+characterdb. Pure client observation; no NF. Keep Stalker windows TIGHT (live game
+thread; operator is playing — don't destabilize the client).
