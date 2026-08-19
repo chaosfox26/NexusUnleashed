@@ -1,6 +1,20 @@
 # Spec: the encryption gate (the road to "in the world")
 
-**Status: OPEN — the biggest remaining piece before a client reaches the world.**
+**Status: CLOSED (2026-08-19) — superseded by `spec/protocol/containers.md`.**
+
+> The gate is shut. There is **no SRP-derived channel key and no ARC4** on the
+> packet channel: the world channel wraps every game message in a packed
+> container (`0x03DC` S→C / `0x0244` C→S) and enciphers the inner message with
+> `PacketCrypt(0xD283F5B34A8DC685)`, a static build-derived seed. Proven
+> byte-for-byte against the real captured ServerHello (decode → inner opcode
+> `0x0003`; encode → the exact captured wire bytes;
+> `test/NexusUnleashed.Protocol.Tests`). The container codec is wired into the
+> session (`WorldPacket` + `GameSession.Crypt`). See `containers.md`. The text
+> below is the historical record of the open problem.
+
+---
+
+**Status (historical): OPEN — the biggest remaining piece before a client reaches the world.**
 
 Definition of done for the whole engine: the operator's real 16042 client
 connects to THIS engine, authenticates, selects a character, and stands in the

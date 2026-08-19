@@ -5,4 +5,7 @@
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\NexusUnleashed.Cryptography\NexusUnleashed.Cryptography.csproj" />
+  </ItemGroup>
 </Project>

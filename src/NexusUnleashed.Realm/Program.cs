@@ -31,9 +31,12 @@ internal static class Program
         AuthFlow.Register(sts, accounts);
         Log.Info($"sts login server listening ({accounts.GetType().Name}; body schemas pending oracle capture).");
 
-        // World game server - handlers register as messages are pinned.
-        var world = new GameServer(cfg.BindAddress, cfg.WorldPort);
-        Log.Info("world server listening (handshake pending oracle capture).");
+        // World game server - encrypted packed-container channel (0x03DC/0x0244,
+        // static-seeded PacketCrypt). The handshake sends the 0x0003 hello on
+        // connect and routes the client's login messages toward world entry.
+        var world = new GameServer(cfg.BindAddress, cfg.WorldPort, worldChannel: true);
+        WorldHandshake.Register(world);
+        Log.Info("world server listening (encrypted channel; 0x0003 hello on connect).");
 
         try
         {

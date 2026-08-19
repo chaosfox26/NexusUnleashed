@@ -290,3 +290,18 @@ implemented independently (the client runs the identical cipher). VERIFIED
 byte-for-byte against a real captured keystream (cf0c0e97...) + round-trip
 (13/13). The seed (0xD283F5B34A8DC685) is the static build key, observed at
 runtime. The old ARC4-based PacketCrypt was wrong and is replaced.
+
+## Encrypted world container codec + session wiring (2026-08-19)
+
+| file | class | source |
+|---|---|---|
+| `Network/WorldPacket.cs` | AUTHORED | the world channel's encrypted packed container (`0x03DC`/`0x0244` = `[u32 innerLen][encrypted [u16 op][body]]`), decoded from our own login capture. Structure + static seed are protocol FACTS from the wire; the codec is our own code over our own `PacketCrypt`. No emulator source read. |
+| `Network/GameSession.cs` (Crypt/State/SendGameMessageAsync/container-unwrap) | AUTHORED | per-session cipher + container-aware dispatch; a malformed container is contained to its message (robustness law). |
+| `Network/GameServer.cs` (worldChannel/OnConnected) | AUTHORED | world-channel mode seeds each session's cipher; on-connect hook for the hello. |
+| `Realm/WorldHandshake.cs` | AUTHORED | sends `0x0003` on connect (captured template body, UNPINNED) and routes the observed client login opcodes toward world entry. |
+| `test/NexusUnleashed.Protocol.Tests` (container block) | AUTHORED | proves DecodeContainer(real ServerHello) → inner `0x0003` + exact body, and EncodeServer reproduces the captured wire byte-for-byte. |
+| `spec/protocol/containers.md` | spec | the container structure, decoded byte-for-byte from the capture; source is our own wire capture, NOT NF. |
+
+The encryption gate is now not just cracked but WIRED: the engine reads what the
+client sends and produces exactly what the client expects on the world channel.
+Proven (22/22 protocol) against the operator's own captured packets.

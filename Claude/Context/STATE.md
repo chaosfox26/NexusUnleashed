@@ -34,9 +34,35 @@ fidelity AND a production multiplayer realm. Zero NF source; two MIT primitives
 ## THE ROAD (task #48 = NORTH STAR: operator stands in the world on our engine)
 
 DONE: crypto/login, wire codec, framing, protocol capture, message models,
-ENCRYPTION. NEXT: **auth handshake -> character list -> character select ->
-world entry (world-state blobs 0x0988/0x0981/0x098B + entity spawns 0x0262) ->
-the client renders**. Built iteratively with the client as oracle.
+ENCRYPTION, **encrypted channel WIRED**. NEXT: **the 0x058F client hello / token
+verify -> character list -> character select -> world entry (world-state blobs
+0x0988/0x0981/0x098B + entity spawns 0x0262) -> the client renders**. Built
+iteratively with the client as oracle.
+
+### Encrypted channel is now wired (2026-08-19, this session)
+
+The world channel's real structure was decoded byte-for-byte from our own login
+capture and built into the engine:
+
+- **`0x03DC` (S→C) / `0x0244` (C→S) are packed containers**:
+  `[u32 innerLen self-inclusive][encrypted inner]`, inner = `[u16 op][body]`,
+  enciphered with the static-seeded `PacketCrypt`. The auth channel (port 23115)
+  is CLEAR direct frames; the world channel (24000) is the encrypted container.
+- `Network/WorldPacket.cs` encodes/decodes it; `GameSession.Crypt` +
+  container-aware dispatch + `SendGameMessageAsync` wire it into the transport;
+  `GameServer(worldChannel:true)` seeds each session; `Realm/WorldHandshake.cs`
+  sends the `0x0003` hello on connect and routes the client's login opcodes.
+- **Proven (22/22 protocol tests):** DecodeContainer(real captured ServerHello)
+  → inner opcode `0x0003` + exact body; EncodeServer reproduces the captured
+  wire byte-for-byte. Spec: `spec/protocol/containers.md`.
+
+### The oracle-loop test the operator can run now
+
+Point a real 16042 client's world connection at this engine (host it, aim the
+client at our world port). It should receive the `0x0003` hello over the
+encrypted channel and send its `0x058F` hello back — which our handshake logs.
+That log is the next capture: it tells us the token/enter layout to pin the
+character-list step. This is the client-as-oracle loop from here to world entry.
 
 ## The capture pipeline + facts (for the next session)
 

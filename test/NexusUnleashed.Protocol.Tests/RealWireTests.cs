@@ -88,5 +88,31 @@ Console.WriteLine("-- message models vs real bytes --");
     Check("entity-create POSITION decodes to real world coords", ok);
 }
 
+// --- encrypted world container round-trip vs the REAL captured ServerHello ---
+// The first server->client 0x03DC frame of the login capture. The container
+// payload is [u32 innerLen][encrypted inner]; decrypting yields inner opcode
+// 0x0003 (AuthHello) and its body must match the decrypted 0x0003 seen in the
+// other capture. Encoding it back must reproduce the exact captured wire bytes.
+Console.WriteLine("-- encrypted world container (real ServerHello) --");
+{
+    const ulong seed = 0xD283F5B34A8DC685ul;
+    // container payload as logged (starts at the innerLen field):
+    byte[] payload = Hex("350000001a57c0cbff79ba9c87080349bf63806df50021ea5e4a2918faa344ca85401d094f69e88d7762748aee15966790e91be068");
+    var crypt = new NexusUnleashed.Cryptography.PacketCrypt(seed);
+    var (op, body) = NexusUnleashed.Network.WorldPacket.DecodeContainer(payload, crypt);
+    Check("container decodes to inner opcode 0x0003", op == 0x0003, $"(0x{op:X4})");
+    string bodyHex = Convert.ToHexString(body).ToLowerInvariant();
+    string expectBody = "aa3e0000010000001500000000000000000000000000000000000b14332f0100000000000000000000000000000000";
+    Check("container inner body == decrypted 0x0003 body", bodyHex == expectBody);
+
+    // encode the inner back into a full frame and compare to the captured wire.
+    // full outer frame = [u32 size=0x3b][u16 0x03DC][payload] (frame.md capture).
+    var crypt2 = new NexusUnleashed.Cryptography.PacketCrypt(seed);
+    byte[] frame = NexusUnleashed.Network.WorldPacket.EncodeServer(op, body, crypt2);
+    string frameHex = Convert.ToHexString(frame).ToLowerInvariant();
+    string expectFrame = "3b000000dc03" + Convert.ToHexString(payload).ToLowerInvariant();
+    Check("EncodeServer reproduces the captured ServerHello wire byte-for-byte", frameHex == expectFrame, frameHex == expectFrame ? "" : $"\n      got {frameHex}\n      exp {expectFrame}");
+}
+
 Console.WriteLine($"{pass} pass / {fail} fail");
 return fail == 0 ? 0 : 1;

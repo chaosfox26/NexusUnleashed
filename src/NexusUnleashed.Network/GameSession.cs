@@ -8,6 +8,7 @@ using System.IO.Pipelines;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
+using NexusUnleashed.Cryptography;
 
 namespace NexusUnleashed.Network;
 
@@ -26,6 +27,17 @@ public sealed class GameSession : IDisposable
 
     public Guid Id { get; } = Guid.NewGuid();
     public string RemoteAddress => _socket.RemoteEndPoint?.ToString() ?? "?";
+
+    /// <summary>
+    /// When set, this session speaks the world channel's encrypted packed
+    /// container: inbound 0x0244 frames are unwrapped+decrypted to their inner
+    /// game message, and <see cref="SendGameMessageAsync"/> wraps+encrypts. When
+    /// null, the session is a clear direct-frame channel (the auth server).
+    /// </summary>
+    public PacketCrypt? Crypt { get; set; }
+
+    /// <summary>Arbitrary per-session state bag for handshake/handlers.</summary>
+    public System.Collections.Generic.Dictionary<string, object> State { get; } = new();
 
     public GameSession(Socket socket, Func<GameSession, ushort, byte[], Task> dispatch)
     {
@@ -74,7 +86,24 @@ public sealed class GameSession : IDisposable
                 while (TrySliceFrame(ref buffer, out byte[]? frame))
                 {
                     var (opcode, payload) = GamePacketFrame.Decode(frame!);
-                    await _dispatch(this, opcode, payload);
+
+                    // World channel: a client container carries one encrypted
+                    // inner game message; unwrap+decrypt and dispatch the inner.
+                    // A malformed container is contained to this message, never
+                    // fatal (the concurrent-multiplayer robustness law).
+                    if (Crypt != null && opcode == WorldPacket.ClientContainer)
+                    {
+                        try
+                        {
+                            var (innerOp, innerBody) = WorldPacket.DecodeContainer(payload, Crypt);
+                            await _dispatch(this, innerOp, innerBody);
+                        }
+                        catch (ArgumentException) { /* drop the bad container */ }
+                    }
+                    else
+                    {
+                        await _dispatch(this, opcode, payload);
+                    }
                 }
 
                 reader.AdvanceTo(buffer.Start, buffer.End);
@@ -106,6 +135,19 @@ public sealed class GameSession : IDisposable
         var w = new PacketWriter();
         packet.Write(w);
         byte[] frame = GamePacketFrame.Encode(packet.Opcode, w.ToArray());
+        await _socket.SendAsync(frame, SocketFlags.None);
+    }
+
+    /// <summary>
+    /// Send a game message on the world channel. When <see cref="Crypt"/> is set
+    /// the message is wrapped in a 0x03DC container and encrypted (exactly the
+    /// captured ServerHello path); otherwise it is a clear direct frame.
+    /// </summary>
+    public async Task SendGameMessageAsync(ushort opcode, byte[] body)
+    {
+        byte[] frame = Crypt != null
+            ? WorldPacket.EncodeServer(opcode, body, Crypt)
+            : GamePacketFrame.Encode(opcode, body);
         await _socket.SendAsync(frame, SocketFlags.None);
     }
 
