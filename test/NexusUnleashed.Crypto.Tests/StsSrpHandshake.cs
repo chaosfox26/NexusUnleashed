@@ -47,7 +47,9 @@ byte[] salt = Rng.GenerateRandomKey(16);
 byte[] ipw = System.Text.Encoding.UTF8.GetBytes(user + ":" + pw);
 BigInteger x = FromBE(H(salt, H(ipw)));
 BigInteger v = BigInteger.ModPow(g, x, N);
-byte[] verifier = Pad(ToBE(v));
+// The DB stores the verifier as .NET BigInteger.ToByteArray() = little-endian
+// (with a trailing sign byte); StsSrp reads it that way.
+byte[] verifier = v.ToByteArray(isUnsigned: true, isBigEndian: false);
 
 // server B
 var srp = new StsSrp(salt, verifier);

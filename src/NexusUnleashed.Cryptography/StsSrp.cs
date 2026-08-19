@@ -74,7 +74,10 @@ public sealed class StsSrp
         _salt = salt;
         _vBytes = verifier;
         _userBytes = System.Text.Encoding.UTF8.GetBytes(username);
-        _v = FromBE(verifier);
+        // The verifier was written by the .NET launcher's BigInteger.ToByteArray()
+        // = LITTLE-ENDIAN with a trailing 0x00 sign byte (the DB value is 129 bytes
+        // and >N when misread big-endian). Read it little-endian, unsigned.
+        _v = new BigInteger(verifier, isUnsigned: true, isBigEndian: false);
         // The SRP multiplier k. RFC-5054 H(N|PAD(g)) did not reproduce the
         // client's shared secret, so k is one of the common variants below; the
         // right one is identified when the client's own M1 verifies.
