@@ -33,5 +33,25 @@ for (int i = 0; i < samples.Length; i++)
 }
 Check("guid is constant across the movement stream (5076)", guidConstant && firstGuid == 5076, $"({firstGuid})");
 
+
+// --- message model validation against real captured payloads ---
+Console.WriteLine("-- message models vs real bytes --");
+{
+    var m = ServerEntitySmallUpdate.Parse(Hex("55032c07000001"));
+    Check("0x0355 small-update: guid+flag", m.Guid == 1836 && m.Flag == 1, $"(guid={m.Guid} flag={m.Flag})");
+
+    var add = ServerSpellBuffAdd.Parse(Hex("11080300000001000000d4130000"));
+    Check("0x0811 buff-add: buffId+count+target", add.BuffId == 3 && add.Count == 1 && add.TargetGuid == 5076, $"(buff={add.BuffId} count={add.Count} target={add.TargetGuid})");
+
+    var rem = ServerSpellBuffRemove.Parse(Hex("130803000000d4130000"));
+    Check("0x0813 buff-remove: buffId+target", rem.BuffId == 3 && rem.TargetGuid == 5076, $"(buff={rem.BuffId} target={rem.TargetGuid})");
+
+    var upd = ServerEntityUpdate.Parse(Hex("3809d41300000f00000000"));
+    Check("0x0938 entity-update: guid+fields", upd.Guid == 5076 && upd.FieldA == 15 && upd.Tail == 0, $"(guid={upd.Guid} a={upd.FieldA} b={upd.FieldB})");
+
+    var pos = ServerEntityPositionUpdate.Parse(Hex("3509d41300000200b07d08"));
+    Check("0x0935 position: guid extracted", pos.Guid == 5076, $"(guid={pos.Guid} move=0x{pos.MovementData:X8})");
+}
+
 Console.WriteLine($"{pass} pass / {fail} fail");
 return fail == 0 ? 0 : 1;

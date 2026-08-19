@@ -248,3 +248,15 @@ Proven (7/7): our bit codec reads opcode 0x0935 and guid 5076 correctly out of
 five real captured server->client movement packets (guid constant = the tracked
 entity). The clean-room wire codec matches Carbine's actual bit format,
 confirmed against the operator's own captured packets - not inference.
+
+## First server message models (2026-08-19)
+
+| file | class | source |
+|---|---|---|
+| `Network/ServerMessages.cs` | AUTHORED | typed models pinned from the capture: ServerEntitySmallUpdate (0x0355), ServerSpellBuffAdd (0x0811), ServerSpellBuffRemove (0x0813), ServerEntityUpdate (0x0937/0x0938), ServerEntityPositionUpdate (0x0935). Layouts recovered by field-inference over thousands of real samples; validated against real bytes with our PacketReader. |
+
+Proven (12/12) against real captured payloads: buff add decodes buffId 3 /
+count 1 / target 5076; buff remove buffId 3 / target 5076; small-update guid
+1836 / flag 1; entity-update guid 5076 / fieldA 15; position guid 5076. The
+layout is a protocol fact from Carbine's wire; field-inference tool + capture
+found it, no emulator source read.

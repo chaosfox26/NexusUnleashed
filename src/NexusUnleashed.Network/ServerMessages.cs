@@ -1,0 +1,82 @@
+// NexusUnleashed - clean-room authored. Typed server->client message models,
+// each PINNED from a live capture of the oracle (field layout recovered by
+// analyzing thousands of real samples) and validated against real bytes with
+// our own PacketReader. The payload as captured is [u16 LE opcode][body]; each
+// Parse skips the opcode then reads the body. Field names are ours (inferred
+// roles); the layout is a protocol fact from Carbine's wire.
+using System;
+
+namespace NexusUnleashed.Network;
+
+public interface IServerMessage
+{
+    GameMessageOpcode Opcode { get; }
+}
+
+/// <summary>0x0355: a small per-entity state update (guid + one flag byte).</summary>
+public sealed record ServerEntitySmallUpdate(uint Guid, byte Flag) : IServerMessage
+{
+    public GameMessageOpcode Opcode => GameMessageOpcode.ServerEntitySmallUpdate;
+    public static ServerEntitySmallUpdate Parse(byte[] payload)
+    {
+        var r = new PacketReader(payload);
+        r.ReadBits(16);                       // opcode
+        return new ServerEntitySmallUpdate(r.ReadUInt32(), r.ReadByte());
+    }
+}
+
+/// <summary>0x0811: apply a spell buff (buffId + stack count + target guid).</summary>
+public sealed record ServerSpellBuffAdd(uint BuffId, uint Count, uint TargetGuid) : IServerMessage
+{
+    public GameMessageOpcode Opcode => (GameMessageOpcode)0x0811;
+    public static ServerSpellBuffAdd Parse(byte[] payload)
+    {
+        var r = new PacketReader(payload);
+        r.ReadBits(16);
+        return new ServerSpellBuffAdd(r.ReadUInt32(), r.ReadUInt32(), r.ReadUInt32());
+    }
+}
+
+/// <summary>0x0813: remove a spell buff (buffId + target guid).</summary>
+public sealed record ServerSpellBuffRemove(uint BuffId, uint TargetGuid) : IServerMessage
+{
+    public GameMessageOpcode Opcode => GameMessageOpcode.ServerSpellBuffRemove;
+    public static ServerSpellBuffRemove Parse(byte[] payload)
+    {
+        var r = new PacketReader(payload);
+        r.ReadBits(16);
+        return new ServerSpellBuffRemove(r.ReadUInt32(), r.ReadUInt32());
+    }
+}
+
+/// <summary>
+/// 0x0937 / 0x0938: entity update carrying a guid and two 16-bit fields + a
+/// trailing byte (exact semantics of the u16s pending; the layout is pinned).
+/// </summary>
+public sealed record ServerEntityUpdate(ushort Opcode16, uint Guid, ushort FieldA, ushort FieldB, byte Tail) : IServerMessage
+{
+    public GameMessageOpcode Opcode => (GameMessageOpcode)Opcode16;
+    public static ServerEntityUpdate Parse(byte[] payload)
+    {
+        var r = new PacketReader(payload);
+        ushort op = (ushort)r.ReadBits(16);
+        return new ServerEntityUpdate(op, r.ReadUInt32(), r.ReadUInt16(), r.ReadUInt16(), r.ReadByte());
+    }
+}
+
+/// <summary>
+/// 0x0935: the entity position broadcast (the world heartbeat) - guid + a
+/// 4-byte packed movement field + a trailing byte. The movement field's exact
+/// decode (position/delta/time) is pending correlation; the framing is pinned
+/// and the guid is validated.
+/// </summary>
+public sealed record ServerEntityPositionUpdate(uint Guid, uint MovementData, byte Tail) : IServerMessage
+{
+    public GameMessageOpcode Opcode => GameMessageOpcode.ServerEntityPositionUpdate;
+    public static ServerEntityPositionUpdate Parse(byte[] payload)
+    {
+        var r = new PacketReader(payload);
+        r.ReadBits(16);
+        return new ServerEntityPositionUpdate(r.ReadUInt32(), r.ReadUInt32(), r.ReadByte());
+    }
+}
