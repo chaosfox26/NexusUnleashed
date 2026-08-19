@@ -28,6 +28,9 @@ int listenPort = int.Parse(args[0]);
 string targetHost = args[1];
 int targetPort = int.Parse(args[2]);
 string logPath = args[3];
+// "raw" mode dumps full bytes (hex + printable text) per chunk instead of the
+// opcode-framed envelope - for text protocols like STS login (clear-text on 6600).
+bool raw = args.Length >= 5 && args[4].Equals("raw", StringComparison.OrdinalIgnoreCase);
 
 using var log = new StreamWriter(logPath, append: true) { AutoFlush = true };
 void Log(string line)
@@ -40,7 +43,18 @@ void Log(string line)
 Log($"# capture proxy: :{listenPort} -> {targetHost}:{targetPort}, log {logPath}");
 
 var listener = new TcpListener(IPAddress.Loopback, listenPort);
-listener.Start();
+// Retry the bind: the port may still be held by the realm until it restarts onto
+// its new port, so the proxy can be started first and will grab the port the
+// moment it frees. Avoids tight start-order coordination.
+for (int attempt = 1; ; attempt++)
+{
+    try { listener.Start(); break; }
+    catch (SocketException)
+    {
+        if (attempt == 1) Log($"# port {listenPort} busy; waiting for it to free (retrying)...");
+        await Task.Delay(1000);
+    }
+}
 Log($"# listening on 127.0.0.1:{listenPort}");
 
 while (true)
@@ -84,11 +98,30 @@ async Task Pump(NetworkStream from, NetworkStream to, int id, string dir)
             int n = await from.ReadAsync(buf);
             if (n == 0) break;
             await to.WriteAsync(buf.AsMemory(0, n));   // forward untouched, first
+            if (raw)
+            {
+                DumpRaw(buf, n, id, dir);
+                continue;
+            }
             for (int i = 0; i < n; i++) acc.Add(buf[i]);
             DrainFrames(acc, id, dir);
         }
     }
     catch { /* peer closed */ }
+}
+
+void DumpRaw(byte[] buf, int n, int id, string dir)
+{
+    var hex = new StringBuilder(n * 2);
+    var txt = new StringBuilder(n);
+    for (int i = 0; i < n; i++)
+    {
+        hex.Append(buf[i].ToString("x2"));
+        char c = (char)buf[i];
+        txt.Append(c >= ' ' && c < 127 ? c : '.');
+    }
+    Log($"[{id}] {dir} {n}B text: {txt}");
+    Log($"[{id}] {dir} {n}B  hex: {hex}");
 }
 
 void DrainFrames(List<byte> acc, int id, string dir)
