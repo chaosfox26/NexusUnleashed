@@ -36,25 +36,31 @@ public static class AuthFlow
 
         server.On("/Auth/LoginStart", async (s, r) =>
         {
-            string login = XmlBody.FirstText(r.BodyText) ?? "";
+            // Request shape RE'd from the client (spec/protocol/sts.md):
+            //   <Request><LoginName>..</LoginName><NetAddress>..</NetAddress></Request>
+            string login = XmlBody.Field(r.BodyText, "LoginName");
             s.State[KeyLogin] = login;
 
             var creds = await accounts.GetSrpCredentialsAsync(login);
             if (creds == null || creds.Value.Verifier.Length == 0)
             {
-                await s.SendAsync(StsReply.Error(r.Sequence, 403));   // no such account / not provisioned
+                await s.SendAsync(StsReply.Error(r.Sequence, 403));   // no such account
                 return;
             }
 
-            // REAL SRP step 1: compute B from salt + verifier, keep the server
-            // handshake object on the session for KeyData.
+            // REAL SRP step 1: compute B from salt + verifier.
             var srp = new SrpServer(creds.Value.Salt, login, creds.Value.Verifier);
             var (salt, B) = srp.StartHandshake();
             s.State[KeySrp] = srp;
 
-            // UNPINNED body schema: salt + B carried as hex.
+            // Reply shape RE'd from the client: a <KeyData> element, base64. The
+            // client GetField("KeyData") -> base64-decode -> SRP setup. The blob's
+            // internal layout (salt/B delimiting) is a CANDIDATE here (length-
+            // prefixed), to be CONFIRMED from the client's own KeyData request that
+            // this reply provokes - the capture reveals the true packing.
+            byte[] blob = KeyDataBlob.Pack(salt, B);
             await s.SendAsync(StsReply.Ok(r.Sequence,
-                XmlBody.Fields(("salt", Hex.To(salt)), ("B", Hex.To(B)))));
+                "<Content><KeyData>" + Convert.ToBase64String(blob) + "</KeyData></Content>"));
         });
 
         server.On("/Auth/KeyData", async (s, r) =>
@@ -65,21 +71,26 @@ public static class AuthFlow
                 return;
             }
 
-            // UNPINNED body schema: client A + proof M1 as hex.
-            byte[] a = Hex.From(XmlBody.Field(r.BodyText, "A"));
-            byte[] m1 = Hex.From(XmlBody.Field(r.BodyText, "M1"));
+            // Request shape RE'd from the client: <Request><KeyData>base64(blob)
+            // </KeyData></Request>, blob = client A + proof M1 (same packing the
+            // reply uses for salt+B). Decode with the candidate layout.
+            byte[] clientBlob = Convert.FromBase64String(XmlBody.Field(r.BodyText, "KeyData"));
+            var parts = KeyDataBlob.Unpack(clientBlob);
+            byte[] a = parts.Length > 0 ? parts[0] : Array.Empty<byte>();
+            byte[] m1 = parts.Length > 1 ? parts[1] : Array.Empty<byte>();
 
             // REAL SRP step 2: verify the client proof, derive the session key.
             SrpServerResult result = srp.Verify(a, m1);
             if (!result.Success)
             {
-                await s.SendAsync(StsReply.Error(r.Sequence, 403));   // bad password
+                await s.SendAsync(StsReply.Error(r.Sequence, 403));   // bad password / wrong layout
                 return;
             }
             s.State[KeyAuthed] = true;
 
+            byte[] m2blob = KeyDataBlob.Pack(result.ServerProof);
             await s.SendAsync(StsReply.Ok(r.Sequence,
-                XmlBody.Fields(("M2", Hex.To(result.ServerProof)))));
+                "<Content><KeyData>" + Convert.ToBase64String(m2blob) + "</KeyData></Content>"));
         });
 
         server.On("/Auth/RequestGameToken", async (s, r) =>
@@ -140,6 +151,49 @@ internal static class XmlBody
         if (lt < 0) return null;
         string inner = xml[(gt + 1)..lt].Trim();
         return inner.Length > 0 ? inner : null;
+    }
+}
+
+/// <summary>
+/// The KeyData binary blob (base64'd inside the STS &lt;KeyData&gt; element). The
+/// SRP values (salt+B one way, A+M1 the other) are packed here. LAYOUT IS A
+/// CANDIDATE - each field as [u32 LE length][bytes] - pending confirmation from
+/// the client's own KeyData request (RE'd from the client, never from NF). When
+/// the captured client blob shows the true packing, this is corrected to match.
+/// </summary>
+internal static class KeyDataBlob
+{
+    public static byte[] Pack(params byte[][] parts)
+    {
+        int n = 0;
+        foreach (var p in parts) n += 4 + p.Length;
+        var buf = new byte[n];
+        int o = 0;
+        foreach (var p in parts)
+        {
+            buf[o] = (byte)p.Length; buf[o + 1] = (byte)(p.Length >> 8);
+            buf[o + 2] = (byte)(p.Length >> 16); buf[o + 3] = (byte)(p.Length >> 24);
+            System.Array.Copy(p, 0, buf, o + 4, p.Length);
+            o += 4 + p.Length;
+        }
+        return buf;
+    }
+
+    public static byte[][] Unpack(byte[] blob)
+    {
+        var list = new System.Collections.Generic.List<byte[]>();
+        int o = 0;
+        while (o + 4 <= blob.Length)
+        {
+            int len = blob[o] | (blob[o + 1] << 8) | (blob[o + 2] << 16) | (blob[o + 3] << 24);
+            o += 4;
+            if (len < 0 || o + len > blob.Length) break;
+            var p = new byte[len];
+            System.Array.Copy(blob, o, p, 0, len);
+            list.Add(p);
+            o += len;
+        }
+        return list.ToArray();
     }
 }
 

@@ -114,12 +114,30 @@ KeyData, LoginName, NetAddress, Salt, Verifier, ServerRand, ClientRand, Token,
 UserId, UserName, UserCenter, LocationId, AccessMask, PasswordHash, Content,
 Request, Reply, … — the message vocabulary, straight from the client.
 
-## STILL being pinned (RE in progress)
+## STILL being pinned (RE in progress) — LIVE-TESTED against the client
 
-- **The KeyData blob's internal byte layout** — how salt and B are delimited
-  inside the base64 blob (length-prefixing width/order). Being traced through the
-  client's SRP/SocketCrypt setup; will be stated from the client, not guessed and
-  not from NF. (Values in any example use placeholders — see PRIVACY.md.)
+Our engine now serves the login end-to-end to a real client (STS DB lookup + SRP
++ `<Content><KeyData>base64</KeyData></Content>` reply). The client accepts
+`/Sts/Connect` and `/Auth/LoginStart`, but on our LoginStart REPLY it throws
+**"Unhandled NC Platform Error 15"** and does not proceed to `/Auth/KeyData`. So
+our reply is close but the KeyData BLOB is not what the client's parser wants.
+
+Findings from the full client teardown (`Project Resources/StsConnLib-Deconstruct`,
+built by `wildstar-deconstruct.py` — GPU+threads, our tool, client-only):
+
+- RTTI classes confirm the handlers: `CLoginStartTxnNotify`, `CKeyDataTxnNotify`,
+  `CSrpClient`/`ISrpClient`, plus a token/signed path (`CLoginTokenStartTxnNotify`).
+- The LoginStart reply handler (`.text` 0x0A360) reads one base64 `<KeyData>`
+  element, decodes it, and feeds the blob into **SocketCrypt** (channel cipher)
+  setup — so KeyData carries SRP material AND the socket-crypt seed in one
+  structured blob. `Salt`/`Verifier` are NEVER read from the wire (0 xrefs) —
+  salt is inside the blob.
+- Error 15 fires while parsing/using that blob, before SRP `KeyData` is sent.
+
+**Open:** the exact internal structure of the KeyData blob (SRP salt+B + crypt
+seed layout) — to be read from the client's blob-parse code, not guessed, not NF.
+Candidate `[u32 len][salt][u32 len][B]` is REJECTED by the client (error 15).
+(Placeholders only in examples — PRIVACY.md.)
 
 ## Historical UNPINNED note
 

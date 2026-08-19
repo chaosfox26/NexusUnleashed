@@ -65,7 +65,18 @@ public sealed class StsServer
 
         if (_routes.TryGetValue(request.Uri, out var handler))
         {
-            await handler(session, request);
+            try
+            {
+                await handler(session, request);
+            }
+            catch (Exception ex)
+            {
+                // A handler fault must never leave the client hanging (it would
+                // just ping forever). Log it and reply ERROR so the failure is
+                // visible on both ends.
+                Console.WriteLine($"{DateTime.UtcNow:HH:mm:ss.fff} [ERROR] STS handler {request.Uri} threw: {ex.GetType().Name}: {ex.Message}");
+                try { await session.SendAsync(StsReply.Error(request.Sequence, 500)); } catch { }
+            }
         }
         else
         {
@@ -112,8 +123,18 @@ public sealed class StsSession : IDisposable
         }
     }
 
-    public Task SendAsync(byte[] frame)
-        => _socket.SendAsync(frame, SocketFlags.None);
+    public async Task SendAsync(byte[] frame)
+    {
+        // Reply logging (capture stage): dump exactly what we send so a rejected
+        // reply can be compared against what the client expects.
+        try
+        {
+            string text = System.Text.Encoding.UTF8.GetString(frame);
+            Console.WriteLine($"{DateTime.UtcNow:HH:mm:ss.fff} [STS-REPLY] {text.Replace("\r", "\\r").Replace("\n", "\\n")}");
+        }
+        catch { }
+        await _socket.SendAsync(frame, SocketFlags.None);
+    }
 
     public void Dispose()
     {
