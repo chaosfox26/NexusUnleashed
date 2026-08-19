@@ -46,3 +46,12 @@ our own SRP6a (MIT Arctium seed, already ledgered under Cryptography).
 | `content/kits.tsv` | OUR DATA | 20,020 creature-spell entries from the retail-kit restoration (Jabbithole/wiki/patch-note derivation, boss-kit-mapper) |
 
 The loader proof requires the load to equal the live DB's own counts exactly.
+
+## Framing PINNED (2026-08-19)
+
+`GamePacketFrame` / `spec/protocol/frame.md`: header widths measured from the
+behavioral oracle (the running frozen realm), not from any source. Auth port
+23115 and world port 24000 each opened with a self-inclusive u32 LE size + u16
+LE opcode; two independent frames agreed byte-for-byte with the layout. Raw
+captures preserved in the spec. This is a wire measurement — observing bytes on
+a socket is not reading code.

@@ -92,12 +92,9 @@ public sealed class GameSession : IDisposable
         if (buffer.Length < head.Length)
             return false;
         buffer.Slice(0, head.Length).CopyTo(head);
-        if (!GamePacketFrame.TryReadLength(head, out int total))
-        {
-            // header present but full frame not yet buffered
-            if (buffer.Length < total) return false;
-        }
-        if (buffer.Length < total)
+        GamePacketFrame.TryReadLength(head, out int total);
+        // `total` is the whole self-inclusive frame length; wait until buffered.
+        if (total < head.Length || buffer.Length < total)
             return false;
         frame = buffer.Slice(0, total).ToArray();
         buffer = buffer.Slice(total);
