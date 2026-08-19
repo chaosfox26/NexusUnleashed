@@ -28,16 +28,17 @@ public static class StsReply
 {
     public const string Version = "STS/1.0";   // measured client token
 
-    public static byte[] Ok(int sequence, string xmlBody)
-        => Build($"{Version} 200 OK", sequence, Encoding.UTF8.GetBytes(xmlBody));
+    // Status line matches the frozen realm's own STS byte-for-byte: "200" then
+    // TWO spaces then "OK" (a status the client parses; single-space was silently
+    // discarded, causing a timeout-retry then error 15).
+    public const string OkStatus = Version + " 200  OK";
 
-    /// <summary>
-    /// 200 OK with a RAW byte body — for replies whose XML carries binary field
-    /// values verbatim (the STS &lt;KeyData&gt; SRP blob is raw bytes, not base64;
-    /// RE'd from the client, which reads the node value as the bytes directly).
-    /// </summary>
+    public static byte[] Ok(int sequence, string xmlBody)
+        => Build(OkStatus, sequence, Encoding.UTF8.GetBytes(xmlBody));
+
+    /// <summary>200 OK with a RAW byte body.</summary>
     public static byte[] OkRaw(int sequence, byte[] body)
-        => Build($"{Version} 200 OK", sequence, body);
+        => Build(OkStatus, sequence, body);
 
     public static byte[] Error(int sequence, int code, string xmlBody = "")
         => Build($"{Version} {code} ERROR", sequence, Encoding.UTF8.GetBytes(xmlBody));
