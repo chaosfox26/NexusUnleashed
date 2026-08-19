@@ -66,26 +66,41 @@ its origin is recorded. Nothing else is permitted in the tree.
    WildStar-Server (MIT)** — auth, handshake, and packet framing; the protocol
    bootstrap, legally reusable.
 
-**The spec bridge — effectively disused by design (hardened 2026-08-19 against
-the strict-clean-room challenge).** The strong form of our position is not "we
-read NF carefully"; it is **"we almost never need to."** Our answer key is the
-client and the frozen realm's observable behavior, not NF. So the standing rule
-is: exhaust sources 1–4 — and specifically, prefer deriving a fact from the
-client's *behavior* (packet capture against the oracle, table analysis) over
-reading NF, even when reading NF would be faster. NF source is the source of
-**last resort**, and every component's provenance-ledger entry must name a
-source that is NOT NF wherever humanly possible. When NF is genuinely the only
-door, reading it incurs no license obligation, but only a **fact, restated in
-our own words**, crosses into a spec file — implementation then happens from the
-spec with NF source closed, in our own architecture. **Provenance we can show
-(this fact came from this packet / this table / this ledger) is the defense;
-purity we can only claim is not.** A component whose behavior is fixed by the
-client is not NF's expression no matter who else implemented it — that is the
-Altai filtration, and it is most of the engine.
+### 1.0 THE NO-NF LAW — absolute, baked in (operator directive, 2026-08-19)
 
-**Forbidden, absolutely:** NF literal code, comments, or snippets; translation
-or paraphrase of NF code; reproduction of NF's discretionary architecture,
-class decomposition, or naming where the problem did not force it.
+**NexusForever — and everything derived from it — is NOT a source. Not last
+resort, not for facts, not to "understand an algorithm," not at all.** This
+supersedes every earlier "NF is a last resort" wording in this project. The rule
+is binary:
+
+- **Do NOT open, read, grep, decompile, or reference the NF-derived trees** to
+  build ANYTHING in this repository. That explicitly includes
+  `realm-source/recovered/**` (the decompiled old realm — it descends from NF and
+  is AGPL), the NF corpus (`Project Resources/_AllRepos`, `_ForkPool*`,
+  `_Emulators-*`, `NexusForever*`), and the shipped `realm-portable/servers/**`
+  assemblies. If a fact seems reachable only by reading one of those, that is
+  **not** a green light — it means the fact must be re-derived from a clean
+  source (below) or left unbuilt until it can be.
+- **The only permitted sources are 1–4 above:** the client (its binary, tables,
+  Lua, and its behavior on the wire), our own data/knowledge, the behavioral
+  oracle (observing the frozen realm's *wire*, never its code), and
+  permissively-licensed code (MIT/Apache/BSD). A packet capture is the oracle's
+  *behavior* and is clean; the oracle's *source* is NF and is forbidden.
+- **Every ledger entry must name a source in 1–4.** "recovered/…", "NF", "the
+  old realm's code", or any decompiled-NF origin is a **provenance failure**, not
+  an acceptable last resort. The `nf-guard` check (provenance/) enforces this and
+  must pass — a build that references the NF trees is broken by definition.
+- If reaching login/world-entry needs a fact we can only see in NF today, the
+  answer is: get it from the **client** (extract from the 16042 binary) or from a
+  **capture** of the client's behavior — and if neither is available yet, we
+  wait, we do not borrow. Slower-but-clean always beats fast-but-tainted.
+
+**Forbidden, absolutely:** NF literal code, comments, or snippets; translation or
+paraphrase of NF code; reproduction of NF's discretionary architecture, class
+decomposition, or naming; and **reading the NF-derived `recovered/` tree or NF
+corpus for any purpose connected to this repository.** A component whose behavior
+is fixed by the client is free to build — but build it *from the client*, never
+from NF's copy of that behavior.
 
 **The parity oracle, not the parity source.** We match NF's *behavior* because
 we both obey the same client — never because we copied how NF achieved it.

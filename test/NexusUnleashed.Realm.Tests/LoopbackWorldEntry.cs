@@ -56,23 +56,22 @@ async Task<byte[]> ReadExact(int n)
 }
 
 // 3) AUTH phase: receive the 0x0003 hello, decrypt with the auth key.
-var authCrypt = new PacketCrypt(PacketCrypt.GetKeyFromAuthBuildAndMessage());
+var authCrypt = new PacketCrypt(PacketCrypt.AuthChannelKey);
 var (op0, pay0) = await ReadFrame();
 Check("hello frame is a 0x03DC container", op0 == WorldPacket.ServerContainer, $"(0x{op0:X4})");
 var (helloOp, _) = WorldPacket.DecodeContainer(pay0, authCrypt);
 Check("hello decrypts (auth key) to inner opcode 0x0003", helloOp == 0x0003, $"(0x{helloOp:X4})");
 
 // 4) send the 0x058F client hello, wrapped + encrypted with the auth key.
-var clientAuth = new PacketCrypt(PacketCrypt.GetKeyFromAuthBuildAndMessage());
+var clientAuth = new PacketCrypt(PacketCrypt.AuthChannelKey);
 byte[] helloBody = new byte[41];   // token-bearing body (contents don't matter to the re-key seam here)
 byte[] clientFrame = WorldPacket.EncodeClient(0x058F, helloBody, clientAuth);
 await client.SendAsync(clientFrame, SocketFlags.None);
 Console.WriteLine("-- sent 0x058F; server should re-key + stream world entry --");
 
-// 5) WORLD phase: the server re-keyed to GetKeyFromTicket(DevSessionKey); decrypt
-//    the world-init with that world key.
-ulong worldKeyInt = PacketCrypt.GetKeyFromTicket(WorldHandshake.DevSessionKey);
-var worldCrypt = new PacketCrypt(worldKeyInt);
+// 5) WORLD phase: the server re-keyed to the dev world key; decrypt the
+//    world-init with that same world key.
+var worldCrypt = new PacketCrypt(WorldHandshake.DevWorldKey);
 var (op1, pay1) = await ReadFrame();
 Check("world frame is a 0x03DC container", op1 == WorldPacket.ServerContainer, $"(0x{op1:X4})");
 var (wOp, wBody) = WorldPacket.DecodeContainer(pay1, worldCrypt);

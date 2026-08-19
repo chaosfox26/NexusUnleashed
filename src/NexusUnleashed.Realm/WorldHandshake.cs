@@ -34,18 +34,22 @@ public static class WorldHandshake
         "aa3e0000010000001500000000000000000000000000000000000b14332f0100000000000000000000000000000000";
 
     /// <summary>
-    /// Resolves the 16-byte SRP session key for the account entering the world,
-    /// from the token carried in the 0x058F client hello. The real path looks the
-    /// token up against STS-issued sessions; the default returns a fixed dev key
-    /// so the engine (and the loopback self-test) can exercise the full two-phase
-    /// re-key without STS wired. Replace in deployment with the token store.
+    /// Resolves the WORLD-phase cipher keyInteger for the account entering the
+    /// world, from the token carried in the 0x058F client hello. The default
+    /// returns a fixed dev key so the engine (and the loopback self-test) can
+    /// exercise the two-phase re-key MECHANISM without STS wired.
     /// </summary>
-    public static Func<byte[] /*helloBody*/, byte[] /*sessionKey16*/> SessionKeyResolver { get; set; }
-        = _ => DevSessionKey;
+    /// <remarks>
+    /// The real per-session derivation (SRP session key -> world keyInteger) is
+    /// QUARANTINED pending a clean, non-NF source (provenance/QUARANTINE-NF.md):
+    /// its formula had been read from the NF-derived tree. The channel, framing,
+    /// and message models are all clean; only this resolver's real body waits.
+    /// </remarks>
+    public static Func<byte[] /*helloBody*/, ulong /*worldKeyInteger*/> WorldKeyResolver { get; set; }
+        = _ => DevWorldKey;
 
-    /// <summary>A deterministic 16-byte dev session key (both ends know it).</summary>
-    public static readonly byte[] DevSessionKey =
-        { 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 };
+    /// <summary>A fixed dev world keyInteger (both ends use it) for the self-test.</summary>
+    public const ulong DevWorldKey = 0x4888DCE5CA507060ul;
 
     public static void Register(GameServer world)
     {
@@ -58,11 +62,11 @@ public static class WorldHandshake
         world.On(ClientHello, async (s, body) =>
         {
             Log.Info($"world: <- 0x058F client hello ({body.Length}B) {Preview(body)}");
-            // The client hello carries the STS game token. Resolve the session key
-            // it maps to, then RE-KEY to the WORLD cipher (two-phase keying): every
-            // message after this is enciphered with GetKeyFromTicket(sessionKey).
-            byte[] sessionKey = SessionKeyResolver(body);
-            s.RekeyForWorld(sessionKey);
+            // The client hello carries the STS game token. Resolve the world
+            // keyInteger it maps to, then RE-KEY to the WORLD cipher (two-phase
+            // keying): every message after this is enciphered with that key.
+            ulong worldKey = WorldKeyResolver(body);
+            s.RekeyForWorld(worldKey);
             Log.Info("world: re-keyed to the world cipher; streaming world entry.");
             // Begin the world-entry sequence (spec/protocol/world-entry.md). First
             // the world-init id list; the remaining blobs (0x0988/0x098B/0x0117/

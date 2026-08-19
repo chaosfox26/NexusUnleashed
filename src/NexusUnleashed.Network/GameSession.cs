@@ -40,13 +40,15 @@ public sealed class GameSession : IDisposable
     public System.Collections.Generic.Dictionary<string, object> State { get; } = new();
 
     /// <summary>
-    /// Switch the channel to the WORLD-phase cipher after login: re-key to
-    /// PacketCrypt(GetKeyFromTicket(sessionKey)). Both ends derive the identical
-    /// key from the SRP session key, so all world messages encrypt/decrypt with
-    /// it (two-phase keying, proven against the captured world stream).
+    /// Switch the channel to the WORLD-phase cipher after login, given the world
+    /// keyInteger. Both ends key the same PacketCrypt so all world messages
+    /// encrypt/decrypt with it (two-phase keying, proven against the captured
+    /// world stream). HOW the world keyInteger is derived from the session key is
+    /// the caller's concern — that derivation is quarantined pending a clean,
+    /// non-NF source (see PacketCrypt / provenance/QUARANTINE-NF.md).
     /// </summary>
-    public void RekeyForWorld(byte[] sessionKey)
-        => Crypt = new PacketCrypt(PacketCrypt.GetKeyFromTicket(sessionKey));
+    public void RekeyForWorld(ulong worldKeyInteger)
+        => Crypt = new PacketCrypt(worldKeyInteger);
 
     public GameSession(Socket socket, Func<GameSession, ushort, byte[], Task> dispatch)
     {

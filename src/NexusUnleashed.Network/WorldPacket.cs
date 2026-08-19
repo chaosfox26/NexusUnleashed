@@ -29,12 +29,12 @@ public static class WorldPacket
     public const ushort ClientContainer = 0x0244;
 
     /// <summary>
-    /// The AUTH-phase cipher key (== PacketCrypt.GetKeyFromAuthBuildAndMessage(),
-    /// a build constant). The channel opens with this for the hello, then RE-KEYS
-    /// to PacketCrypt.GetKeyFromTicket(sessionKey) after login (two-phase keying).
-    /// Kept as a const so the acceptor can seed a session before auth completes.
+    /// The AUTH-phase cipher key (== PacketCrypt.AuthChannelKey, the static build
+    /// key observed on the wire). The channel opens with this for the hello, then
+    /// RE-KEYS to the world keyInteger after login (two-phase keying). Kept as a
+    /// const so the acceptor can seed a session before auth completes.
     /// </summary>
-    public const ulong WorldChannelSeed = 0xD283F5B34A8DC685ul;
+    public const ulong WorldChannelSeed = PacketCrypt.AuthChannelKey;
 
     /// <summary>
     /// Build a complete on-wire server-&gt;client frame carrying one encrypted game

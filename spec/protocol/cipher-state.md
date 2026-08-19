@@ -8,6 +8,14 @@ This file first (mistakenly) reported the cipher as "stateful, only msg #0
 reproduced." That was WRONG, and the story of the mistake is instructive, so it
 is kept below the answer.
 
+> **Provenance note (No-NF law, 2026-08-19):** the world-key *derivation formula*
+> below (`GetKeyFromTicket`) had been read from the NF-derived `recovered/` tree
+> and is now **quarantined** (`provenance/QUARANTINE-NF.md`) — removed from
+> shipping code, to be re-sourced from the 16042 client. What stands and is clean:
+> the auth key VALUE (runtime-observed), and the world key TABLE (recovered from
+> your capture by cryptanalysis). The formula below is documented as the observed
+> shape; it is not implemented until re-sourced cleanly.
+
 ## The answer
 
 The cipher (`PacketCrypt`) is **stateless per message** — each Encrypt/Decrypt

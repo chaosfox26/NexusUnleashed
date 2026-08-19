@@ -84,29 +84,26 @@ public sealed class PacketCrypt
     public byte[] Decrypt(byte[] data) => Decrypt(data, data.Length);
 
     /// <summary>
-    /// The AUTH-phase keyInteger: a build-derived constant used before login (the
-    /// hello). A protocol fact (== 0xD283F5B34A8DC685). Restated from the observed
-    /// derivation; the client computes the identical value.
+    /// The AUTH-phase keyInteger: the static build key the channel opens with
+    /// (the hello), OBSERVED at runtime on the wire — a clean protocol fact.
     /// </summary>
-    public static ulong GetKeyFromAuthBuildAndMessage() => unchecked(606559840449654397ul * Multiplier);
+    /// <remarks>
+    /// Provenance: this VALUE was observed at runtime (key-log tap + the captured
+    /// keystream it reproduces). We state the value directly. An earlier decomposed
+    /// form (`N * Multiplier`) was removed 2026-08-19 under the No-NF law
+    /// (provenance/NO-NF.md): that factoring had been read from the NF-derived
+    /// `recovered/` tree, and provenance beats convenience.
+    /// </remarks>
+    public const ulong AuthChannelKey = 0xD283F5B34A8DC685ul;
 
-    /// <summary>
-    /// The WORLD-phase keyInteger: derived from the 16-byte SRP session key ("the
-    /// ticket"). Fold each key byte through the multiply chain from the initial
-    /// seed, add the auth constant, multiply once more. A protocol fact — the
-    /// client derives the identical value to decrypt the world channel; confirmed
-    /// against the captured world stream (the recovered key rebuilds from a
-    /// keyInteger of exactly this shape).
-    /// </summary>
-    public static ulong GetKeyFromTicket(byte[] sessionKey)
-    {
-        if (sessionKey is not { Length: 16 })
-            throw new ArgumentException("session key must be 16 bytes", nameof(sessionKey));
-        ulong v = SeedInitial;
-        foreach (byte b in sessionKey)
-            v = (v + b) * Multiplier;
-        return (v + GetKeyFromAuthBuildAndMessage()) * Multiplier;
-    }
+    // The WORLD-phase keyInteger derivation (session key -> world key) is
+    // QUARANTINED, not implemented here. Its formula had been read from the
+    // NF-derived recovered tree; under the No-NF law it must be re-sourced from a
+    // CLEAN source (the 16042 client's own crypto, or cryptanalysis of a capture
+    // whose session key we know) before it ships. See provenance/QUARANTINE-NF.md.
+    // The world channel + container codec + message models are all clean (they
+    // come from your captures); only this one derivation waits. Until then the
+    // world key is supplied to the session directly as a keyInteger.
 
     private static void WriteU64(byte[] dst, int off, ulong v)
     {

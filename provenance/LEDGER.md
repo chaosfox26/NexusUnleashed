@@ -331,20 +331,36 @@ over-claim class the project's own rules warn about.
 
 ## CIPHER SOLVED — two-phase keying (2026-08-19, supersedes the correction above)
 
+> **CORRECTED 2026-08-19 under the No-NF law** — see the NO-NF LAW entry below.
+> The two keyInteger *derivations* had been read from the NF-derived `recovered/`
+> tree; that provenance is not acceptable. The auth key VALUE
+> (`0xD283F5B34A8DC685`) is clean (runtime-observed) and is now stated directly as
+> `PacketCrypt.AuthChannelKey`; the world-key derivation is QUARANTINED
+> (`provenance/QUARANTINE-NF.md`).
+
 | file | class | source |
 |---|---|---|
-| `Cryptography/PacketCrypt.cs` (`GetKeyFromAuthBuildAndMessage`, `GetKeyFromTicket`) | AUTHORED | the two keyInteger derivations. Restated as protocol facts (uncopyrightable procedures the client runs identically) and CONFIRMED against the wire: the recovered world key rebuilds from a keyInteger and decrypts the world stream. Method = observe-the-algorithm-then-reimplement, already ledgered for the cipher; our own code, not NF expression. |
-| `Network/GameSession.cs` (`RekeyForWorld`) | AUTHORED | switches the channel to the world/ticket key after login. |
-| `Realm/WorldHandshake.cs` (re-key call point) | AUTHORED | opens on the auth key, re-keys on the token hello. |
-| `test/…Protocol.Tests` (two-phase block) | AUTHORED | auth key == 0xD283…; a real captured WORLD-key message decrypts through the codec to 0x0981 + the 251-id list. |
+| `Cryptography/PacketCrypt.cs` (`AuthChannelKey`) | AUTHORED | the auth-phase key VALUE, observed at runtime on the wire (reproduces the captured keystream). Clean. |
+| `Network/GameSession.cs` (`RekeyForWorld(ulong)`) | AUTHORED | switches the channel to a directly-supplied world keyInteger after login. |
+| `Realm/WorldHandshake.cs` (re-key call point) | AUTHORED | opens on the auth key, re-keys on the token hello via a `WorldKeyResolver` (dev key default; real derivation quarantined). |
+| `test/…Protocol.Tests` (two-phase block) | AUTHORED | auth key == 0xD283…; a real captured WORLD-key message decrypts through the codec to 0x0981 + the 251-id list — the world key is the one RECOVERED from the capture, clean. |
 
-The cipher is stateless-fixed-key with TWO phases: auth key
-(`GetKeyFromAuthBuildAndMessage` = `0xD283F5B34A8DC685`) for the hello, then
-`GetKeyFromTicket(sessionKey)` for the world stream. Recovered the 128-byte world
-key table from ONE known-plaintext world message (`key[b+k]=plain[i]^cipher[i]^
-cipher[i-8]`), 128/128 self-consistent, and it decrypts the entire world-entry
-stream. The "stateful" scare was a wrong plaintext-identity assumption. 28/28.
-**The encryption gate is genuinely closed, both directions, both phases.**
+The cipher is stateless-fixed-key with TWO phases. The 128-byte world key TABLE
+was recovered from ONE known-plaintext world message
+(`key[b+k]=plain[i]^cipher[i]^cipher[i-8]`), 128/128 self-consistent — pure
+cryptanalysis on your captures, clean, and it decrypts the entire world stream.
+The framing, models, and channel are all clean; only the per-session world-key
+*derivation formula* is quarantined pending a client-sourced re-derivation. 28/28.
+
+## THE NO-NF LAW — baked in (operator directive, 2026-08-19)
+
+| file | class | source |
+|---|---|---|
+| `ARCHITECTURE.md` §1.0, `provenance/NO-NF.md` | law | NF and everything derived from it (incl. `realm-source/recovered/**`, the shipped assemblies, the NF corpus) is NOT a source — not last resort, not for facts. Only sources 1–4 (client / our data / oracle WIRE / permissive code). Supersedes all earlier "NF last resort" wording. |
+| `provenance/nf-guard.py` | tool | mechanically scans src/test/tools for references into the NF-derived trees; fails the build on any hit. Run in the gate. Currently GREEN. |
+| `provenance/QUARANTINE-NF.md` | audit | records this session's self-audit: the auth-key factoring (fixed) and the world-key derivation (quarantined), with the clean re-source plan. |
+
+The guard catches NF *text*; *derivation* is caught by discipline + this ledger.
 
 ## End-to-end loopback: two-phase handshake over a real socket (2026-08-19)
 
