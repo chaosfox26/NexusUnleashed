@@ -218,3 +218,14 @@ heal caps; zero-max unit no-ops. No under/overflow.
 Proven on ARCTERRA (world 3335): 1,804 entities / 1,755 sim creatures wandering
 + aggroing, a player walking through (37 visible), 600 ticks, ZERO NaN, all
 entities bounded. The living world runs cohesively before a single wire opcode.
+
+## tools/NexusUnleashed.CaptureAnalyzer (2026-08-19)
+
+| file | class | source |
+|---|---|---|
+| `Program.cs` | AUTHORED | reads packet-dump.log (observed wire bytes from our own diagnostics tap) and aggregates it into an opcode inventory. Pure fact processing; no emulator source. |
+
+The frozen-realm side of the tap (a `packetdump=1` toggle in our own diagnostics
++ two funnel hooks) lives in the separate realm-source tree (that realm is AGPL);
+it records the wire before the realm's handlers, so a WIP oracle does not limit
+coverage. This analyzer + the pinned message models are the clean-engine half.
