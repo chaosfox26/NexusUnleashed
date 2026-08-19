@@ -34,9 +34,9 @@ fidelity AND a production multiplayer realm. Zero NF source; two MIT primitives
 ## THE ROAD (task #48 = NORTH STAR: operator stands in the world on our engine)
 
 DONE: crypto/login, wire codec, framing, protocol capture, message models,
-container framing, cipher for msg #0. **TRUE NEXT BLOCKER: the per-message cipher
-state** (`spec/protocol/cipher-state.md`) — then 0x058F client hello / token
-verify -> character list -> character select -> world entry -> the client renders.
+container framing, **cipher SOLVED (two-phase keying, decrypts the whole world
+stream)**. NEXT: the handshake payloads — 0x058F client hello / token → sessionKey
+lookup → character list → character select → world entry → the client renders.
 
 ### Container framing wired; cipher partially reproduced (2026-08-19, this session)
 
@@ -55,24 +55,27 @@ capture and built into the engine:
   + exact body; EncodeServer reproduces the captured wire byte-for-byte **for the
   first message**. Framing spec: `spec/protocol/containers.md`.
 
-### CORRECTION: the cipher is NOT fully closed (2026-08-19)
+### CIPHER SOLVED: two-phase keying (2026-08-19)
 
-The earlier "ENCRYPTION GATE CLOSED, 13/13 byte-for-byte" was validated only
-against the FIRST message. **The cipher is stateful across the connection**: the
-same 49-byte hello plaintext produced **12 distinct ciphertexts** in one session.
-`PacketCrypt` reproduces only message #0 (it starts from the static register `a`,
-which msg #0 recovers exactly). Continuous-CFB carry, per-message chain-advance,
-and shared-duplex models were all tested and REJECTED (`cipher-state.md` has the
-evidence + the 12 known-plaintext levers). So the wired channel sends a correct
-FIRST hello, then would encipher the rest wrong — a real client accepts the hello
-and rejects the stream. **This per-message state rule is now the true task-#48
-blocker**, ahead of char list / world entry. Framing + message models + the world
-sim are all ready to plug in the moment the cipher stream is reproduced.
+The cipher is fully cracked and wired. It is **stateless-fixed-key**, with TWO
+phases per connection:
+- **auth key** `GetKeyFromAuthBuildAndMessage()` = `0xD283F5B34A8DC685` (a build
+  constant) — the pre-login hello.
+- **world key** `GetKeyFromTicket(sessionKey)` (folds the 16-byte SRP session
+  key) — every message after login. Re-keyed implicitly at login; no key on wire.
 
-Leading next attacks (see cipher-state.md): raw duplex-interleave with the C→S
-ciphertext (needs a tap that logs C→S BEFORE decrypt), or the client binary's
-`GetKeyFromAuthBuildAndMessage` key setup (source 1). We hold 12 known-plaintext
-hello pairs + recovered per-message registers as the cryptanalytic lever.
+**Proven byte-for-byte on the real capture:** recovered the full 128-byte world
+key table from one known-plaintext world message (128/128, zero conflicts), it
+rebuilds exactly from a keyInteger, and it decrypts the whole world-entry stream
+(`0x0988` self-decrypts; the rest decode to `0x098B`, `0x0981` → the 251-id list,
+…). Test 28/28. `PacketCrypt.GetKeyFromTicket` + `GameSession.RekeyForWorld` are
+wired; `WorldHandshake` opens on the auth key and re-keys on the token hello.
+
+**The earlier "stateful, msg #0 only" scare was an error:** the 12 "identical
+hello" frames were actually 12 *different* 49-byte world messages under the world
+key, not the hello under a moving register. Verify message identity before
+concluding about a cipher. Real blocker is now just the handshake payloads
+(0x058F token → sessionKey lookup → character list → world entry).
 
 ## The capture pipeline + facts (for the next session)
 

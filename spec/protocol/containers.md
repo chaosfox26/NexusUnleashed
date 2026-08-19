@@ -1,17 +1,18 @@
 # Spec: the encrypted packed container (world channel)
 
-**Status: FRAMING PINNED byte-for-byte; CIPHER proven for message #0 only.**
+**Status: FRAMING PINNED byte-for-byte; CIPHER SOLVED (two-phase keying).**
 
-> **Correction (2026-08-19):** the container FRAMING below is fully proven, but
-> the per-message CIPHER STATE is NOT closed — see `spec/protocol/cipher-state.md`.
-> The same hello plaintext produces 12 different ciphertexts, so the cipher is
-> stateful across the connection; `PacketCrypt` reproduces only the first message.
-> There is no SRP-derived channel key and no ARC4 (those are settled); the open
-> piece is how the cipher's register evolves per message.
+> **2026-08-19:** the container FRAMING is proven, and the cipher is now SOLVED —
+> stateless-fixed-key with TWO phases: the auth key (`0xD283F5B34A8DC685`) for the
+> hello, then a re-key to `GetKeyFromTicket(sessionKey)` for the world stream.
+> Confirmed against the real world stream byte-for-byte. See
+> `spec/protocol/cipher-state.md`. (An intermediate "stateful, msg #0 only" reading
+> was an error — the later 49-byte frames were different messages under the world
+> key, not the hello under a moving key.)
 
 This is the structure that carries every game message on the world channel: the
 world wraps each game message in a container and encrypts the inner message with
-the build-seeded `PacketCrypt`.
+the phase-appropriate `PacketCrypt`.
 
 ## The two channels
 
@@ -52,10 +53,10 @@ S->C 0x03DC payload = 35000000 1a57c0cbff79ba9c87080349bf63806df50021ea5e4a2918f
   seen post-decryption in session 2 (0300aa3e0000010000001500...).
 ```
 
-`Encrypt` of that plaintext reproduces the captured ciphertext byte-for-byte **for
-this first message**. Verified in `test/NexusUnleashed.Protocol.Tests` (real-wire).
-Subsequent messages use an evolved register (`cipher-state.md`) — the framing here
-is correct, but reproducing message #N needs the state rule first.
+`Encrypt` of that plaintext reproduces the captured ciphertext byte-for-byte.
+Verified in `test/NexusUnleashed.Protocol.Tests` (real-wire). World-phase messages
+use the ticket key and decrypt/encrypt the same way (`cipher-state.md`); a real
+captured world message (`0x0981`) decrypts end-to-end through this codec.
 
 ## Client→server direction
 

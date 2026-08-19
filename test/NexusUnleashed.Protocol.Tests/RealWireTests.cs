@@ -127,5 +127,25 @@ Console.WriteLine("-- world-init 0x0981 (real captured world-entry bytes) --");
         rebuilt.Length == real.Length ? "" : $"(len {rebuilt.Length} vs {real.Length})");
 }
 
+// --- TWO-PHASE KEY: decrypt a real WORLD-key message end to end ---
+// Auth key (0xD283F5B34A8DC685) handles the hello; after login the channel
+// re-keys to GetKeyFromTicket(sessionKey). This wrapper is a real captured
+// world message under that world key (recovered keyInteger 0x4888DCE5CA507060);
+// our WorldPacket + PacketCrypt(worldKey) decrypt it to 0x0981 + the 251-id list.
+Console.WriteLine("-- two-phase keying: real WORLD-key decrypt --");
+{
+    Check("GetKeyFromAuthBuildAndMessage == 0xD283F5B34A8DC685",
+        NexusUnleashed.Cryptography.PacketCrypt.GetKeyFromAuthBuildAndMessage() == 0xD283F5B34A8DC685ul);
+    var worldCrypt = new NexusUnleashed.Cryptography.PacketCrypt(0x4888DCE5CA507060ul);
+    byte[] wrapperPayload = Hex("f603000099a9bf68ebb004b11840d11cf72b3ae89163af6f107e62014081f42c6cf19a1e199875a5678c7b913811b89454c76f3211558cbdbc886f666079d89e7ce182cf990a84805900b6095816f578eb17022d916ece7648107e5a80c4c4b3ff0e757999a425229872d94378195b86c9d899a5918fc53750e7663ea0c24ad40ef084c119507182a774d33698b93ff6bbefcd6f119a61855cbab586c0781ac620356d999961bb4f2b48ac16b8e8567e180398b591ac4257f04cb8e1e08036743025754819f34a6a15c4618ed8ef1b92a7d3f5aa1197009c04d4a9dd003d2a59b3ca82fe195debc8d4b60ec4f8e0b56c851c6e2211760bdd1c23b1b9203ba43e4234734699a9ff68ebb044b11840d11cf72b3ae89163ef6f107e22014081f42c6cf19a1e199835a5678c3b913811b89454c76f321155ccbdbc882f666079d89e7ce182cf990ac4805900f6095816f578eb17022d916e8e7648103e5a80c4c4b3ff0e757999a465229872994378195b86c9d899a5918f853750e7263ea0c24ad40ef084c119503182a774933698b93ff6bbefcd6f119a21855cbaf586c0781ac620356d999961fb4f2b48ec16b8e8567e180398b591ac0257f04cf8e1e08036743025754819f30a6a15c4218ed8ef1b92a7d3f5aa1197409c04d4e9dd003d2a59b3ca82fe195dabc8d4b64ec4f8e0b56c851c6e2211764bdd1c23f1b9203ba43e4234734699a93f68ebb084b11840d11cf72b3ae891632f6f107ee2014081f42c6cf19a1e1998f5a5678cfb913811b89454c76f3211550cbdbc88ef666079d89e7ce182cf990a0480590036095816f578eb17022d916e4e764810fe5a80c4c4b3ff0e757999a4a5229872594378195b86c9d899a5918f453750e7e63ea0c24ad40ef084c11950f182a774533698b93ff6bbefcd6f119ae1855cba3586c0781ac620356d9999613b4f2b482c16b8e8567e180398b591acc257f04c38e1e08036743025754819f3ca6a15c4e18ed8ef1b92a7d3f5aa1197809c04d429dd003d2a59b3ca82fe195d6bc8d4b68ec4f8e0b56c851c6e2211768bdd1c2331b9203ba43e4234734699a97f68ebb0c4b11840d11cf72b3ae891636f6f107ea2014081f42c6cf19a1e1998b5a5678cbb913811b89454c76f3211554cbdbc88af666079d89e7ce182cf990a4480590076095816f578eb17022d916e0e764810be5a80c4c4b3ff0e757999a4e5229872194378195b86c9d899a5918f053750e7a63ea0c24ad40ef084c11950b182a774133698b93ff6bbefcd6f119aa1855cba7586c0781ac620356d9999617b4f2b486c16b8e8567e180398b591ac8257f04c78e1e08036743025754819f38a6a15c4a18ed8ef1b92a7d3f5aa1197c19c04d46add003d2a59b3ca8efe195d2ac8d4b6c1c4f8e0b56c851c66221176");
+    var (wop, wbody) = NexusUnleashed.Network.WorldPacket.DecodeContainer(wrapperPayload, worldCrypt);
+    Check("world-key container decodes to inner opcode 0x0981", wop == 0x0981, $"(0x{wop:X4})");
+    // rebuild full payload (op+body) and parse the id list
+    var full = new byte[wbody.Length + 2];
+    full[0] = 0x81; full[1] = 0x09; System.Array.Copy(wbody, 0, full, 2, wbody.Length);
+    var wi2 = NexusUnleashed.Network.ServerWorldInit.Parse(full);
+    Check("world-key 0x0981 decrypts to the 251-id list", wi2.Ids.Length == 251 && wi2.Ids[0] == 1, $"({wi2.Ids.Length})");
+}
+
 Console.WriteLine($"{pass} pass / {fail} fail");
 return fail == 0 ? 0 : 1;

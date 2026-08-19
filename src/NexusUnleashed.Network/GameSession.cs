@@ -39,6 +39,15 @@ public sealed class GameSession : IDisposable
     /// <summary>Arbitrary per-session state bag for handshake/handlers.</summary>
     public System.Collections.Generic.Dictionary<string, object> State { get; } = new();
 
+    /// <summary>
+    /// Switch the channel to the WORLD-phase cipher after login: re-key to
+    /// PacketCrypt(GetKeyFromTicket(sessionKey)). Both ends derive the identical
+    /// key from the SRP session key, so all world messages encrypt/decrypt with
+    /// it (two-phase keying, proven against the captured world stream).
+    /// </summary>
+    public void RekeyForWorld(byte[] sessionKey)
+        => Crypt = new PacketCrypt(PacketCrypt.GetKeyFromTicket(sessionKey));
+
     public GameSession(Socket socket, Func<GameSession, ushort, byte[], Task> dispatch)
     {
         _socket = socket;

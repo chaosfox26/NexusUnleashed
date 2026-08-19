@@ -44,8 +44,15 @@ public static class WorldHandshake
         world.On(ClientHello, (s, body) =>
         {
             Log.Info($"world: <- 0x058F client hello ({body.Length}B) {Preview(body)}");
-            // Next: verify the game token carried here, then send the character
-            // list. Pinned against the capture as the list message is decoded.
+            // The client hello carries the game token from STS login. The flow:
+            //   1. read the token from this body (layout pinned from the capture),
+            //   2. look up the account + its 16-byte SRP session key by token,
+            //   3. s.RekeyForWorld(sessionKey) — switch to the WORLD cipher, so
+            //      every message after this is enciphered with the ticket key
+            //      (two-phase keying, proven against the captured world stream),
+            //   4. send the character list.
+            // Steps 1/4 are pinned as those payloads are decoded; the re-key
+            // mechanism (step 3) is in place (GameSession.RekeyForWorld).
             return Task.CompletedTask;
         });
 

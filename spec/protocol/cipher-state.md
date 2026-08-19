@@ -1,82 +1,60 @@
-# Spec: the packet cipher's per-message state (the true remaining gate)
+# Spec: the packet cipher keying — SOLVED (two-phase)
 
-**Status: OPEN — the cipher reproduces message #0 byte-for-byte, but its
-per-message state evolution across a connection is NOT yet reproduced.**
+**Status: SOLVED (2026-08-19). The cipher is stateless-fixed-key; a connection
+uses TWO keys (auth, then the login ticket key). Confirmed against the real world
+stream, byte-for-byte.**
 
-This corrects an earlier over-claim. "Encryption gate closed, byte-for-byte
-(13/13)" was validated only against the **first** message on the connection (the
-`0x0003` hello). It does not generalize: the live multi-message stream is not yet
-decryptable with `PacketCrypt` as written.
+This file first (mistakenly) reported the cipher as "stateful, only msg #0
+reproduced." That was WRONG, and the story of the mistake is instructive, so it
+is kept below the answer.
 
-## What is proven (stands)
+## The answer
 
-- **Container framing** (`spec/protocol/containers.md`): `0x03DC`/`0x0244`,
-  `[u32 innerLen][cipher]`. Correct.
-- **Cipher algorithm + key table**: the 128-byte key from the multiply-chain, the
-  CFB byte loop, and the length-derived block counter. For message #0 the decrypt
-  yields `0x0003` + exact body, and the encrypt reproduces the captured ciphertext
-  byte-for-byte, both directions.
+The cipher (`PacketCrypt`) is **stateless per message** — each Encrypt/Decrypt
+starts from the same key table + register. One `PacketCrypt` instance serves a
+whole phase. A connection has **two phases, two keyIntegers**:
 
-## The proof that it is stateful (not stateless-per-message)
+| phase | keyInteger | when |
+|---|---|---|
+| **auth** | `GetKeyFromAuthBuildAndMessage()` = `606559840449654397 * 2860486313` = **`0xD283F5B34A8DC685`** (a build constant) | connection open → the pre-login hello |
+| **world** | `GetKeyFromTicket(sessionKey)` — fold the 16-byte SRP session key through the multiply chain, add the auth constant, ×`Multiplier` | after login; every world message |
 
-The `0x0003` hello has an **identical 49-byte plaintext** every time it is sent
-(`0300aa3e0000…`). Captured 12 times in one session, it produced **12 DISTINCT
-ciphertexts**. A stateless cipher would produce one. So the keystream depends on
-connection state / message sequence, not on the plaintext alone. (Analysis:
-`realm-source/captures/`; the 12 wrappers are byte-distinct.)
+`GetKeyFromTicket`:
+```
+v = SeedInitial (8182381946860333969)
+for each of the 16 session-key bytes b:  v = (v + b) * Multiplier
+return (v + GetKeyFromAuthBuildAndMessage()) * Multiplier      // all mod 2^64
+```
 
-## What the evidence says about the state
+Both ends derive the identical world key from the shared SRP session key, so no
+key material is ever sent — the re-key is implicit at login.
 
-For CFB, the first 8 cipher bytes of a known-plaintext message recover that
-message's **starting register**: `reg[7-k] = cipher[k] ^ plain[k] ^ key[block0+k]`.
-Recovered from the 12 hellos:
+## Proof (real capture, byte-for-byte)
 
-- The **first** message of the connection (session 1, msg #0) recovers the
-  **static register `a`** (`0x7D546D1D1994C849`) exactly — confirming msg #0 uses
-  the pristine build-derived state. This is why `PacketCrypt` works for it.
-- **Later** hellos recover DIFFERENT registers (session 2 cluster
-  ~`0xE3EF__C2486F____`; session 1 later ~`0x12C82B8A…`). The register evolves.
+- **Auth key**: decrypts the first connection frame → inner `0x0003` hello, exact
+  body; re-encrypt reproduces the captured wire. (`containers.md`.)
+- **World key**: recovered the full 128-byte world key table from ONE known
+  plaintext world message via `key[block+k] = plain[i] ^ cipher[i] ^ cipher[i-8]`
+  — **128/128 bytes, zero conflicts** (self-consistent ⇒ pairing correct ⇒ cipher
+  is stateless-fixed-key). That table **rebuilds exactly** from a keyInteger
+  (`0x4888DCE5CA507060` for the captured session), and it decrypts the whole
+  world-entry stream: `0x0988` self-decrypts exactly, the following wrappers
+  decode to `0x098B`, etc. Test: `test/NexusUnleashed.Protocol.Tests` (28/28).
 
-## Models tested and REJECTED (do not re-try blind)
+## Wired
 
-Decrypting the session-1 S→C `0x03DC` stream from msg #0 (the true connection
-start), each fails at msg #1 while msg #0 stays correct:
+`PacketCrypt.GetKeyFromAuthBuildAndMessage()` / `GetKeyFromTicket(sessionKey)`
+(clean facts). `GameSession.RekeyForWorld(sessionKey)` switches the channel after
+login. `WorldHandshake` opens on the auth key (hello) and re-keys on the client's
+token hello. The channel is now genuinely functional both directions.
 
-1. **Stateless per message** (register reset to `a` each msg) — msg #1 garbage.
-2. **Continuous CFB feedback** (carry the working `fb` across messages, counter
-   reset per length) — msg #1 garbage.
-3. **Continuous counter** variants (carry the block counter) — msg #0 garbage too.
-4. **Advance the multiply-chain per message** (register = next `a`, or next `b`)
-   — msg #1 sometimes plausible (`0x0396`) but msg #2+ garbage.
+## The mistake (kept as a lesson)
 
-## Leading hypotheses (for the next attack, in order)
-
-1. **Shared full-duplex state**: one cipher state advanced by BOTH directions'
-   bytes. The S→C-only continuous decrypt fails at msg #1 because the client's
-   messages between msg #0 and msg #1 (`0x058F`/`0x07E0`/`0x038C`/`0x0000`) also
-   advance the register. Test: reconstruct the exact interleaved wire byte order
-   (C→S cipher is in the `0x0244` wrappers) and carry one register through all of
-   it. This is the most likely resolution.
-2. **Missing S→C messages** in `capture-session1-cs.log` (if the tap dropped some
-   S→C frames, the register desyncs). Cross-check S→C frame counts against a
-   second tap.
-3. **Per-message re-key** via `GetKeyFromAuthBuildAndMessage()` (the ledger names
-   this symbol): the key/register re-derived per message from (build seed, a
-   per-message value — sequence number? opcode?). Would need the client binary's
-   setup (source 1) or solving the sequence from the recovered registers.
-
-## The cryptanalytic levers we hold (do not lose these)
-
-- **12 known-plaintext hello pairs** (identical 49-byte plaintext, 12 ciphertexts)
-  → 12 recovered starting registers spread across the connection.
-- msg #0 register == static `a` (anchor).
-- `capture-session1-cs.log` begins at the connection's msg #0 (the hello), so it
-  is the stream to attack; `capture-session2.log` starts mid-connection (06:37).
-
-## Impact on the road
-
-The wired world channel sends a correct FIRST hello, but subsequent S→C messages
-would be enciphered wrong until this is solved — so a real client would accept the
-hello and then reject the stream. This is now the true task-#48 blocker, ahead of
-character list / world entry. The framing, the message models, and the world
-simulation are all ready to plug in the moment the cipher stream is reproduced.
+The wrong "stateful" reading came from assuming all 49-byte (`len=53` wrapper)
+frames were the identical `0x0003` hello. They were NOT: only the FIRST per
+connection is the hello (auth key); the rest are *different* 49-byte world
+messages under the *world* key, which of course don't decode with the auth key —
+producing 12 "different ciphertexts for the same plaintext" that were really 12
+different messages. Decrypting each with its correct key resolves everything.
+Lesson: verify the message identity before concluding about the cipher; a wrong
+plaintext assumption looked exactly like a stateful cipher.

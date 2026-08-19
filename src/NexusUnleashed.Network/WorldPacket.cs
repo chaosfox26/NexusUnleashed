@@ -29,9 +29,10 @@ public static class WorldPacket
     public const ushort ClientContainer = 0x0244;
 
     /// <summary>
-    /// The static build-derived cipher seed for the world channel (a protocol
-    /// fact, observed at runtime; never re-keyed). The client derives the same
-    /// key table from it, so encryption is active from the first frame.
+    /// The AUTH-phase cipher key (== PacketCrypt.GetKeyFromAuthBuildAndMessage(),
+    /// a build constant). The channel opens with this for the hello, then RE-KEYS
+    /// to PacketCrypt.GetKeyFromTicket(sessionKey) after login (two-phase keying).
+    /// Kept as a const so the acceptor can seed a session before auth completes.
     /// </summary>
     public const ulong WorldChannelSeed = 0xD283F5B34A8DC685ul;
 

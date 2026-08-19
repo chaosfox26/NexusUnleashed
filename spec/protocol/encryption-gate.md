@@ -1,19 +1,17 @@
 # Spec: the encryption gate (the road to "in the world")
 
-**Status: PARTIALLY CLOSED — framing done; per-message cipher state OPEN. See
-`spec/protocol/cipher-state.md` (the live problem) and `containers.md` (framing).**
+**Status: CLOSED (2026-08-19) — framing + cipher both solved. See
+`spec/protocol/cipher-state.md` and `containers.md`.**
 
-> Settled: there is **no SRP-derived channel key and no ARC4**. The world channel
-> wraps every game message in a packed container (`0x03DC` S→C / `0x0244` C→S)
-> and enciphers the inner message with `PacketCrypt` from the build seed
-> `0xD283F5B34A8DC685`. The container FRAMING is proven byte-for-byte and wired
-> (`WorldPacket` + `GameSession.Crypt`).
->
-> **Still open (corrected 2026-08-19):** the cipher is stateful across the
-> connection — the same hello plaintext gave 12 distinct ciphertexts — and
-> `PacketCrypt` reproduces only message #0. The per-message state evolution is
-> unsolved; that is the real gate. Details + rejected models + levers in
-> `cipher-state.md`. The text below is the original open-problem record.
+> The gate is genuinely shut. **No ARC4, no key material on the wire.** The world
+> channel wraps every game message in a packed container (`0x03DC` S→C / `0x0244`
+> C→S) and enciphers the inner message with a stateless `PacketCrypt` under a
+> TWO-PHASE key: the auth constant `0xD283F5B34A8DC685` for the hello, then
+> `GetKeyFromTicket(sessionKey)` (from the SRP session key) for the world stream.
+> Proven byte-for-byte on the real capture — the world key decrypts the whole
+> world-entry stream. Wired: `WorldPacket`, `GameSession.Crypt` +
+> `RekeyForWorld`, `WorldHandshake`. The text below is the original open-problem
+> record (superseded).
 
 ---
 

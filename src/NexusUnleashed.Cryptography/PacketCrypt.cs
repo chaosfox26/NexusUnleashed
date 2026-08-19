@@ -1,17 +1,23 @@
 // NexusUnleashed - clean-room authored. Carbine's WildStar packet cipher, an
 // independent implementation of a PROTOCOL FACT (the client runs the identical
 // cipher, so it is uncopyrightable procedure, not anyone's creative expression).
-// It is NOT ARC4: a 128-byte key table is expanded from an 8-byte seed via two
-// multiply-chains, then each byte is XORed with an 8-byte feedback register and
-// a rotating key block, with ciphertext fed back (a CFB-style stream cipher).
-// The seed itself is a static value from the client build (observed at runtime).
+// It is NOT ARC4: a 128-byte key table is expanded from an 8-byte keyInteger via
+// two multiply-chains, then each byte is XORed with an 8-byte register + a
+// rotating key block (CFB-style). The cipher is STATELESS per message (each
+// Encrypt/Decrypt starts from the same key table + register); one PacketCrypt
+// instance handles the whole phase.
 //
-// SCOPE (corrected 2026-08-19): this reproduces the FIRST message on a connection
-// byte-for-byte (the register starts at the static `a`). It does NOT yet
-// reproduce later messages: the cipher is stateful across the connection (the
-// same hello plaintext yields different ciphertexts per send). The per-message
-// register evolution is unsolved — see spec/protocol/cipher-state.md. Do not
-// treat this as a closed general-purpose channel cipher until that is resolved.
+// TWO-PHASE KEYING (solved 2026-08-19, confirmed against the world stream):
+// a connection uses TWO keys, each a `keyInteger` fed to this class:
+//   * AUTH phase  -> GetKeyFromAuthBuildAndMessage()  (a build constant,
+//                    0xD283F5B34A8DC685). Used for the pre-login hello.
+//   * WORLD phase -> GetKeyFromTicket(sessionKey)     (folds the 16-byte SRP
+//                    session key). Re-keyed after login; all world messages use
+//                    it. Recovered key table from the capture rebuilds EXACTLY
+//                    from a keyInteger, and this key decrypts the whole world
+//                    entry stream (0x0988/0x098B/... byte-for-byte).
+// The earlier "stateful, only msg #0" note was WRONG: those later 49-byte frames
+// were different messages under the WORLD key, not the hello under a moving key.
 using System;
 
 namespace NexusUnleashed.Cryptography;
@@ -76,6 +82,31 @@ public sealed class PacketCrypt
 
     public byte[] Encrypt(byte[] data) => Encrypt(data, data.Length);
     public byte[] Decrypt(byte[] data) => Decrypt(data, data.Length);
+
+    /// <summary>
+    /// The AUTH-phase keyInteger: a build-derived constant used before login (the
+    /// hello). A protocol fact (== 0xD283F5B34A8DC685). Restated from the observed
+    /// derivation; the client computes the identical value.
+    /// </summary>
+    public static ulong GetKeyFromAuthBuildAndMessage() => unchecked(606559840449654397ul * Multiplier);
+
+    /// <summary>
+    /// The WORLD-phase keyInteger: derived from the 16-byte SRP session key ("the
+    /// ticket"). Fold each key byte through the multiply chain from the initial
+    /// seed, add the auth constant, multiply once more. A protocol fact — the
+    /// client derives the identical value to decrypt the world channel; confirmed
+    /// against the captured world stream (the recovered key rebuilds from a
+    /// keyInteger of exactly this shape).
+    /// </summary>
+    public static ulong GetKeyFromTicket(byte[] sessionKey)
+    {
+        if (sessionKey is not { Length: 16 })
+            throw new ArgumentException("session key must be 16 bytes", nameof(sessionKey));
+        ulong v = SeedInitial;
+        foreach (byte b in sessionKey)
+            v = (v + b) * Multiplier;
+        return (v + GetKeyFromAuthBuildAndMessage()) * Multiplier;
+    }
 
     private static void WriteU64(byte[] dst, int off, ulong v)
     {

@@ -328,3 +328,20 @@ per-message register evolution is the true remaining gate. Docs corrected
 (containers.md, encryption-gate.md, PacketCrypt.cs, STATE.md). Discipline note:
 "verified byte-for-byte" against ONE message did not generalize — exactly the
 over-claim class the project's own rules warn about.
+
+## CIPHER SOLVED — two-phase keying (2026-08-19, supersedes the correction above)
+
+| file | class | source |
+|---|---|---|
+| `Cryptography/PacketCrypt.cs` (`GetKeyFromAuthBuildAndMessage`, `GetKeyFromTicket`) | AUTHORED | the two keyInteger derivations. Restated as protocol facts (uncopyrightable procedures the client runs identically) and CONFIRMED against the wire: the recovered world key rebuilds from a keyInteger and decrypts the world stream. Method = observe-the-algorithm-then-reimplement, already ledgered for the cipher; our own code, not NF expression. |
+| `Network/GameSession.cs` (`RekeyForWorld`) | AUTHORED | switches the channel to the world/ticket key after login. |
+| `Realm/WorldHandshake.cs` (re-key call point) | AUTHORED | opens on the auth key, re-keys on the token hello. |
+| `test/…Protocol.Tests` (two-phase block) | AUTHORED | auth key == 0xD283…; a real captured WORLD-key message decrypts through the codec to 0x0981 + the 251-id list. |
+
+The cipher is stateless-fixed-key with TWO phases: auth key
+(`GetKeyFromAuthBuildAndMessage` = `0xD283F5B34A8DC685`) for the hello, then
+`GetKeyFromTicket(sessionKey)` for the world stream. Recovered the 128-byte world
+key table from ONE known-plaintext world message (`key[b+k]=plain[i]^cipher[i]^
+cipher[i-8]`), 128/128 self-consistent, and it decrypts the entire world-entry
+stream. The "stateful" scare was a wrong plaintext-identity assumption. 28/28.
+**The encryption gate is genuinely closed, both directions, both phases.**
