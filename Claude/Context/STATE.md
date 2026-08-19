@@ -1,5 +1,10 @@
 # NexusUnleashed Engine — State of the Build
 
+> **📎 FULL CONTINUATION HANDOFF: read `CONTINUE.md` first** — it is the self-contained
+> pickup point (mission, ALL rules, hardware requirements, technical state, run
+> commands, the safe next-step plan). Sensitive specifics are in the gitignored
+> `local-notes.md`. This banner below is the short form.
+
 > **RESUME HERE (2026-08-19, deep night) — STS DONE END TO END; THE CLIENT IS NOW ON
 > THE REALM CHANNEL (23115). NEXT WALL = CHARACTER LIST.**
 > The real 16042 client authenticates fully through STS and hands off to our realm

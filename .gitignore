@@ -14,3 +14,5 @@ clean-engine*.log
 # The private-terms list the privacy guard scans for - names must never enter the repo.
 provenance/.private-terms
 charlist-replay.bin
+Claude/Context/local-notes.md
+*local-notes*
