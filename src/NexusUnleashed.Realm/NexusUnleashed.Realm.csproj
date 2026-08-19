@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\NexusUnleashed.Network\NexusUnleashed.Network.csproj" />
+    <ProjectReference Include="..\NexusUnleashed.GameData\NexusUnleashed.GameData.csproj" />
+  </ItemGroup>
+</Project>

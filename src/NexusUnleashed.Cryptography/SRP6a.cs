@@ -36,7 +36,7 @@ namespace NexusUnleashed.Cryptography
 
         public SRP6a(string salt, string accountName, string passwordVerifier)
         {
-            sha256 = new SHA256Managed();
+            sha256 = SHA256.Create();
 
             I = sha256.ComputeHash(Encoding.UTF8.GetBytes(accountName));
 

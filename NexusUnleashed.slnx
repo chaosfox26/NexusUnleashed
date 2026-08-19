@@ -3,5 +3,6 @@
     <Project Path="src/NexusUnleashed.Cryptography/NexusUnleashed.Cryptography.csproj" />
     <Project Path="src/NexusUnleashed.GameData/NexusUnleashed.GameData.csproj" />
     <Project Path="src/NexusUnleashed.Network/NexusUnleashed.Network.csproj" />
+    <Project Path="src/NexusUnleashed.Realm/NexusUnleashed.Realm.csproj" />
   </Folder>
 </Solution>
