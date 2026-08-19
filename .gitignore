@@ -4,3 +4,5 @@ obj/
 canon-private/
 **/canon-private/
 /publish/
+captures/
+packet-dump*.log

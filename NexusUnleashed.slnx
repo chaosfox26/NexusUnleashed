@@ -16,6 +16,7 @@
     <Project Path="test/NexusUnleashed.Crypto.Tests/NexusUnleashed.Crypto.Tests.csproj" />
     <Project Path="test/NexusUnleashed.Database.Tests/NexusUnleashed.Database.Tests.csproj" />
     <Project Path="test/NexusUnleashed.GameData.Tests/NexusUnleashed.GameData.Tests.csproj" />
+    <Project Path="test/NexusUnleashed.Protocol.Tests/NexusUnleashed.Protocol.Tests.csproj" />
     <Project Path="test/NexusUnleashed.Sts.Tests/NexusUnleashed.Sts.Tests.csproj" />
     <Project Path="test/NexusUnleashed.World.Tests/NexusUnleashed.World.Tests.csproj" />
   </Folder>

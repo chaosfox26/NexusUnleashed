@@ -237,3 +237,14 @@ coverage. This analyzer + the pinned message models are the clean-engine half.
 | `Network/GameMessageOpcode.cs` | GENERATED from capture | 157 opcodes observed on the oracle's wire (41 C->S + 116 S->C), both directions decrypted. Numbers are protocol facts (Carbine's client); names are ours (inferred roles or Op_0xNNNN). The message identity table. |
 
 Captured live via our own diagnostics tap; no emulator source read.
+
+## PacketReader validated against real wire (2026-08-19)
+
+| file | class | source |
+|---|---|---|
+| `test/NexusUnleashed.Protocol.Tests/RealWireTests.cs` | AUTHORED | parses REAL captured 0x0935 movement payloads with our clean-room PacketReader. |
+
+Proven (7/7): our bit codec reads opcode 0x0935 and guid 5076 correctly out of
+five real captured server->client movement packets (guid constant = the tracked
+entity). The clean-room wire codec matches Carbine's actual bit format,
+confirmed against the operator's own captured packets - not inference.
