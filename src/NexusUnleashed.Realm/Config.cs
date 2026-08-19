@@ -8,6 +8,7 @@ namespace NexusUnleashed.Realm;
 public sealed class RealmConfig
 {
     public string BindAddress { get; set; } = "0.0.0.0";
+    public int StsPort { get; set; } = 6600;    // UNPINNED: confirm from oracle/launcher config
     public int AuthPort { get; set; } = 23115;   // UNPINNED: real ports from oracle
     public int WorldPort { get; set; } = 24000;
     public string Database { get; set; } = "Server=127.0.0.1;Port=3307;User=root;Database=worlddb";

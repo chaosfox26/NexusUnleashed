@@ -23,3 +23,15 @@ a non-NF source wherever possible.
 | spec/protocol/frame.md | spec | oracle (to be captured) | the clean method to pin the frame; source is the frozen realm, NOT NF | |
 | NexusUnleashed.GameData/GameTableReader.cs | A-authored | our datamine + tbl_reader.py | .tbl binary format is OUR documented spec (equiv-gated 10.27M values); read Creature2 = 53,137 rows/173 fields correctly | header offsets pinned from our Python |
 | test/NexusUnleashed.GameData.Tests/ReadTable.cs | A-authored | this project | verifies against a real client table | |
+
+## src/NexusUnleashed.Sts/ (2026-08-19)
+
+| file | class | source |
+|---|---|---|
+| `StsMessage.cs` | AUTHORED | STS framing measured from the client's own `StsConnLib64.MT.dll` (see `spec/protocol/sts.md` for the extraction); parser/framer code written fresh |
+| `StsServer.cs` | AUTHORED | our own async listener/router; standard .NET sockets |
+| `AuthFlow.cs` | AUTHORED | flow order from client RTTI transaction classes (facts); body schemas marked UNPINNED pending an oracle capture |
+| `spec/protocol/sts.md` | AUTHORED | derivation document — every token named with its extraction method |
+
+No emulator source was consulted for this layer. The one non-client input is
+our own SRP6a (MIT Arctium seed, already ledgered under Cryptography).

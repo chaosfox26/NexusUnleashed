@@ -4,5 +4,9 @@
     <Project Path="src/NexusUnleashed.GameData/NexusUnleashed.GameData.csproj" />
     <Project Path="src/NexusUnleashed.Network/NexusUnleashed.Network.csproj" />
     <Project Path="src/NexusUnleashed.Realm/NexusUnleashed.Realm.csproj" />
+    <Project Path="src/NexusUnleashed.Sts/NexusUnleashed.Sts.csproj" />
+  </Folder>
+  <Folder Name="/test/">
+    <Project Path="test/NexusUnleashed.Sts.Tests/NexusUnleashed.Sts.Tests.csproj" />
   </Folder>
 </Solution>
