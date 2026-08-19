@@ -182,3 +182,19 @@ succeed — the 0x0003 hello — to locate the pump + the bit-reader), then trac
 0x117 deserializer's bit-reads = the exact wire layout, and GENERATE 0x117 from
 characterdb. Pure client observation; no NF. Keep Stalker windows TIGHT (live game
 thread; operator is playing — don't destabilize the client).
+
+### 9.3 The 0x117 wire format is the hard next problem (honest state)
+The char-list handler consumes a DESERIALIZED struct, so the wire parse is done by
+the pump before dispatch. Locating that deserializer is non-trivial:
+- STATIC: the {0x38,0x50,0x5c} struct-write signature matches 133 funcs (too broad);
+  no per-message registry entry found by a naive u32-opcode search. The parse is
+  likely schema/generic-reader driven, or the factory keys opcode as u16.
+- DYNAMIC: a crash-probe (sending zero-body realm msgs 0x116/0x14B/0x036 to trigger
+  the pump + backtrace) CRASHED the fragile client — REMOVED, do NOT repeat. Sending
+  malformed messages to the live client destabilizes it (violates "PC takes priority").
+SAFE PLAN for next: (a) find the pump via the G vtable (OnMessage ptr at .data
+0x140C66D58) and read the per-opcode read path statically; OR (b) Frida-hook the
+deserializer once found and either observe a genuinely-valid parse or NativeFunction-
+call it in-process with a controlled buffer (sandbox — no network, no client-state
+risk). Then build the GENERIC, account-keyed 0x117 generator from characterdb
+(multi-account by design; reproducible; MIT — for the community).
