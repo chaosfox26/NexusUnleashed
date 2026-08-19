@@ -1,5 +1,9 @@
 # NexusUnleashed
 
+> ## 💬 A note from **NU-Dev**
+>
+> ### _“I told you I did not need your code.”_
+
 A **standalone**, clean-room WildStar server engine — built from the client, our
 own restoration data, and the observable behavior of a running reference realm,
 **owing no upstream license, no fork, and no other project anything.**
