@@ -58,6 +58,8 @@ static class RoundTrip
         Console.WriteLine(_fails == 0
             ? "\n== ALL ROUND-TRIP TESTS PASS =="
             : $"\n== {_fails} FAILURE(S) ==");
-        return _fails == 0 ? 0 : 1;
+        Console.WriteLine("-- router --");
+        int routerFails = Routing.RunAsync().GetAwaiter().GetResult();
+        return (_fails == 0 && routerFails == 0) ? 0 : 1;
     }
 }

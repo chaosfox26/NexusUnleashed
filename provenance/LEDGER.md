@@ -132,3 +132,14 @@ creatures resolve; the rest carry empty client strings). The engine names
 The clean method for pinning world-entry protocol: the operator plays a real
 client through the proxy, we observe the wire (a fact). Frame parsing proven
 against a mock oracle (both directions, exact opcode + length).
+
+## Network opcode registry + world router (2026-08-19)
+
+| file | class | source |
+|---|---|---|
+| `Network/Opcodes.cs` | AUTHORED | opcode registry; each entry a measured fact with an evidence note. Seeded with the two server-hello opcodes captured from the oracle (auth 0x0003, world 0x03DC). Grows one capture at a time. |
+| `Network/WorldMessageRouter.cs` | AUTHORED | opcode-keyed dispatch over GameServer; flags handled-but-unpinned opcodes. |
+
+Proven over a live socket (6/6): framed message reaches the keyed handler with
+intact payload; unpinned opcode flagged once. The world message layer that
+captured opcodes plug into.
