@@ -48,6 +48,12 @@ public sealed class GameServer
     public void On(ushort opcode, Func<GameSession, byte[], Task> handler)
         => _handlers[opcode] = handler;
 
+    /// <summary>
+    /// Called for any opcode with no registered handler — the capture hook for
+    /// pinning a channel's vocabulary. Receives (session, opcode, payload).
+    /// </summary>
+    public Action<GameSession, ushort, byte[]>? OnUnhandled { get; set; }
+
     public async Task ListenAsync(CancellationToken ct = default)
     {
         _listener = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
@@ -83,8 +89,9 @@ public sealed class GameServer
     {
         if (_handlers.TryGetValue(opcode, out var handler))
             await handler(session, payload);
-        // Unknown opcodes are recorded, never fatal (the engine's own gaps log
-        // will note them once wired) — the client must never be able to crash
-        // the server with an unrecognized message.
+        else
+            OnUnhandled?.Invoke(session, opcode, payload);
+        // Unknown opcodes are recorded, never fatal — the client must never be
+        // able to crash the server with an unrecognized message.
     }
 }

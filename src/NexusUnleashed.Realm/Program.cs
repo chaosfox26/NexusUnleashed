@@ -47,16 +47,24 @@ internal static class Program
         };
         Log.Info($"sts login server listening ({accounts.GetType().Name}; capturing client requests -> {stsCapturePath}).");
 
+        // Auth game server - CLEAR channel (port 23115). Sends the clear 0x0003
+        // hello on connect and logs every client opcode (capture stage).
+        var auth = new GameServer(cfg.BindAddress, cfg.AuthPort, worldChannel: false);
+        AuthHandshake.Register(auth);
+        Log.Info($"auth server listening on {cfg.AuthPort} (clear channel; 0x0003 hello on connect).");
+
         // World game server - encrypted packed-container channel (0x03DC/0x0244,
         // static-seeded PacketCrypt). The handshake sends the 0x0003 hello on
         // connect and routes the client's login messages toward world entry.
         var world = new GameServer(cfg.BindAddress, cfg.WorldPort, worldChannel: true);
         WorldHandshake.Register(world);
+        world.OnUnhandled = (s, opcode, body) =>
+            Log.Info($"world: <- op=0x{opcode:X4} ({body.Length}B) [unrouted]");
         Log.Info("world server listening (encrypted channel; 0x0003 hello on connect).");
 
         try
         {
-            await Task.WhenAll(sts.ListenAsync(cts.Token), world.ListenAsync(cts.Token));
+            await Task.WhenAll(sts.ListenAsync(cts.Token), auth.ListenAsync(cts.Token), world.ListenAsync(cts.Token));
         }
         catch (OperationCanceledException)
         {
