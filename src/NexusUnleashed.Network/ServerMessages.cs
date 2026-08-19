@@ -80,3 +80,25 @@ public sealed record ServerEntityPositionUpdate(uint Guid, uint MovementData, by
         return new ServerEntityPositionUpdate(r.ReadUInt32(), r.ReadUInt32(), r.ReadByte());
     }
 }
+
+/// <summary>
+/// 0x0262: entity create - what makes a client SEE an entity (the world's most
+/// important server message). Header is pinned (opcode + guid); the BODY is
+/// heavily BIT-PACKED and variable (type, creatureId, position, faction,
+/// display, optional sections), lengths 270..2416 across samples. Position is
+/// NOT byte-aligned, so the body needs dedicated bit-level analysis correlated
+/// with known worlddb entities - a focused effort, not a byte scan. Marked here
+/// so the next pass does not repeat the byte-aligned dead end.
+/// </summary>
+public sealed record ServerEntityCreate(uint Guid, byte[] Body) : IServerMessage
+{
+    public GameMessageOpcode Opcode => GameMessageOpcode.ServerEntityCreate;
+    public static ServerEntityCreate Parse(byte[] payload)
+    {
+        var r = new PacketReader(payload);
+        r.ReadBits(16);                       // opcode (pinned)
+        uint guid = r.ReadUInt32();           // guid (pinned, validated)
+        byte[] body = r.ReadBytes(r.BytesRemaining);   // bit-packed, pending decode
+        return new ServerEntityCreate(guid, body);
+    }
+}

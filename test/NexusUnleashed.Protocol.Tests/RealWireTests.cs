@@ -53,5 +53,12 @@ Console.WriteLine("-- message models vs real bytes --");
     Check("0x0935 position: guid extracted", pos.Guid == 5076, $"(guid={pos.Guid} move=0x{pos.MovementData:X8})");
 }
 
+
+// 0x0262 entity-create header (guid pinned; body bit-packed, pending)
+{
+    var ec = ServerEntityCreate.Parse(Hex("6202e606000040b51c07004611000000f0"));
+    Check("0x0262 entity-create: guid header pinned", ec.Guid == 1766, $"(guid={ec.Guid}, body {ec.Body.Length}B bit-packed)");
+}
+
 Console.WriteLine($"{pass} pass / {fail} fail");
 return fail == 0 ? 0 : 1;
