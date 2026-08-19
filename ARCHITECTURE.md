@@ -31,6 +31,23 @@ not take.
 
 ---
 
+## 0a. Acceptance criteria (operator, binding — the definition of done)
+
+The project is not finished until ALL hold, measured not asserted:
+
+1. **Login works.** A real WildStar 16042 client connects, authenticates, and
+   reaches character select, then enters a world — against this engine.
+2. **Deployable as the private server on NU-Linux.** It runs on the operator's
+   Ubuntu VPS the way the current engine does: `install.sh`-class deployment,
+   systemd services, the existing databases, one-command bring-up.
+3. **As functional as the current engine.** Full behavioral parity with the
+   frozen NexusUnleashed realm — the 263,756-entity world, the systems, the
+   fights — indistinguishable to a player. The frozen realm is the oracle; the
+   parity harness (§3) is the proof.
+
+These supersede nothing in §0; they make it testable. "It compiles" is not done.
+"It boots and a player cannot tell the difference, on the Linux box" is done.
+
 ## 1. The Provenance Discipline — the founding law
 
 Every line in this repository is born from one of four **clean sources**, and
