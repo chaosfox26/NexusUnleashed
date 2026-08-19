@@ -1,25 +1,38 @@
 # NexusUnleashed Engine — State of the Build
 
-> **RESUME HERE (2026-08-19, night) — THE STS SRP IS CRACKED. Login authenticates.**
-> The real 16042 client's SRP proof VERIFIES on our engine — error 15 is GONE,
-> the client now shows "NCSoft login service finish timeout" (a NEW downstream
-> stage: the post-auth RequestGameToken / LoginFinish flow).
-> - **THE SRP IS WILDSTAR'S GAME SRP, LITTLE-ENDIAN** (not standard big-endian):
->   N read little-endian, ReverseUInt32 (word-order) hashing, little-endian
->   bignums, interleaved session key. `StsSrp.cs` rewritten to mirror
->   `SrpReferenceClient.cs`. Cracked via `sts-cracker.py` using a known-credential
->   account's stored verifier as the oracle (`v=g^x mod N`). Full recipe in
->   `NU-deconstruct/StsConnLib64.MT.dll/login-protocol.md` (SOLVED section).
-> - **I can drive the game-client login myself** (screenshot + PowerShell SendInput
->   to `WildStar64.exe`; scripts in `<scratch>/wslogin.ps1`), so no operator
->   needed to test. (Do NOT commit real account creds — bot account kept private.)
-> - **NEXT: the login-finalize flow.** After KeyData/M2 (proof VERIFIED), the client
->   sends nothing and times out. It should send RequestGameToken (STS) → get a token
->   → the login "finishes". Flow classes: CLoginFinish, CRequestGameToken,
->   ConsumeGameToken; string `IsRequireLoginFinish`. M2 handler = SRP state 2
->   (`0x18002d3b0`), expects `[u32 32][M2]`, M2=SHA256(A|M1|K). AuthFlow already has
->   a RequestGameToken handler stub — likely needs the client to be signalled to send
->   it, or the KeyData reply needs session fields. RE the post-M2 client flow.
+> **RESUME HERE (2026-08-19, deep night) — STS DONE END TO END; THE CLIENT IS NOW ON
+> THE REALM CHANNEL (23115). NEXT WALL = CHARACTER LIST.**
+> The real 16042 client authenticates fully through STS and hands off to our realm
+> server. Milestones this session, all clean (client-as-oracle, NO NF server — the
+> operator's hard line: "We do NOT use NF servers"):
+> - **STS SRP cracked** (game SRP, little-endian — see below) AND the full STS
+>   transaction chain now works: `/Sts/Connect` → `LoginStart`/`KeyData` (SRP proof
+>   VERIFIES) → `LoginFinish` (**AuthType=`Password`**, not "1") → `ListMyAccounts`
+>   → `RequestGameToken` (`<Token>`). Post-SRP channel is **ARC4(sessionKey)**.
+> - **ListMyAccounts fix:** records are direct children of `<Reply>` — **NO
+>   `<Items>`/type="array" wrapper** (those strings do not exist in StsConnLib; the
+>   parser does `[reply+0x60]`=first record, `[item+0xc0]`=field). Enriched the
+>   GameAccount with the FULL field set the client reads (GameAccountId, AccountId,
+>   LoginName, UserId, UserName, Email, Alias, AccountAlias, GameCode, AppId,
+>   UserCenter, State, Status, Roles) — a missing string field made WildStar64.exe
+>   `strlen(null)` → AccessViolation (RVA 0xB3885). Fixed → token issued.
+> - **Realm/auth channel (23115):** the client accepts a CLEAR `0x0003` hello, then
+>   speaks the auth-key encrypted container (`0x0244` in / `0x03DC` out). Wired
+>   `WorldHandshake` to bootstrap clear-then-container (keys off `Crypt==null`).
+>   The client's `0x0244` **decodes cleanly to inner op `0x0592`** (396B) = realm-
+>   enter: `[build 16042][8B][login name UTF-16][fields][hardware survey]`. Our
+>   earlier capture called this `0x058F`; **the LIVE client uses `0x0592` — it wins.**
+> - **I drive the login myself** (screenshot + PowerShell SendInput to WildStar64;
+>   `<scratch>/wslogin.ps1`). Engine log: `<scratch>/clean-engine.log`.
+> - **PRIVACY:** the 0x0592 body carries the login email + machine hardware — NEVER
+>   commit a capture of it. Code changes hardcode nothing private (login comes from
+>   the client at runtime).
+> - **NEXT: reply to `0x0592` → CHARACTER LIST → select → world entry.** No model
+>   exists yet; needs RE (opcode + field layout). `HasReceivedCharacterList` (Lua)
+>   confirms the message. Our world-entry capture SKIPPED char-select (it was a
+>   reconnect), so `world-entry.md`'s 0x0988/0x0981/0x0117/0x0262 sequence is
+>   POST-select. The realm must also read the account's real characters from
+>   characterdb — the engine does not read that DB yet.
 >
 > ---------- (prior) THE LOGIN IS ALMOST CRACKED. ----------
 > The STS login broke through "NC Platform Error 15": the real 16042 client now

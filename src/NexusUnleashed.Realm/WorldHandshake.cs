@@ -55,9 +55,35 @@ public static class WorldHandshake
     {
         world.OnConnected = async session =>
         {
-            Log.Info($"world: client connected {session.RemoteAddress} — sending 0x0003 hello (encrypted 0x03DC)");
-            await session.SendGameMessageAsync(ServerHello, Hex(HelloBodyHex));
+            if (session.Crypt == null)
+            {
+                // Auth channel (23115): the real client accepts a CLEAR 0x0003
+                // hello, then speaks the auth-key container protocol (0x0244 in /
+                // 0x03DC out). Bootstrap clear, then switch to container mode.
+                Log.Info($"realm: client connected {session.RemoteAddress} — clear 0x0003 hello, then container mode");
+                await session.SendGameMessageAsync(ServerHello, Hex(HelloBodyHex));
+                session.Crypt = new NexusUnleashed.Cryptography.PacketCrypt(NexusUnleashed.Network.WorldPacket.WorldChannelSeed);
+            }
+            else
+            {
+                Log.Info($"realm: client connected {session.RemoteAddress} — 0x0003 hello (encrypted 0x03DC)");
+                await session.SendGameMessageAsync(ServerHello, Hex(HelloBodyHex));
+            }
         };
+
+        // The client's realm-enter (token-bearing). Live 16042 uses inner op
+        // 0x0592 (our earlier capture read 0x058F; the live client is authority).
+        world.On(0x0592, async (s, body) =>
+        {
+            Log.Info($"realm: <- 0x0592 realm-enter ({body.Length}B) FULL={Convert.ToHexString(body)}");
+            // (reply pending: validate token -> character list)
+            await Task.CompletedTask;
+        });
+
+        // Log every inner opcode not yet handled — pins the realm vocabulary from
+        // the live client, decoded out of its 0x0244 containers.
+        world.OnUnhandled = (s, opcode, body) =>
+            Log.Info($"realm: <- inner op=0x{opcode:X4} ({body.Length}B) {Preview(body)}");
 
         world.On(ClientHello, async (s, body) =>
         {

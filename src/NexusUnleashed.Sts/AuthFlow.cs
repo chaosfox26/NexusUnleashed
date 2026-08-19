@@ -21,6 +21,8 @@ public interface IAccountStore
     /// <summary>Returns (salt, verifier) for the account, or null if unknown.</summary>
     Task<(byte[] Salt, byte[] Verifier)?> GetSrpCredentialsAsync(string loginName);
     Task StoreGameTokenAsync(string loginName, Guid token);
+    /// <summary>The account's numeric id (STS UserId), or 0 if unknown.</summary>
+    Task<long> GetUserIdAsync(string loginName);
 }
 
 public static class AuthFlow
@@ -92,11 +94,73 @@ public static class AuthFlow
                 return;
             }
             Console.WriteLine($"[STS-SRP] proof VERIFIED — variant: {srp.MatchedVariant}");
+            Console.WriteLine($"[STS-SRP] K={Convert.ToHexString(sessionKey)}");
             s.State[KeyAuthed] = true;
             s.State[KeySession] = sessionKey;
 
             byte[] blob = KeyDataBlob.Pack(m2);
             await s.SendAsync(StsReply.Ok(r.Sequence, KeyDataBody(blob)));
+            // AFTER M2 (the last plaintext reply) the STS channel is ARC4(K) both ways.
+            s.EnableEncryption(sessionKey);
+        });
+
+        // After the SRP the client asks the STS to finalize the login; the reply
+        // carries the account/session record (RE'd from the client's LoginFinish
+        // reply handler: AuthType/LocationId/UserId/UserCenter/UserName/AccessMask/
+        // Roles/Status). Encrypted (ARC4) like everything post-SRP.
+        server.On("/Auth/LoginFinish", async (s, r) =>
+        {
+            string login = s.State.TryGetValue(KeyLogin, out var lo) ? (string)lo : "";
+            long uid = await accounts.GetUserIdAsync(login);
+            string body =
+                "<Reply>\n" +
+                "<AuthType>Password</AuthType>\n" +
+                $"<UserId>{uid}</UserId>\n" +
+                "<UserCenter>1</UserCenter>\n" +
+                $"<UserName>{System.Security.SecurityElement.Escape(login)}</UserName>\n" +
+                "<LocationId>1</LocationId>\n" +
+                "<AccessMask>4294967295</AccessMask>\n" +
+                "<Status>0</Status>\n" +
+                "<Roles>1</Roles>\n" +
+                "</Reply>\n";
+            await s.SendAsync(StsReply.Ok(r.Sequence, body));
+        });
+
+        // The client lists the game accounts under this STS user. One WildStar game
+        // account per user. Array reply (<Reply type="array"><Items><Item>…). The
+        // per-Item fields are RE'd from the client's account-list parser; the UserId
+        // must match what the client sent (it verifies).
+        server.On("/GameAccount/ListMyAccounts", async (s, r) =>
+        {
+            Console.WriteLine($"[STS] ListMyAccounts req: {r.BodyText.Replace("\n", " ")}");
+            string login = s.State.TryGetValue(KeyLogin, out var lo) ? (string)lo : "";
+            long uid = await accounts.GetUserIdAsync(login);
+            string e = System.Security.SecurityElement.Escape(login) ?? "";
+            // StsConnLib parses records via [reply+0x60]=first record, [item+0xc0]=field.
+            // NO <Items>/type="array" wrapper (those strings don't exist in the client);
+            // the records are direct child elements of <Reply>. The full field set is
+            // read from the client's own account object (StsConnLib strings): every
+            // string getter must be non-null or the game strlen()s null and crashes.
+            string alias = login.Contains('@') ? login[..login.IndexOf('@')] : login;
+            string ea = System.Security.SecurityElement.Escape(alias) ?? "";
+            string body =
+                "<Reply>\n<GameAccount>\n" +
+                $"<GameAccountId>{uid}</GameAccountId>\n" +
+                $"<AccountId>{uid}</AccountId>\n" +
+                $"<LoginName>{e}</LoginName>\n" +
+                $"<UserId>{uid}</UserId>\n" +
+                $"<UserName>{e}</UserName>\n" +
+                $"<Email>{e}</Email>\n" +
+                $"<Alias>{ea}</Alias>\n" +
+                $"<AccountAlias>{ea}</AccountAlias>\n" +
+                "<GameCode>wildstar</GameCode>\n" +
+                "<AppId>0</AppId>\n" +
+                "<UserCenter>1</UserCenter>\n" +
+                "<State>1</State>\n" +
+                "<Status>0</Status>\n" +
+                "<Roles>1</Roles>\n" +
+                "</GameAccount>\n</Reply>\n";
+            await s.SendAsync(StsReply.Ok(r.Sequence, body));
         });
 
         server.On("/Auth/RequestGameToken", async (s, r) =>
@@ -107,7 +171,7 @@ public static class AuthFlow
                 Guid token = NewToken();
                 await accounts.StoreGameTokenAsync((string)login, token);
                 await s.SendAsync(StsReply.Ok(r.Sequence,
-                    XmlBody.Fields(("token", token.ToString("N")))));
+                    XmlBody.Fields(("Token", token.ToString("N")))));
             }
             else
             {

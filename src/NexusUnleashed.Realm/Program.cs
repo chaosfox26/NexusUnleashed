@@ -49,9 +49,13 @@ internal static class Program
 
         // Auth game server - CLEAR channel (port 23115). Sends the clear 0x0003
         // hello on connect and logs every client opcode (capture stage).
+        // The realm/auth connection (port 23115): opens with a CLEAR 0x0003 hello,
+        // then speaks the auth-key encrypted container protocol (0x0244 in). The
+        // same WorldHandshake serves it — its OnConnected keys off Crypt==null to
+        // bootstrap clear then switch to container mode.
         var auth = new GameServer(cfg.BindAddress, cfg.AuthPort, worldChannel: false);
-        AuthHandshake.Register(auth);
-        Log.Info($"auth server listening on {cfg.AuthPort} (clear channel; 0x0003 hello on connect).");
+        WorldHandshake.Register(auth);
+        Log.Info($"realm/auth server listening on {cfg.AuthPort} (clear 0x0003 hello, then container).");
 
         // World game server - encrypted packed-container channel (0x03DC/0x0244,
         // static-seeded PacketCrypt). The handshake sends the 0x0003 hello on
@@ -101,4 +105,6 @@ internal sealed class InMemoryAccountStore : IAccountStore
         _tokens[loginName] = token;
         return Task.CompletedTask;
     }
+
+    public Task<long> GetUserIdAsync(string loginName) => Task.FromResult(1L);
 }

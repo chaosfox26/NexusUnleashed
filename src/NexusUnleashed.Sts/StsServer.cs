@@ -100,10 +100,20 @@ public sealed class StsSession : IDisposable
     /// <summary>Per-session state bag (the auth flow keeps its SRP state here).</summary>
     public Dictionary<string, object> State { get; } = new();
 
+    private Arc4? _rx, _tx;   // SocketCrypt: ARC4(K), one stream per direction, on after SRP
+
     public StsSession(Socket socket, Func<StsSession, StsRequest, Task> dispatch)
     {
         _socket = socket;
         _dispatch = dispatch;
+    }
+
+    /// <summary>After the SRP the STS channel is ARC4(sessionKey) — one keystream per
+    /// direction. Call AFTER the (plaintext) M2 reply is sent.</summary>
+    public void EnableEncryption(byte[] sessionKey)
+    {
+        _rx = new Arc4(sessionKey);
+        _tx = new Arc4(sessionKey);
     }
 
     public async Task RunAsync()
@@ -116,6 +126,8 @@ public sealed class StsSession : IDisposable
             catch (SocketException) { break; }
             if (read == 0) break;
 
+            if (_rx != null) _rx.Process(buf, read);   // decrypt the encrypted STS stream
+
             _parser.Feed(buf.AsSpan(0, read));
             StsRequest? req;
             while ((req = _parser.TryReadRequest()) != null)
@@ -125,14 +137,12 @@ public sealed class StsSession : IDisposable
 
     public async Task SendAsync(byte[] frame)
     {
-        // Reply logging (capture stage): dump exactly what we send so a rejected
-        // reply can be compared against what the client expects.
-        try
+        try { Console.WriteLine($"{DateTime.UtcNow:HH:mm:ss.fff} [STS-REPLY{(_tx == null ? "" : "-ENC")}] {System.Text.Encoding.UTF8.GetString(frame).Replace("\r", "\\r").Replace("\n", "\\n")}"); } catch { }
+        if (_tx != null)
         {
-            string text = System.Text.Encoding.UTF8.GetString(frame);
-            Console.WriteLine($"{DateTime.UtcNow:HH:mm:ss.fff} [STS-REPLY] {text.Replace("\r", "\\r").Replace("\n", "\\n")}");
+            frame = (byte[])frame.Clone();
+            _tx.Process(frame, frame.Length);            // encrypt the reply stream
         }
-        catch { }
         await _socket.SendAsync(frame, SocketFlags.None);
     }
 
@@ -140,5 +150,33 @@ public sealed class StsSession : IDisposable
     {
         try { _socket.Shutdown(SocketShutdown.Both); } catch { }
         _socket.Dispose();
+    }
+}
+
+/// <summary>Stateful ARC4 (RC4) keystream — the STS SocketCrypt after the SRP.</summary>
+internal sealed class Arc4
+{
+    private readonly byte[] _s = new byte[256];
+    private int _i, _j;
+    public Arc4(byte[] key)
+    {
+        for (int i = 0; i < 256; i++) _s[i] = (byte)i;
+        int j = 0;
+        for (int i = 0; i < 256; i++)
+        {
+            j = (j + _s[i] + key[i % key.Length]) & 0xff;
+            (_s[i], _s[j]) = (_s[j], _s[i]);
+        }
+    }
+    /// <summary>XOR the first <paramref name="len"/> bytes of <paramref name="data"/> with the keystream (in place).</summary>
+    public void Process(byte[] data, int len)
+    {
+        for (int n = 0; n < len; n++)
+        {
+            _i = (_i + 1) & 0xff;
+            _j = (_j + _s[_i]) & 0xff;
+            (_s[_i], _s[_j]) = (_s[_j], _s[_i]);
+            data[n] ^= _s[(_s[_i] + _s[_j]) & 0xff];
+        }
     }
 }

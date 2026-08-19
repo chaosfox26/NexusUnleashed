@@ -35,6 +35,17 @@ public sealed class DbAccountStore : IAccountStore
         return (FromHex(s), FromHex(v));
     }
 
+    public async Task<long> GetUserIdAsync(string loginName)
+    {
+        if (string.IsNullOrWhiteSpace(loginName)) return 0;
+        await using var conn = new MySqlConnection(_connectionString);
+        await conn.OpenAsync();
+        await using var cmd = new MySqlCommand("SELECT id FROM account WHERE email = @email LIMIT 1", conn);
+        cmd.Parameters.AddWithValue("@email", loginName);
+        var r = await cmd.ExecuteScalarAsync();
+        return r == null || r is DBNull ? 0 : Convert.ToInt64(r);
+    }
+
     public async Task StoreGameTokenAsync(string loginName, Guid token)
     {
         await using var conn = new MySqlConnection(_connectionString);
