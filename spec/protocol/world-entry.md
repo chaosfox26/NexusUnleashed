@@ -1,6 +1,34 @@
 # Spec: the world-entry message sequence (the script to render the world)
 
-**Status: ORDER PINNED from the capture — payloads pinned message-by-message.**
+**Status: ORDER PINNED; ALL PAYLOADS NOW DECRYPTABLE (cipher solved) — pinned
+message-by-message.**
+
+## Confirmed minimal flow (session 2, a realm-enter straight into the world)
+
+The cleanest observed path — NO character-select exchange (a reconnect/enter with
+the character already chosen):
+
+```
+S->C 0x0003              server hello           [AUTH key]
+C->S 0x058F              client realm-enter (token/char)   [client re-keys after]
+   (server re-keys to the WORLD key = GetKeyFromTicket(sessionKey) here)
+C->S 0x07E0, 0x038C, 0x082D   small client follow-ups
+S->C 0x0988              world-entry payload    [WORLD key] --- from here on
+S->C 0x098B x many       zone/world state blobs
+S->C 0x0981              world-init id list (DONE: ServerWorldInit)
+S->C 0x0117              player self block (who/where am I)
+S->C 0x0262 x many       entity-create stream (spawns the world)
+```
+
+Every S->C payload above is now recoverable in plaintext from the capture (the
+world key decrypts the whole stream), so each is a reproduce-then-generalize
+model. The re-key point is wired (`GameSession.RekeyForWorld`); the remaining work
+is pinning each payload's fields so the engine GENERATES them for a live session
+(the player's own guid/position/character), not just replays the captured one.
+
+---
+
+**(original notes below)**
 
 This is the exact ordered sequence of server→client messages the client received
 at world entry, extracted from our own decrypted capture (session 2, the
