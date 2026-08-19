@@ -1,48 +1,61 @@
 # NexusUnleashed Engine — State of the Build
 
-_Updated 2026-08-19 (protocol-capture milestone). Read `ARCHITECTURE.md` first._
+_Updated 2026-08-19 (ENCRYPTION GATE CLOSED). Read `ARCHITECTURE.md` first._
 
 ## The situation
 
-A clean-room WildStar (16042) server engine, built from the client, our data,
-and the running realm as behavioral oracle. MIT, openly usable by anyone (no
-credit required). Zero NF source ever opened; SRP from MIT Arctium, everything
-else from the client / our data / the oracle's wire.
+A **standalone** clean-room WildStar (16042) server engine whose entire reason to
+exist is escaping the AGPL-3.0. Built from the client, our data, and the running
+realm as behavioral oracle. MIT, open to anyone. Designed for BOTH emulation
+fidelity AND a production multiplayer realm. Zero NF source; two MIT primitives
+(Arctium SRP/ARC4 - note ARC4 is no longer used for the packet channel).
 
 ## BUILT + PROVEN (all pushed)
 
-| layer | status |
-|---|---|
-| Crypto | SRP6a login proven end-to-end (9/9): register->B->(A,M1)->verify, keys agree, bad paths rejected. |
-| Wire codec | Bit packer (12/12). **VALIDATED against REAL captured WildStar packets (7/7)** - parses opcode 0x0935 + guid out of the oracle's own movement stream. The codec matches Carbine's wire. |
-| Framing | u32 LE self-inclusive size + u16 LE opcode, measured off the oracle, confirmed live. |
-| **Protocol** | **157 opcodes PINNED from a live full-duplex capture** (41 C->S + 116 S->C, all decrypted): entity spawn/move/stats, world entry, combat, buffs, loot, emote. `spec/protocol/observed-opcodes.md` + `GameMessageOpcode` enum. |
-| STS login | Text protocol from the client's StsConnLib; AuthFlow runs real SRP; live-socket login 7/7. |
-| Client tables | All 384 tables -> typed models (generated); value reader cell-for-cell == our proven tbl_reader on core tables. Names every creature. |
-| Accounts | DbAccountStore reads real SRP creds from the live authdb (5/5). |
-| World sim | Entity + spatial grid + vision hysteresis (grid never misses, 200/200 vs brute force on 74k-entity world), movement + safety laws (200k steps zero NaN), Catmull-Rom patrols, faction/aggro (client dispositions, Mystpaw law), combat health. All worlds resident at once (2,729 in ~98 MB, 0.2 ms/tick). Living world runs on Arcterra (1,755 creatures, 600 ticks, zero NaN). |
-| Content | The restoration loads (263,756 spawns / 65 worlds) - NOTE: inherited the frozen realm's current corruption (dupes, over-population, faction scramble); clean re-export is task #46, deferred until serving. |
-| Host + deploy | Runnable realm host (boots as NexusUnleashed, our MotD). Self-contained linux-x64 ELF publish + systemd + install docs. |
+- **Login (SRP6a)** proven end to end (9/9).
+- **Wire codec** validated against REAL captured packets (opcode + guid + position).
+- **Framing** pinned + confirmed live (u32 LE self-inclusive size + u16 LE opcode).
+- **157 opcodes** pinned from a live two-way capture (41 C->S + 116 S->C, decrypted).
+- **10 message models** validated on real bytes; entity-create POSITION decoded
+  (3x float32 at bit 289, real world coords).
+- **ENCRYPTION GATE CLOSED**: the packet cipher is Carbine's own (NOT ARC4) - a
+  128-byte key table from an 8-byte seed via two multiply-chains, CFB-style XOR
+  with an 8-byte feedback register + rotating key block. `PacketCrypt.cs`
+  reproduces the real captured keystream BYTE-FOR-BYTE (13/13). Seed = static
+  build key **0xD283F5B34A8DC685**.
+- **384 client tables** typed; names every creature. Reads real accounts (authdb).
+- **World simulation**: entity/grid/vision/movement/aggro/combat; all 2,729 worlds
+  resident at once (~98 MB); Arcterra runs (1,755 creatures, 600 ticks, zero NaN).
+- **Content**: 263,756 spawns loaded (NOTE: inherited the frozen realm's current
+  corruption - dupes, over-population, faction scramble; clean re-export = task #46).
+- **Host + deploy**: runnable, boots as NexusUnleashed with our MotD; self-contained
+  linux-x64 ELF + systemd.
 
-## The capture pipeline (how the protocol was pinned)
+## THE ROAD (task #48 = NORTH STAR: operator stands in the world on our engine)
 
-Our own diagnostics tap (`packetdump=1`) in the frozen realm records every
-message's opcode + bytes - C->S after the client's crypto, S->C before
-encryption - so both directions are decrypted. `CaptureAnalyzer` turns the dump
-into an opcode inventory. The operator plays; we observe the wire (a fact). The
-tap sits before the realm's handlers, so a WIP oracle never limits coverage.
+DONE: crypto/login, wire codec, framing, protocol capture, message models,
+ENCRYPTION. NEXT: **auth handshake -> character list -> character select ->
+world entry (world-state blobs 0x0988/0x0981/0x098B + entity spawns 0x0262) ->
+the client renders**. Built iteratively with the client as oracle.
 
-## NOW: message models (the current phase)
+## The capture pipeline + facts (for the next session)
 
-The codec is validated; the next work is pinning each message's field layout
-from the capture and building typed models the world layer sends/receives.
-Started with the movement broadcast. Critical path: world-entry sequence
-(0x0988/0x0981/...), entity create (0x0262), position broadcast (0x0935), then
-combat/inventory/quest. Occasional targeted captures from the operator ("do one
-thing so I can isolate that message"); the bulk works from the capture on hand.
+- Our own diagnostics tap: `packetdump=1` in the realm's `monitor.conf` logs every
+  message opcode+bytes (C->S after client crypto, S->C before encryption).
+  `packet-key.log` (via RecordKey in OnAccept) logs the static crypt seed.
+- **Captures preserved (local, gitignored - session data): `realm-source/captures/`**
+  (capture-session1-cs.log, capture-session2.log = 67,846 msgs both directions).
+- `CaptureAnalyzer` (tool) turns a dump into an opcode inventory.
+- **The cipher (facts)**: seed 0xD283F5B34A8DC685; SeedInitial 8182381946860333969;
+  Multiplier 2860486313; LengthSeed 2860486314. Real keystream position 0:
+  cf0c0e97c85f02238ce856b6f60d9b1d84466f01e710339191612a4284105ff8.
+  `GetKeyFromAuthBuildAndMessage() = 606559840449654397 * 2860486313`.
 
-## Then
+## Frozen realm deployment state (deployed by us, 2026-08-19)
 
-World server host (sim + message layer) -> a real client connects and sees a
-living world -> parity harness -> NU-Linux deploy. Content re-export (task #46)
-before it serves for real.
+- Network.dll on Auth/World/STS carries the packet-dump + full-duplex + key-log tap
+  (SHA ec177982). Old DLLs backed up as .bak-*.
+- monitor.conf: packetdump=1, **sweeponboot=0** (disabled to avoid the 1,767-map
+  shutdown bog), zone=3335, visibility=1, postrace=1, sprintbit=0x100, matchsolo=1.
+- The realm bogs down / can't cleanly shut down with sweeponboot=1 (1,767 maps) -
+  a real bug the clean engine fixes (graceful shutdown + concurrency).
