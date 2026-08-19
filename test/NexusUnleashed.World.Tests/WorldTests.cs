@@ -105,5 +105,7 @@ Parallel.ForEach(worlds.Values, wi =>
 sw.Stop();
 Console.WriteLine($"one vision pass per world ({worlds.Count} worlds): {sw.ElapsedMilliseconds} ms, {visChecks:N0} entities entered vision");
 
-Console.WriteLine($"{pass} pass / {fail} fail");
-return fail == 0 ? 0 : 1;
+Console.WriteLine("-- movement --");
+int mv = MovementTests.Run();
+Console.WriteLine($"{pass} pass / {fail} fail (world)");
+return (fail == 0 && mv == 0) ? 0 : 1;

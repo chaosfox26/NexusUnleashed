@@ -164,3 +164,13 @@ Proven at scale on the real 263,756 spawns (9/9): all placed across 65 worlds
 (built 69 ms on 32 cores); grid vision == brute force 200/200 on the busiest
 world (74,383 entities) - never misses an in-range entity; hysteresis exact
 (enter 128, stay to 141, leave past, no flicker).
+
+## World movement + safety laws (2026-08-19)
+
+| file | class | source |
+|---|---|---|
+| `Vec.cs`, `Terrain.cs`, `Movement.cs` | AUTHORED | per-tick movement with the frozen realm's safety LAWS as code: SafeNormalize never returns NaN (the vanish/under-map bug), terrain miss returns null and callers keep current Y (never 0/skyward), finite-only moves. |
+
+Proven (8/8): 200,000 wander steps produce zero NaN; a world at Y=-919 with an
+always-miss terrain keeps Y at -919 (no skyward teleport); leash respected. The
+exact frozen-realm failure modes cannot reproduce.
