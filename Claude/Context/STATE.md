@@ -1,14 +1,31 @@
 # NexusUnleashed Engine — State of the Build
 
-> **RESUME HERE (2026-08-19, later): read `Claude/Context/SESSION-2026-08-19-login-and-tools.md` FIRST.**
-> It has the live thread — the STS **login RE** (client hits our engine, throws
-> "Unhandled NC Platform Error 15"; next step = RE the exact `<Reply type="…">`
-> envelope + KeyData encoding from the client, no more guess-retries) — plus the
-> two baked-in laws (No-NF, Privacy, both guards green), the hardware-first tool
-> suite, the PUBLIC `github.com/chaosfox26/NU-deconstruct` DB (push everything we
-> deconstruct there), the native-Linux-client plan, and the RUNNING STATE (our
-> engine + a standalone MariaDB are UP on the standard ports; the frozen realm is
-> DOWN — operator can't play until it's restarted and our engine/DB freed).
+> **RESUME HERE (2026-08-19, evening) — THE LOGIN IS ALMOST CRACKED.**
+> The STS login broke through "NC Platform Error 15": the real 16042 client now
+> **accepts our LoginStart reply and sends its SRP proof** (`/Auth/KeyData`).
+> What got us there, all confirmed against the client + a wire capture:
+> - Reply envelope is **`<Reply>`** (not `<Content>`); status line is
+>   `STS/1.0 200  OK` (TWO spaces — single-space is silently discarded → error 15);
+>   `s:<seq>R` framing; `<KeyData>` = base64 of `[u32 saltLen][salt][u32 BLen][B]`.
+> - SRP is **standard OpenSSL SRP-6a, big-endian**; M1 is 32 bytes → **SHA-256**.
+> - **ROOT-CAUSE BUG FOUND + FIXED:** the DB verifier is stored **little-endian**
+>   (.NET `BigInteger.ToByteArray()`, 129 bytes incl. sign byte) — we were reading
+>   it big-endian, which poisoned `server_S` for every k/recipe (why no proof ever
+>   verified). `StsSrp` now reads it little-endian; self-test 7/7.
+> - The server now **auto-searches** the SRP recipe (k-rotation ×7, u × K × salt ×
+>   M1) against the client's own M1 and accepts the match — so the NEXT real login
+>   should self-resolve the recipe. Old captured proofs are POISONED (made with the
+>   big-endian-v B) — need a FRESH login to confirm.
+> **The remaining step is a single confirmation login.** Operator wants it done
+> autonomously → building a **harness** (`scratchpad/stsharness`) that loads the
+> client's own `StsConnLib64.MT.dll` and drives its real login against our server:
+> `InitializeStsConnLib()` + `CreateStsConn(config)` WORK (returns a live
+> connection); still need to (1) find the connection's login-trigger method on
+> `CStsConn` (vtable `0x180124208`) and (2) implement the config callback interface
+> (host/account/password/result). All SRP RE is in
+> `NU-deconstruct/StsConnLib64.MT.dll/login-protocol.md`.
+> Two baked-in laws (No-NF, Privacy, guards green); PUBLIC `NU-deconstruct` DB.
+> RUNNING STATE: our engine + standalone MariaDB UP on standard ports; frozen realm DOWN.
 
 _Updated 2026-08-19 (ENCRYPTION GATE CLOSED). Read `ARCHITECTURE.md` first._
 
