@@ -280,3 +280,13 @@ OBSERVED at runtime (staged packet-key.log tap), never lifted from NF's
 derivation; then ARC4(key) is verified against a real captured keystream.
 `ARCHITECTURE.md` gains the concurrent-multiplayer law (designed for emulation
 AND a production multiplayer realm).
+
+## ENCRYPTION GATE CLOSED (2026-08-19)
+
+`PacketCrypt.cs` rewritten as Carbine's actual packet cipher (NOT ARC4): 128-byte
+key table from an 8-byte seed via two multiply-chains, CFB-style XOR with an
+8-byte feedback register + rotating key block. Constants are protocol facts;
+implemented independently (the client runs the identical cipher). VERIFIED
+byte-for-byte against a real captured keystream (cf0c0e97...) + round-trip
+(13/13). The seed (0xD283F5B34A8DC685) is the static build key, observed at
+runtime. The old ARC4-based PacketCrypt was wrong and is replaced.

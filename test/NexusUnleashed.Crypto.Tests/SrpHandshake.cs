@@ -62,22 +62,34 @@ using (var server = new SrpServer(saltHex, name, verifierHex))
 // --- PacketCrypt (game channel) ---
 Console.WriteLine("-- packet crypt --");
 {
-    // symmetric round trip: two streams with the same key cancel out.
+    // server encrypt -> client decrypt recovers the plaintext (same static seed).
     ulong key = 0x0123456789ABCDEFul;
-    var enc = new PacketCrypt(key);
-    var dec = new PacketCrypt(key);
     byte[] msg = System.Text.Encoding.ASCII.GetBytes("NexusUnleashed world packet payload, arbitrary length 12345");
-    byte[] buf = (byte[])msg.Clone();
-    enc.Encrypt(buf);
-    Check("ciphertext differs from plaintext", !buf.AsSpan().SequenceEqual(msg));
-    dec.Decrypt(buf);
-    Check("decrypt(encrypt(x)) == x (continuous stream)", buf.AsSpan().SequenceEqual(msg));
+    byte[] ct = new PacketCrypt(key).Encrypt(msg, msg.Length);
+    Check("ciphertext differs from plaintext", !ct.AsSpan().SequenceEqual(msg));
+    byte[] pt = new PacketCrypt(key).Decrypt(ct, ct.Length);
+    Check("decrypt(encrypt(x)) == x", pt.AsSpan().SequenceEqual(msg));
+}
 
-    // stream continuity: a second message uses advanced state, still reversible.
-    byte[] m2 = System.Text.Encoding.ASCII.GetBytes("second message on the same stream");
-    byte[] b2 = (byte[])m2.Clone();
-    enc.Encrypt(b2); dec.Decrypt(b2);
-    Check("second message on advanced stream round-trips", b2.AsSpan().SequenceEqual(m2));
+
+// --- Carbine packet cipher vs REAL captured keystream (gate-closing proof) ---
+Console.WriteLine("-- packet cipher vs real wire --");
+{
+    // seed = static build key (observed at runtime, confirmed by the live tap)
+    ulong seed = 0xD283F5B34A8DC685ul;
+    // keystream captured from the oracle's wire (real cipher output, position 0)
+    byte[] real = Convert.FromHexString("cf0c0e97c85f02238ce856b6f60d9b1d84466f01e710339191612a4284105ff8");
+    var pc = new PacketCrypt(seed);
+    byte[] ks = pc.Encrypt(new byte[real.Length], real.Length);
+    Check("clean cipher reproduces the REAL captured keystream (gate closed)", ks.AsSpan().SequenceEqual(real));
+
+    // round trip: server encrypt -> client decrypt recovers the plaintext
+    var srv = new PacketCrypt(seed);
+    var cli = new PacketCrypt(seed);
+    byte[] msg = System.Text.Encoding.ASCII.GetBytes("hello from NexusUnleashed");
+    byte[] ct = srv.Encrypt(msg, msg.Length);
+    byte[] pt = cli.Decrypt(ct, ct.Length);
+    Check("server-encrypt -> client-decrypt round trip", pt.AsSpan().SequenceEqual(msg));
 }
 
 Console.WriteLine($"{pass} pass / {fail} fail");
