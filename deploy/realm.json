@@ -1,0 +1,10 @@
+{
+  "BindAddress": "0.0.0.0",
+  "StsPort": 6600,
+  "AuthPort": 23115,
+  "WorldPort": 24000,
+  "AuthDatabase": "Server=127.0.0.1;Port=3306;User=nexus;Password=CHANGE_ME;Database=authdb",
+  "Database": "Server=127.0.0.1;Port=3306;User=nexus;Password=CHANGE_ME;Database=worlddb",
+  "ContentRoot": "./content",
+  "AssetPath": "./assets"
+}

@@ -1,0 +1,19 @@
+# systemd unit for the NexusUnleashed clean engine (NU-Linux).
+# Install: copy to /etc/systemd/system/, then `systemctl enable --now nexusunleashed`.
+[Unit]
+Description=NexusUnleashed clean WildStar server engine
+After=network.target mariadb.service
+
+[Service]
+Type=simple
+User=nexus
+WorkingDirectory=/opt/nexusunleashed
+ExecStart=/opt/nexusunleashed/NexusUnleashed.Realm
+Restart=on-failure
+RestartSec=5
+# The engine binds low ports (23115/24000/6600); no root needed for those, but
+# if a port <1024 is ever configured, grant the capability instead of root:
+# AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target

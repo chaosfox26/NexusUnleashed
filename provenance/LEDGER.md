@@ -143,3 +143,13 @@ against a mock oracle (both directions, exact opcode + length).
 Proven over a live socket (6/6): framed message reaches the keyed handler with
 intact payload; unpinned opcode flagged once. The world message layer that
 captured opcodes plug into.
+
+## deploy/ (2026-08-19)
+
+| file | class | source |
+|---|---|---|
+| `publish.sh`, `realm.json`, `nexusunleashed.service`, `INSTALL.md` | AUTHORED | our own NU-Linux packaging: self-contained linux-x64 single-file publish + systemd unit + config template + install docs. |
+
+Proven: `dotnet publish -r linux-x64 --self-contained` yields a 71 MB ELF
+64-bit x86-64 Linux executable (acceptance criterion #2's mechanism works). No
+.NET install needed on the VPS, matching the current realm's deploy model.
