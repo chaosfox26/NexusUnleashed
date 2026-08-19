@@ -1,4 +1,6 @@
 {
+  "RealmName": "NexusUnleashed",
+  "MessageOfTheDay": "Welcome to NexusUnleashed - a clean-room WildStar realm. Open to all, owned by none.",
   "BindAddress": "0.0.0.0",
   "StsPort": 6600,
   "AuthPort": 23115,

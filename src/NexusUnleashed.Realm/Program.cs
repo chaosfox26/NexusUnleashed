@@ -15,8 +15,9 @@ internal static class Program
 {
     private static async Task Main()
     {
-        Log.Info("NexusUnleashed realm host starting.");
         RealmConfig cfg = RealmConfig.Load("realm.json");
+        Log.Info($"=== {cfg.RealmName} realm host starting ===");
+        Log.Info($"MotD: {cfg.MessageOfTheDay}");
         Log.Info($"bind {cfg.BindAddress} | sts {cfg.StsPort} | auth {cfg.AuthPort} | world {cfg.WorldPort}");
 
         using var cts = new CancellationTokenSource();

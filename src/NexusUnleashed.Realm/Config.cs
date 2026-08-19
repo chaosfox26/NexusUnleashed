@@ -7,6 +7,14 @@ namespace NexusUnleashed.Realm;
 
 public sealed class RealmConfig
 {
+    // Realm identity - OURS, never inherited. The connection banner and the
+    // Message of the Day the client shows on login are defined here; the wire
+    // message that carries the MotD is pinned from a capture, but its content
+    // is always NexusUnleashed's.
+    public string RealmName { get; set; } = "NexusUnleashed";
+    public string MessageOfTheDay { get; set; } =
+        "Welcome to NexusUnleashed - a clean-room WildStar realm. Open to all, owned by none.";
+
     public string BindAddress { get; set; } = "0.0.0.0";
     public int StsPort { get; set; } = 6600;    // UNPINNED: confirm from oracle/launcher config
     public int AuthPort { get; set; } = 23115;   // UNPINNED: real ports from oracle
