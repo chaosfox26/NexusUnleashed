@@ -32,6 +32,18 @@ public sealed class SrpServer : IDisposable
     public SrpServer(string saltHex, string accountName, string verifierHex)
         => _srp = new SRP6a(saltHex, accountName, verifierHex);
 
+    /// <summary>As above, from raw salt/verifier bytes (what IAccountStore yields).</summary>
+    public SrpServer(byte[] salt, string accountName, byte[] verifier)
+        : this(ToHex(salt), accountName, ToHex(verifier)) { }
+
+    private static string ToHex(byte[] b)
+    {
+        var c = new char[b.Length * 2];
+        const string h = "0123456789abcdef";
+        for (int i = 0; i < b.Length; i++) { c[i * 2] = h[b[i] >> 4]; c[i * 2 + 1] = h[b[i] & 0xF]; }
+        return new string(c);
+    }
+
     /// <summary>Server step 1: compute B. Returns the (salt, B) the client needs.</summary>
     public (byte[] Salt, byte[] B) StartHandshake()
     {

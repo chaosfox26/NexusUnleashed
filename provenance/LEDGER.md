@@ -76,3 +76,13 @@ unknown account -> null (5/5). No emulator source consulted.
 The SRP6a primitive itself is the MIT Arctium seed (already ledgered). The full
 login round trip is proven (9/9): register -> B -> (A, M1) -> verify -> session
 keys AGREE; wrong password, A=0, and tampered M1 all rejected.
+
+## AuthFlow wired to real SRP (2026-08-19)
+
+`AuthFlow.cs` now runs the proven SRP6a state machine per session: LoginStart
+computes B from the account's salt+verifier, KeyData verifies the client's A+M1
+and derives the session key, RequestGameToken gates on authentication. XML body
+layout still UNPINNED (SRP values carried as hex in <Content> until one oracle
+capture); the flow and crypto are real. Proven over a live TCP socket end to
+end (7/7): a real client ran SRP against the STS server, got M2 and a token;
+wrong password rejected over the wire.
