@@ -29,7 +29,23 @@ internal static class Program
             ? new InMemoryAccountStore()
             : new NexusUnleashed.Database.DbAccountStore(cfg.AuthDatabase);
         AuthFlow.Register(sts, accounts);
-        Log.Info($"sts login server listening ({accounts.GetType().Name}; body schemas pending oracle capture).");
+
+        // Clean capture hook: record exactly what a real client sends to STS (the
+        // port is clear-text), which pins the login XML schema from the client's
+        // OWN bytes — the clean source #1. Writes sts-capture.log beside the exe.
+        var stsCapturePath = "sts-capture.log";
+        sts.RequestObserver = req =>
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.Append("=== ").Append(DateTime.UtcNow.ToString("HH:mm:ss.fff"))
+              .Append(' ').Append(req.Method).Append(' ').Append(req.Uri).Append(" ===\n");
+            foreach (var h in req.Headers) sb.Append(h.Key).Append(": ").Append(h.Value).Append('\n');
+            sb.Append("body(").Append(req.Body.Length).Append("B) text: ").Append(req.BodyText).Append('\n');
+            sb.Append("body hex: ").Append(Convert.ToHexString(req.Body)).Append("\n\n");
+            try { System.IO.File.AppendAllText(stsCapturePath, sb.ToString()); } catch { }
+            Log.Info($"sts: <- {req.Method} {req.Uri} ({req.Body.Length}B body) [logged]");
+        };
+        Log.Info($"sts login server listening ({accounts.GetType().Name}; capturing client requests -> {stsCapturePath}).");
 
         // World game server - encrypted packed-container channel (0x03DC/0x0244,
         // static-seeded PacketCrypt). The handshake sends the 0x0003 hello on

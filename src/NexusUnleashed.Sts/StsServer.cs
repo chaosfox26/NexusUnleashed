@@ -24,6 +24,14 @@ public sealed class StsServer
 
     public int SessionCount => _sessions.Count;
 
+    /// <summary>
+    /// Called for EVERY inbound request before routing — the clean capture hook.
+    /// When a real client logs in, this records exactly what it sends (the STS
+    /// port is clear-text), which pins the login XML schema without reading any
+    /// NF source. Never throws into dispatch.
+    /// </summary>
+    public Action<StsRequest>? RequestObserver { get; set; }
+
     /// <summary>Route an STS URI ("/Auth/LoginStart") to a handler.</summary>
     public void On(string uri, Func<StsSession, StsRequest, Task> handler)
         => _routes[uri] = handler;
@@ -50,6 +58,11 @@ public sealed class StsServer
 
     private async Task DispatchAsync(StsSession session, StsRequest request)
     {
+        if (RequestObserver != null)
+        {
+            try { RequestObserver(request); } catch { /* capture must never break login */ }
+        }
+
         if (_routes.TryGetValue(request.Uri, out var handler))
         {
             await handler(session, request);

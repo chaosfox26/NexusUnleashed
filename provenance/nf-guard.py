@@ -33,9 +33,10 @@ FORBIDDEN = [
     r"Project Resources[\\/]+_AllRepos",
     r"_ForkPool",
     r"_Emulators-",
-    r"\bfrom NF\b",
-    r"\bdecompiled NF\b",
 ]
+# Note: we deliberately do NOT match bare prose like "from NF" - anti-NF comments
+# ("pinned from the client, not the NF code") are legitimate and would false-trip.
+# The reliable contamination signal is a PATH/NAME reference into an NF tree above.
 PATTERN = re.compile("|".join(FORBIDDEN), re.IGNORECASE)
 
 def scan():
