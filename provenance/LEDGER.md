@@ -199,3 +199,12 @@ hostile); level-0 relationships read hostile; hostile/aggressive engage,
 neutral-nonaggressive does not, rooted faces only, leash returns. ARCHITECTURE.md
 gains the Full-Load/Optimize-Underneath law with the runtime-portability clause
 (must load flawlessly on ANY hardware; Starlight is dev-time only).
+
+## Combat health (UnitEntity) (2026-08-19)
+
+| file | class | source |
+|---|---|---|
+| `UnitEntity.cs` | AUTHORED | unit health/damage with the realm's LAWS: damage never overkills the pool (irregularities.log guard), DelayDeath holds a lethal blow at 1, heal caps at max. |
+
+Proven (8/8): overkill removes only the pool; DelayDeath leaves 1 and survives;
+heal caps; zero-max unit no-ops. No under/overflow.
