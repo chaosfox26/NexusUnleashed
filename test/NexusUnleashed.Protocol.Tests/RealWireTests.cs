@@ -60,5 +60,16 @@ Console.WriteLine("-- message models vs real bytes --");
     Check("0x0262 entity-create: guid header pinned", ec.Guid == 1766, $"(guid={ec.Guid}, body {ec.Body.Length}B bit-packed)");
 }
 
+
+// batch 2: relation / value / counter
+{
+    var rel = ServerEntityRelation.Parse(Hex("7608bf070000d4130000"));
+    Check("0x0876 relation: source+target guids", rel.SourceGuid == 1983 && rel.TargetGuid == 5076, $"({rel.SourceGuid}->{rel.TargetGuid})");
+    var val = ServerEntityValue.Parse(Hex("2f09d4130000b0040000000000"));
+    Check("0x092F value: guid + value 1200", val.Guid == 5076 && val.Value == 1200, $"(guid={val.Guid} val={val.Value})");
+    var cnt = ServerCounter.Parse(Hex("fe0704000000"));
+    Check("0x07FE counter: single u32", cnt.Value == 4, $"({cnt.Value})");
+}
+
 Console.WriteLine($"{pass} pass / {fail} fail");
 return fail == 0 ? 0 : 1;

@@ -102,3 +102,40 @@ public sealed record ServerEntityCreate(uint Guid, byte[] Body) : IServerMessage
         return new ServerEntityCreate(guid, body);
     }
 }
+
+/// <summary>0x0876: an entity relation - source guid + target guid (e.g. X acts on Y).</summary>
+public sealed record ServerEntityRelation(uint SourceGuid, uint TargetGuid) : IServerMessage
+{
+    public GameMessageOpcode Opcode => (GameMessageOpcode)0x0876;
+    public static ServerEntityRelation Parse(byte[] payload)
+    {
+        var r = new PacketReader(payload);
+        r.ReadBits(16);
+        return new ServerEntityRelation(r.ReadUInt32(), r.ReadUInt32());
+    }
+}
+
+/// <summary>0x092F: an entity value update - guid + a u32 value + trailing bytes
+/// (value observed constant 1200 in the sample set; likely a stat/vital).</summary>
+public sealed record ServerEntityValue(uint Guid, uint Value) : IServerMessage
+{
+    public GameMessageOpcode Opcode => (GameMessageOpcode)0x092F;
+    public static ServerEntityValue Parse(byte[] payload)
+    {
+        var r = new PacketReader(payload);
+        r.ReadBits(16);
+        return new ServerEntityValue(r.ReadUInt32(), r.ReadUInt32());
+    }
+}
+
+/// <summary>0x07FE: a single u32 (a counter/index; the smallest server message).</summary>
+public sealed record ServerCounter(uint Value) : IServerMessage
+{
+    public GameMessageOpcode Opcode => (GameMessageOpcode)0x07FE;
+    public static ServerCounter Parse(byte[] payload)
+    {
+        var r = new PacketReader(payload);
+        r.ReadBits(16);
+        return new ServerCounter(r.ReadUInt32());
+    }
+}
