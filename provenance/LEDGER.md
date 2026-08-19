@@ -208,3 +208,13 @@ gains the Full-Load/Optimize-Underneath law with the runtime-portability clause
 
 Proven (8/8): overkill removes only the pool; DelayDeath leaves 1 and survives;
 heal caps; zero-max unit no-ops. No under/overflow.
+
+## Integrated world simulation (2026-08-19)
+
+| file | class | source |
+|---|---|---|
+| `WorldSimulation.cs` | AUTHORED | the per-world tick that advances movement, vision, and aggro together. Parallel across worlds, identical sequentially (runtime-portability law). |
+
+Proven on ARCTERRA (world 3335): 1,804 entities / 1,755 sim creatures wandering
++ aggroing, a player walking through (37 visible), 600 ticks, ZERO NaN, all
+entities bounded. The living world runs cohesively before a single wire opcode.

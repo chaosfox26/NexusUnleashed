@@ -116,5 +116,7 @@ Console.WriteLine("-- aggro / faction --");
 int ag = AggroTests.Run(tblDir);
 Console.WriteLine("-- combat --");
 int cb = CombatTests.Run();
+Console.WriteLine("-- arcterra living world --");
+int arc = ArcterraSimTests.Run(tblDir, contentRoot);
 Console.WriteLine($"{pass} pass / {fail} fail (world)");
-return (fail == 0 && mv == 0 && sp == 0 && aw == 0 && ag == 0 && cb == 0) ? 0 : 1;
+return (fail == 0 && mv == 0 && sp == 0 && aw == 0 && ag == 0 && cb == 0 && arc == 0) ? 0 : 1;
