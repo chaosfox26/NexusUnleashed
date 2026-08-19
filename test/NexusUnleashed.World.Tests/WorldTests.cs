@@ -107,5 +107,10 @@ Console.WriteLine($"one vision pass per world ({worlds.Count} worlds): {sw.Elaps
 
 Console.WriteLine("-- movement --");
 int mv = MovementTests.Run();
+Console.WriteLine("-- spline --");
+int sp = SplineTests.Run();
+Console.WriteLine("-- all worlds resident --");
+string tblDir = args.Length > 1 ? args[1] : "assets/tbl";
+int aw = AllWorldsTests.Run(tblDir, contentRoot);
 Console.WriteLine($"{pass} pass / {fail} fail (world)");
-return (fail == 0 && mv == 0) ? 0 : 1;
+return (fail == 0 && mv == 0 && sp == 0 && aw == 0) ? 0 : 1;

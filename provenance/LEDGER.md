@@ -174,3 +174,15 @@ world (74,383 entities) - never misses an in-range entity; hysteresis exact
 Proven (8/8): 200,000 wander steps produce zero NaN; a world at Y=-919 with an
 always-miss terrain keeps Y at -919 (no skyward teleport); leash respected. The
 exact frozen-realm failure modes cannot reproduce.
+
+## World splines + WorldManager (all worlds resident) (2026-08-19)
+
+| file | class | source |
+|---|---|---|
+| `Spline.cs` | AUTHORED | Catmull-Rom patrol paths with the frozen realm's spline LAWS: >=4 node floor, iterative (non-recursive) finite-guarded evaluation (the 0xC00000FD NaN-recursion crash can't recur), exotic-mode fallback. |
+| `WorldManager.cs` | AUTHORED | holds every world resident at once and ticks them in parallel - the operator's target (the whole game loaded simultaneously, the frozen realm's sweep-on-boot behavior). |
+
+Proven: splines 8/8 (crash modes guarded, 5000-tick follower zero NaN). All
+worlds resident: 2,729 World.tbl worlds instantiated at once (1 ms), all 263,756
+spawns placed, 10 global ticks in 2 ms (0.2 ms/tick), ~98 MB. Exceeds the frozen
+realm's 1,767-world sweep - the "all worlds at the same time" architecture.
