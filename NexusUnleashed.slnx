@@ -9,6 +9,7 @@
     <Project Path="src/NexusUnleashed.Network/NexusUnleashed.Network.csproj" />
     <Project Path="src/NexusUnleashed.Realm/NexusUnleashed.Realm.csproj" />
     <Project Path="src/NexusUnleashed.Sts/NexusUnleashed.Sts.csproj" />
+    <Project Path="src/NexusUnleashed.World/NexusUnleashed.World.csproj" />
   </Folder>
   <Folder Name="/test/">
     <Project Path="test/NexusUnleashed.Content.Tests/NexusUnleashed.Content.Tests.csproj" />
@@ -16,5 +17,6 @@
     <Project Path="test/NexusUnleashed.Database.Tests/NexusUnleashed.Database.Tests.csproj" />
     <Project Path="test/NexusUnleashed.GameData.Tests/NexusUnleashed.GameData.Tests.csproj" />
     <Project Path="test/NexusUnleashed.Sts.Tests/NexusUnleashed.Sts.Tests.csproj" />
+    <Project Path="test/NexusUnleashed.World.Tests/NexusUnleashed.World.Tests.csproj" />
   </Folder>
 </Solution>

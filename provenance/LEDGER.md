@@ -153,3 +153,14 @@ captured opcodes plug into.
 Proven: `dotnet publish -r linux-x64 --self-contained` yields a 71 MB ELF
 64-bit x86-64 Linux executable (acceptance criterion #2's mechanism works). No
 .NET install needed on the VPS, matching the current realm's deploy model.
+
+## src/NexusUnleashed.World (2026-08-19)
+
+| file | class | source |
+|---|---|---|
+| `Entity.cs`, `SpatialGrid.cs`, `WorldInstance.cs` | AUTHORED | the world simulation core - entity model, uniform spatial hash, and interest management with vision hysteresis. The hysteresis behavior (enter 128 / leave ~141) is a MEASURED fact about our frozen realm (the documented vanish/flicker fix), not copied code. |
+
+Proven at scale on the real 263,756 spawns (9/9): all placed across 65 worlds
+(built 69 ms on 32 cores); grid vision == brute force 200/200 on the busiest
+world (74,383 entities) - never misses an in-range entity; hysteresis exact
+(enter 128, stay to 141, leave past, no flicker).
