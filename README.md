@@ -49,8 +49,8 @@ in the open, in real time:
 | **02 · Foundation** | SRP login, bit-packed wire codec, 384 client tables typed, real accounts, Linux binary | ✅ Done |
 | **03 · The Living World** | 263,756 entities, all 2,729 worlds resident at once, vision + movement + aggro + combat | ✅ Done |
 | **04 · The Wire** | 157 opcodes captured from real play, codec **validated on real packets**, entity position decoded | ✅ Done |
-| **05 · The Encryption Gate** | The encrypted game channel (ARC4 keyed off the SRP session key) — the one wall left | 🔶 **In progress** |
-| **06 · The Handshake** | Auth · character list · select &amp; enter | ⬜ Next |
+| **05 · The Encryption Gate** | Encrypted channel open: SRP session key, the ARC4 login stream, the two-phase game cipher — cracked from the client | ✅ Done |
+| **06 · The Handshake** | The real 16042 client logs in through STS end to end and reaches our realm channel (token issued, realm-enter decoded). **Auth: done.** Character list · select &amp; enter next | 🔶 **In progress** |
 | **07 · World Entry** | World-state blobs · entity spawns · the client renders | ⬜ Next |
 | **★ The North Star** | **You, standing in the world — on our engine, not theirs** | 🎯 Goal |
 
