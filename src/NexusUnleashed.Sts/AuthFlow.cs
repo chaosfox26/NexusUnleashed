@@ -112,13 +112,14 @@ public static class AuthFlow
     }
 
     /// <summary>Build the STS reply body:
-    /// &lt;Content&gt;&lt;KeyData&gt;BASE64(blob)&lt;/KeyData&gt;&lt;/Content&gt;.
-    /// Envelope + field + encoding RE'd from the client: the reply parser fetches
-    /// a content object (null =&gt; error), reads GetField("KeyData"), and
-    /// base64-decodes it to the binary SRP blob. Standard base64 alphabet
-    /// (ABC..xyz0..9+/), confirmed present in the client.</summary>
+    /// &lt;Reply&gt;\n&lt;KeyData&gt;BASE64(blob)&lt;/KeyData&gt;\n&lt;/Reply&gt;\n.
+    /// Envelope + field + encoding + formatting confirmed BYTE-FOR-BYTE against a
+    /// live capture of the frozen realm's own STS (behavioral oracle): the reply
+    /// body root is &lt;Reply&gt; (NOT &lt;Content&gt;), the SRP blob rides a base64
+    /// &lt;KeyData&gt; child. The client's reply parser fetches this body object,
+    /// GetField("KeyData"), base64-decodes to the binary SRP blob.</summary>
     private static string KeyDataBody(byte[] blob)
-        => "<Content><KeyData>" + Convert.ToBase64String(blob) + "</KeyData></Content>";
+        => "<Reply>\n<KeyData>" + Convert.ToBase64String(blob) + "</KeyData>\n</Reply>\n";
 
     private static Guid NewToken()
     {
@@ -133,12 +134,13 @@ internal static class XmlBody
 {
     public static string Fields(params (string Tag, string Value)[] fields)
     {
-        var sb = new System.Text.StringBuilder("<Content>");
+        // STS reply body root is <Reply> (confirmed against the frozen STS wire).
+        var sb = new System.Text.StringBuilder("<Reply>\n");
         foreach (var (tag, val) in fields)
             sb.Append('<').Append(tag).Append('>')
               .Append(System.Security.SecurityElement.Escape(val))
-              .Append("</").Append(tag).Append('>');
-        return sb.Append("</Content>").ToString();
+              .Append("</").Append(tag).Append(">\n");
+        return sb.Append("</Reply>\n").ToString();
     }
 
     /// <summary>Value of a named element, or "".</summary>
