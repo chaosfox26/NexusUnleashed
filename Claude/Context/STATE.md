@@ -1,67 +1,48 @@
 # NexusUnleashed Engine — State of the Build
 
-_Updated 2026-08-19. The "where are we right now" file. Read `ARCHITECTURE.md`
-(the constitution) first, then this._
+_Updated 2026-08-19 (protocol-capture milestone). Read `ARCHITECTURE.md` first._
 
----
+## The situation
 
-## The one-paragraph situation
+A clean-room WildStar (16042) server engine, built from the client, our data,
+and the running realm as behavioral oracle. MIT, openly usable by anyone (no
+credit required). Zero NF source ever opened; SRP from MIT Arctium, everything
+else from the client / our data / the oracle's wire.
 
-NexusUnleashed is a **clean-room WildStar (build 16042) server engine**, built
-from Carbine's client, our own restoration data, and a running reference realm
-as the behavioral oracle — owing no upstream license anything. It exists because
-the prior engine descended from NexusForever (AGPL-3.0), and we chose to rebuild
-rather than live under a license used as leverage. **MIT-licensed and openly
-usable by anyone**, forked or not, no credit required (see README).
+## BUILT + PROVEN (all pushed)
 
-## Acceptance criteria (binding — the definition of done)
+| layer | status |
+|---|---|
+| Crypto | SRP6a login proven end-to-end (9/9): register->B->(A,M1)->verify, keys agree, bad paths rejected. |
+| Wire codec | Bit packer (12/12). **VALIDATED against REAL captured WildStar packets (7/7)** - parses opcode 0x0935 + guid out of the oracle's own movement stream. The codec matches Carbine's wire. |
+| Framing | u32 LE self-inclusive size + u16 LE opcode, measured off the oracle, confirmed live. |
+| **Protocol** | **157 opcodes PINNED from a live full-duplex capture** (41 C->S + 116 S->C, all decrypted): entity spawn/move/stats, world entry, combat, buffs, loot, emote. `spec/protocol/observed-opcodes.md` + `GameMessageOpcode` enum. |
+| STS login | Text protocol from the client's StsConnLib; AuthFlow runs real SRP; live-socket login 7/7. |
+| Client tables | All 384 tables -> typed models (generated); value reader cell-for-cell == our proven tbl_reader on core tables. Names every creature. |
+| Accounts | DbAccountStore reads real SRP creds from the live authdb (5/5). |
+| World sim | Entity + spatial grid + vision hysteresis (grid never misses, 200/200 vs brute force on 74k-entity world), movement + safety laws (200k steps zero NaN), Catmull-Rom patrols, faction/aggro (client dispositions, Mystpaw law), combat health. All worlds resident at once (2,729 in ~98 MB, 0.2 ms/tick). Living world runs on Arcterra (1,755 creatures, 600 ticks, zero NaN). |
+| Content | The restoration loads (263,756 spawns / 65 worlds) - NOTE: inherited the frozen realm's current corruption (dupes, over-population, faction scramble); clean re-export is task #46, deferred until serving. |
+| Host + deploy | Runnable realm host (boots as NexusUnleashed, our MotD). Self-contained linux-x64 ELF publish + systemd + install docs. |
 
-1. A real 16042 client **logs in** and reaches character select, then a world.
-2. It **deploys as the private server on NU-Linux** the way the current engine
-   does.
-3. It is **as functional as the current engine** — behavioral parity with the
-   frozen realm, indistinguishable to a player.
+## The capture pipeline (how the protocol was pinned)
 
-## What is BUILT and PROVEN (all pushed, all clean, zero NF)
+Our own diagnostics tap (`packetdump=1`) in the frozen realm records every
+message's opcode + bytes - C->S after the client's crypto, S->C before
+encryption - so both directions are decrypted. `CaptureAnalyzer` turns the dump
+into an opcode inventory. The operator plays; we observe the wire (a fact). The
+tap sits before the realm's handlers, so a WIP oracle never limits coverage.
 
-| layer | project | status |
-|---|---|---|
-| Crypto | `Cryptography` | SRP6a/ARC4/Adler32 (MIT Arctium, attributed) + our RNG. **Full SRP login proven 9/9**: register→B→(A,M1)→verify, session keys agree, bad paths rejected. |
-| Wire format | `Network` | Bit packer (12/12). **Framing PINNED off the oracle**: u32 LE self-inclusive size + u16 LE opcode (auth :23115, world :24000 captured). |
-| STS login | `Sts` | Text-protocol parser (11/11) + server + **AuthFlow running real SRP**. Login works **over a live socket (7/7)**: client → token; wrong password rejected on the wire. Protocol pinned from the client's own `StsConnLib64.MT.dll`. |
-| Client tables | `GameData` + `.Gen` + `.Generated` | `.tbl` reader + **code generator: all 384 client tables → typed C# records** (facts→generated). Compiles; core tables load (53,137 creatures / 66,383 spells / worlds incl. 990+3335 / 5,194 quests). |
-| Accounts | `Database` | `DbAccountStore` over authdb (MySqlConnector, MIT). **Reads real SRP creds from the live authdb (5/5).** |
-| World data | `Content` + `content/` | Native TSV format + **the whole restoration loaded: 263,756 spawns / 65 worlds / 8,059 patrols / 20,020 kit entries** (8/8, counts == live DB). |
-| Server host | `Realm` | Runnable exe: boots STS + world listeners, DB or in-memory store by config. |
+## NOW: message models (the current phase)
 
-Provenance for every file: `provenance/LEDGER.md`.
+The codec is validated; the next work is pinning each message's field layout
+from the capture and building typed models the world layer sends/receives.
+Started with the movement broadcast. Critical path: world-entry sequence
+(0x0988/0x0981/...), entity create (0x0262), position broadcast (0x0935), then
+combat/inventory/quest. Occasional targeted captures from the operator ("do one
+thing so I can isolate that message"); the bulk works from the capture on hand.
 
-## What is NOT done (the honest road)
+## Then
 
-- **XML body element names for the STS messages** — the only UNPINNED piece of
-  login. SRP values currently ride as hex in `<Content>`; the flow, state
-  machine, and crypto are real. One oracle capture pins the element names, then
-  the (de)serialization swaps — nothing else changes.
-- **World entry** — realm handoff (game token → world server), character list,
-  character select, world enter. Opcodes come from the client (facts). NEXT.
-- **The living world** — entity/map/movement/vision, spells, AI, combat.
-- **The systems** — quests, items, groups, etc.
-- **The parity harness** — drives both engines, diffs the wire. Skeleton only.
-- **NU-Linux deployment packaging.**
-
-## Next actions
-
-1. Extract the opcode set from the client (WildStar64.exe / message defs) — the
-   fact table the whole world-message layer keys on.
-2. Realm handoff + character list + character select + world entry, each
-   pinned/parity-checked against the oracle.
-3. Living world → systems → parity → NU-Linux deploy.
-
-## The laws (never violated)
-
-- **Provenance Discipline** (`ARCHITECTURE.md §1`): every line from the client,
-  our data, the oracle, or permissive code. Facts (opcodes, formats, behavior)
-  are free; NF *expression* (text, translation, paraphrase, discretionary
-  architecture) is never taken.
-- **Openness Law** (`§1a`): everything documented and pushed to the public repo,
-  in real time. A change not pushed is not done.
+World server host (sim + message layer) -> a real client connects and sees a
+living world -> parity harness -> NU-Linux deploy. Content re-export (task #46)
+before it serves for real.
