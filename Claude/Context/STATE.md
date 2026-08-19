@@ -1,6 +1,27 @@
 # NexusUnleashed Engine — State of the Build
 
-> **RESUME HERE (2026-08-19, evening) — THE LOGIN IS ALMOST CRACKED.**
+> **RESUME HERE (2026-08-19, night) — THE STS SRP IS CRACKED. Login authenticates.**
+> The real 16042 client's SRP proof VERIFIES on our engine — error 15 is GONE,
+> the client now shows "NCSoft login service finish timeout" (a NEW downstream
+> stage: the post-auth RequestGameToken / LoginFinish flow).
+> - **THE SRP IS WILDSTAR'S GAME SRP, LITTLE-ENDIAN** (not standard big-endian):
+>   N read little-endian, ReverseUInt32 (word-order) hashing, little-endian
+>   bignums, interleaved session key. `StsSrp.cs` rewritten to mirror
+>   `SrpReferenceClient.cs`. Cracked via `sts-cracker.py` using a known-credential
+>   account's stored verifier as the oracle (`v=g^x mod N`). Full recipe in
+>   `NU-deconstruct/StsConnLib64.MT.dll/login-protocol.md` (SOLVED section).
+> - **I can drive the game-client login myself** (screenshot + PowerShell SendInput
+>   to `WildStar64.exe`; scripts in `<scratch>/wslogin.ps1`), so no operator
+>   needed to test. (Do NOT commit real account creds — bot account kept private.)
+> - **NEXT: the login-finalize flow.** After KeyData/M2 (proof VERIFIED), the client
+>   sends nothing and times out. It should send RequestGameToken (STS) → get a token
+>   → the login "finishes". Flow classes: CLoginFinish, CRequestGameToken,
+>   ConsumeGameToken; string `IsRequireLoginFinish`. M2 handler = SRP state 2
+>   (`0x18002d3b0`), expects `[u32 32][M2]`, M2=SHA256(A|M1|K). AuthFlow already has
+>   a RequestGameToken handler stub — likely needs the client to be signalled to send
+>   it, or the KeyData reply needs session fields. RE the post-M2 client flow.
+>
+> ---------- (prior) THE LOGIN IS ALMOST CRACKED. ----------
 > The STS login broke through "NC Platform Error 15": the real 16042 client now
 > **accepts our LoginStart reply and sends its SRP proof** (`/Auth/KeyData`).
 > What got us there, all confirmed against the client + a wire capture:
