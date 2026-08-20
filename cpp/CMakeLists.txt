@@ -53,7 +53,7 @@ target_link_libraries(nexus_realm PRIVATE nexus_core)
 
 # ---- nusl.exe: the Nexus Unleashed Server Launcher (native Win32 GUI, no deps) ----
 if(WIN32)
-  add_executable(nusl WIN32 src/launcher/nusl.cpp)
+  add_executable(nusl WIN32 src/launcher/nusl.cpp src/launcher/nusl.rc)
   set_target_properties(nusl PROPERTIES OUTPUT_NAME "nusl")
   target_link_libraries(nusl PRIVATE user32 gdi32 gdiplus psapi)
 endif()

@@ -201,6 +201,16 @@ static void DrawSlider(Graphics& g, RectF track, int val, int lo, int hi, Color 
     Pen kp(accent, 2.5f); g.DrawEllipse(&kp, cx - 8.f, cy - 8.f, 16.f, 16.f);
 }
 
+static void DrawMeter(Graphics& g, float x, float y, float w, float frac, Color accent, const wchar_t* label, const wchar_t* value, const Font& fLbl, const Font& fVal) {
+    Text(g, label, fLbl, cMuted, x, y + 1);
+    float bx = x + 52, bw = w - 52 - 132, by = y + 5, bh = 9;
+    FillRound(g, bx, by, bw, bh, 4.5f, Color(255, 32, 32, 52));
+    if (frac < 0) frac = 0; if (frac > 1) frac = 1;
+    float fw = bw * frac;
+    if (fw > 6) { GraphicsPath* p = RoundRect(bx, by, fw, bh, 4.5f);
+        LinearGradientBrush b(RectF(bx, by, bw, bh), cBlue, accent, LinearGradientModeHorizontal); g.FillPath(&b, p); delete p; }
+    Text(g, value, fVal, cWhite, x + w - 130, y + 1, 130, StringAlignmentFar);
+}
 static void CenterText(Graphics& g, const wchar_t* t, const Font& f, Color c, RectF r) {
     SolidBrush b(c); StringFormat sf; sf.SetAlignment(StringAlignmentCenter); sf.SetLineAlignment(StringAlignmentCenter);
     g.DrawString(t, -1, &f, r, &sf, &b);
@@ -270,12 +280,14 @@ static void Paint(HWND h) {
       DrawButton(g, rStart, cBlue, L"START", fBtn, !run, g_hover == H_START, g_press == H_START);
       DrawButton(g, rStop, cMag, L"STOP", fBtn, run, g_hover == H_STOP, g_press == H_STOP);
 
-      // usage line
-      wchar_t us[160];
-      if (run) swprintf(us, 160, L"RAM  %.0f MB / %d GB        CPU  %.0f%%  across %d core%s",
-                        g_ramMB, g_memGB, g_cpuPct, g_cpuCores, g_cpuCores == 1 ? L"" : L"s");
-      else wcscpy(us, L"RAM  —        CPU  —");
-      Text(g, us, fMono, run ? cBlue : cDim, 30, 364);
+      // live monitor meters (RAM + CPU) — always active, updated every tick
+      wchar_t rv[64], cv[64];
+      if (run) { swprintf(rv, 64, L"%.0f MB / %d GB", g_ramMB, g_memGB); swprintf(cv, 64, L"%.0f %%  · %d cores", g_cpuPct, g_cpuCores); }
+      else { wcscpy(rv, L"—"); wcscpy(cv, L"—"); }
+      float memFrac = run ? (float)(g_ramMB / (g_memGB * 1024.0)) : 0.f;
+      float cpuFrac = run ? (float)(g_cpuPct / 100.0) : 0.f;
+      DrawMeter(g, 30, 362, W - 60.f, memFrac, cBlue, L"RAM", rv, fLbl, fMono);
+      DrawMeter(g, 30, 388, W - 60.f, cpuFrac, cMag, L"CPU", cv, fLbl, fMono);
     }
     BitBlt(dc, 0, 0, W, H, mem, 0, 0, SRCCOPY);
     SelectObject(mem, ob); DeleteObject(bmp); DeleteDC(mem); ReleaseDC(h, dc);
@@ -303,6 +315,11 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         g_serverDir = DirOfSelf(); g_serverExe = g_serverDir + L"\\nexus_realm.exe";
         g_logPath = g_serverDir + L"\\nexus_realm.log"; g_realmJson = g_serverDir + L"\\realm.json";
         LoadRealmInfo();
+        { HINSTANCE inst = (HINSTANCE)GetModuleHandleW(nullptr);
+          HICON sm = (HICON)LoadImageW(inst, MAKEINTRESOURCEW(1), IMAGE_ICON, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), 0);
+          HICON big = (HICON)LoadImageW(inst, MAKEINTRESOURCEW(1), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE);
+          if (sm) SendMessageW(h, WM_SETICON, ICON_SMALL, (LPARAM)sm);
+          if (big) SendMessageW(h, WM_SETICON, ICON_BIG, (LPARAM)big); }   // title bar + taskbar
         SYSTEM_INFO si; GetSystemInfo(&si); g_maxCores = (int)si.dwNumberOfProcessors; if (g_maxCores < 1) g_maxCores = 1;
         MEMORYSTATUSEX ms{ sizeof ms }; GlobalMemoryStatusEx(&ms);
         int ram = (int)(ms.ullTotalPhys / (1024ull * 1024ull * 1024ull));
@@ -310,7 +327,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         g_cpuCores = g_maxCores; g_memGB = g_maxMemGB >= 4 ? 4 : g_maxMemGB;
         g_editFont = CreateFontW(15, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Consolas");
         g_log = CreateWindowExW(0, L"EDIT", L"", WS_CHILD | WS_VISIBLE | WS_VSCROLL | ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL,
-                                26, 396, 100, 180, h, (HMENU)IDC_LOG, nullptr, nullptr);
+                                26, 420, 100, 160, h, (HMENU)IDC_LOG, nullptr, nullptr);
         SendMessageW(g_log, WM_SETFONT, (WPARAM)g_editFont, TRUE);
         // dark mode: allow dark app theming, then give the log a dark (grey) scrollbar
         if (HMODULE ux = LoadLibraryW(L"uxtheme.dll")) {
@@ -322,7 +339,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         wchar_t hw[128]; swprintf(hw, 128, L"[launcher] this machine: %d logical cores, %d GB cap available.", g_maxCores, g_maxMemGB); AppendLog(hw);
         SetTimer(h, IDT_POLL, 500, nullptr); return 0;
     }
-    case WM_SIZE: { int W = LOWORD(l), H = HIWORD(l); MoveWindow(g_log, 26, 396, W - 52, H - 396 - 22, TRUE); return 0; }
+    case WM_SIZE: { int W = LOWORD(l), H = HIWORD(l); MoveWindow(g_log, 26, 420, W - 52, H - 420 - 22, TRUE); return 0; }
     case WM_ERASEBKGND: return 1;
     case WM_PAINT: { PAINTSTRUCT ps; BeginPaint(h, &ps); Paint(h); EndPaint(h, &ps); return 0; }
     case WM_TIMER: UpdateUsage(); if (IsRunning()) TailLog(); InvalidateRect(h, nullptr, FALSE); return 0;
@@ -363,7 +380,9 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
 int WINAPI wWinMain(HINSTANCE hi, HINSTANCE, PWSTR, int show) {
     GdiplusStartupInput in; GdiplusStartup(&g_gdip, &in, nullptr);
     WNDCLASSW wc{}; wc.lpfnWndProc = WndProc; wc.hInstance = hi; wc.lpszClassName = L"NuslWindow";
-    wc.hCursor = LoadCursor(nullptr, IDC_ARROW); wc.hbrBackground = nullptr; RegisterClassW(&wc);
+    wc.hCursor = LoadCursor(nullptr, IDC_ARROW); wc.hbrBackground = nullptr;
+    wc.hIcon = (HICON)LoadImageW(hi, MAKEINTRESOURCEW(1), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE);   // taskbar / alt-tab
+    RegisterClassW(&wc);
     g_hwnd = CreateWindowW(wc.lpszClassName, L"Nexus Unleashed Server Launcher",
                            (WS_OVERLAPPEDWINDOW & ~WS_MAXIMIZEBOX), CW_USEDEFAULT, CW_USEDEFAULT, 600, 660, nullptr, nullptr, hi, nullptr);
     { BOOL dark = TRUE; DwmSetWindowAttribute(g_hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark)); }  // dark title bar
