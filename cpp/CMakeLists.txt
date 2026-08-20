@@ -51,6 +51,13 @@ endif()
 add_executable(nexus_realm src/realm/main.cpp)
 target_link_libraries(nexus_realm PRIVATE nexus_core)
 
+# ---- nusl.exe: the Nexus Unleashed Server Launcher (native Win32 GUI, no deps) ----
+if(WIN32)
+  add_executable(nusl WIN32 src/launcher/nusl.cpp)
+  set_target_properties(nusl PROPERTIES OUTPUT_NAME "nusl")
+  target_link_libraries(nusl PRIVATE user32 gdi32 comctl32 psapi)
+endif()
+
 # ---- tests (byte-verification against the C# reference vectors) ----
 enable_testing()
 add_executable(nexus_tests

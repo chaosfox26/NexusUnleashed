@@ -1,6 +1,7 @@
 // NexusUnleashed - clean-room authored. Realm host entry point (C++ port of Program.cs).
 // Boots the STS login server + the realm/auth channel; the world channel arrives later.
 #include <cstdio>
+#include <cstdlib>
 #include <thread>
 #include <vector>
 #include <asio.hpp>
@@ -123,8 +124,16 @@ int main() {
     realmConn.Start();
     std::printf("realm connection server listening on %u\n", cfg.world_port);
 
-    // ---- run the io_context across the hardware threads ----
+    // ---- run the io_context across a worker pool (spread across CPU cores) ----
+    // Default: one worker per hardware thread. The launcher (nusl.exe) can override the count via
+    // NUSL_THREADS to match the CPU-cores slider; the process affinity mask it sets then pins the
+    // pool to those cores.
     unsigned n = std::max(2u, std::thread::hardware_concurrency());
+    if (const char* t = std::getenv("NUSL_THREADS")) {
+        int req = std::atoi(t);
+        if (req >= 1) n = (unsigned)req;
+    }
+    std::printf("worker pool: %u threads\n", n);
     std::vector<std::thread> pool;
     for (unsigned i = 1; i < n; ++i) pool.emplace_back([&io]{ io.run(); });
     io.run();
