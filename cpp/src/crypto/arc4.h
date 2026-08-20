@@ -1,6 +1,3 @@
-// NexusUnleashed - clean-room authored. Standard RC4/ARC4 stream cipher (public-domain
-// algorithm), written from the algorithm — the post-SRP STS channel cipher. State (i,j)
-// persists across ProcessBuffer calls, matching the C# reference behavior.
 #pragma once
 #include <cstdint>
 #include <cstddef>

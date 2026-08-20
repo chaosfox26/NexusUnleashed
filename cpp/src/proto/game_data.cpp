@@ -1,4 +1,3 @@
-// NexusUnleashed - clean-room authored. See game_data.h.
 #include "proto/game_data.h"
 #include <cstdio>
 #include <cstdlib>
@@ -27,7 +26,7 @@ size_t GameData::LoadCharacterCreation(const std::string& tsvPath) {
     bool header = true;
     creation_.clear();
     while (std::getline(f, line)) {
-        if (header) { header = false; continue; }   // skip column header
+        if (header) { header = false; continue; }
         if (line.empty()) continue;
         std::stringstream ss(line);
         std::string id, cls, race, sex, fac, start, items;
@@ -76,11 +75,9 @@ size_t GameData::LoadCharacterCustomization(const std::string& tsvPath) {
 
 std::vector<AppearanceVisual> GameData::ResolveAppearance(
     uint32_t race, uint32_t gender, const std::vector<CustomizationChoice>& choices) {
-    // chosen[label] = value for O(1) matching
     std::map<uint32_t, uint32_t> chosen;
     for (const auto& c : choices) chosen[c.Label] = c.Value;
 
-    // slot -> displayId; later matching rows overwrite (table order, matches the client's build)
     std::map<uint32_t, uint32_t> bySlot;
     for (const auto& r : customization_) {
         if (r.RaceId != race || r.Gender != gender) continue;

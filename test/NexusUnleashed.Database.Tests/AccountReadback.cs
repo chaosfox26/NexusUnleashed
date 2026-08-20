@@ -1,6 +1,3 @@
-// Read-only integration proof: the DB account store reads a real SRP credential
-// out of the live authdb at the correct byte widths. Connection string + a
-// known account email are passed on argv so no secret is baked into the repo.
 using System;
 using System.Threading.Tasks;
 using NexusUnleashed.Database;

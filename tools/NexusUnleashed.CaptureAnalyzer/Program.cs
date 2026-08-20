@@ -1,12 +1,3 @@
-// NexusUnleashed - clean-room authored. Turns a packet-dump.log (from our own
-// diagnostics tap on the oracle) into a clean protocol-facts reference: per
-// opcode, the direction(s), count, payload-length distribution, and sample
-// bytes. This is how a play-session capture becomes pinned message facts -
-// pure processing of observed wire bytes, no emulator source involved.
-//
-//   analyzer <packet-dump.log> [outDir]
-//
-// Dump line format: "HH:mm:ss.fff DIR op=0xXXXX len=N  <hex>"
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -47,7 +38,6 @@ foreach (string raw in File.ReadLines(logPath))
 
 var rows = stats.OrderBy(kv => kv.Key.Op).ThenBy(kv => kv.Key.Dir).ToList();
 
-// TSV report
 string tsv = Path.Combine(outDir, "opcode-inventory.tsv");
 using (var w = new StreamWriter(tsv))
 {
@@ -61,7 +51,6 @@ Console.WriteLine($"distinct (dir,opcode) pairs: {stats.Count}");
 Console.WriteLine($"  C->S opcodes: {stats.Keys.Where(k => k.Dir == "C->S").Select(k => k.Op).Distinct().Count()}");
 Console.WriteLine($"  S->C opcodes: {stats.Keys.Where(k => k.Dir == "S->C").Select(k => k.Op).Distinct().Count()}");
 Console.WriteLine($"wrote {tsv}");
-// top talkers
 Console.WriteLine("busiest opcodes:");
 foreach (var (key, st) in rows.OrderByDescending(r => r.Value.Count).Take(10))
     Console.WriteLine($"  {key.Dir} 0x{key.Op:X4}  x{st.Count}  len {st.Lengths.Min()}..{st.Lengths.Max()}");

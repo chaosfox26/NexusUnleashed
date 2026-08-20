@@ -1,5 +1,3 @@
-// In-process live-socket proof of the FULL login: a real TCP client runs the
-// SRP6a handshake against the STS server and comes away with a game token.
 using System;
 using System.Linq;
 using System.Net.Sockets;
@@ -17,7 +15,6 @@ public static class LiveSocket
         void Check(string name, bool ok, string d = "")
         { if (ok) { pass++; Console.WriteLine($"  PASS {name} {d}"); } else { fail++; Console.WriteLine($"  FAIL {name} {d}"); } }
 
-        // provision one account with a real SRP verifier
         string login = "captain@nexusunleashed.test", password = "eldan secrets";
         byte[] saltBytes = Rng.GenerateRandomKey(16);
         string saltHex = string.Concat(saltBytes.Select(b => b.ToString("x2")));
@@ -52,7 +49,6 @@ public static class LiveSocket
         byte[] B = FromHex(Field(startReply, "B"));
         Check("B is 128 bytes", B.Length == 128, $"({B.Length})");
 
-        // real SRP client response
         var cli = SrpReferenceClient.Respond(saltHex, login, password, B);
         string keyReply = await Rt("/Auth/KeyData", 3,
             $"<Content><A>{Hex(cli.PublicA)}</A><M1>{Hex(cli.ProofM1)}</M1></Content>");
@@ -62,7 +58,6 @@ public static class LiveSocket
         Check("RequestGameToken -> token", tokReply.Contains("200 OK") && tokReply.Contains("<token>"));
         Check("token stored on account", store.LastToken != Guid.Empty);
 
-        // wrong-password client must be rejected end to end
         using (var c2 = new TcpClient())
         {
             await c2.ConnectAsync("127.0.0.1", 16601);

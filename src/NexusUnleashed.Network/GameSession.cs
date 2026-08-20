@@ -1,7 +1,3 @@
-// NexusUnleashed - clean-room authored. A per-connection session on modern .NET
-// (System.IO.Pipelines async socket). This is our own transport - standard .NET
-// infrastructure, no third-party socket code. Frame accumulation follows the
-// GamePacketFrame contract; dispatch is handed to the owning server.
 using System;
 using System.Buffers;
 using System.IO.Pipelines;
@@ -12,13 +8,6 @@ using NexusUnleashed.Cryptography;
 
 namespace NexusUnleashed.Network;
 
-/// <summary>
-/// One client connection. Reads length-framed messages off the socket, hands
-/// each complete (opcode, payload) to a dispatcher, and writes frames back.
-/// Encryption sits between the socket and the framer once the handshake spec is
-/// pinned (the ARC4 keystream from the crypto layer); until then this is the
-/// clear-text transport skeleton.
-/// </summary>
 public sealed class GameSession : IDisposable
 {
     private readonly Socket _socket;
@@ -28,25 +17,10 @@ public sealed class GameSession : IDisposable
     public Guid Id { get; } = Guid.NewGuid();
     public string RemoteAddress => _socket.RemoteEndPoint?.ToString() ?? "?";
 
-    /// <summary>
-    /// When set, this session speaks the world channel's encrypted packed
-    /// container: inbound 0x0244 frames are unwrapped+decrypted to their inner
-    /// game message, and <see cref="SendGameMessageAsync"/> wraps+encrypts. When
-    /// null, the session is a clear direct-frame channel (the auth server).
-    /// </summary>
     public PacketCrypt? Crypt { get; set; }
 
-    /// <summary>Arbitrary per-session state bag for handshake/handlers.</summary>
     public System.Collections.Generic.Dictionary<string, object> State { get; } = new();
 
-    /// <summary>
-    /// Switch the channel to the WORLD-phase cipher after login, given the world
-    /// keyInteger. Both ends key the same PacketCrypt so all world messages
-    /// encrypt/decrypt with it (two-phase keying, proven against the captured
-    /// world stream). HOW the world keyInteger is derived from the session key is
-    /// the caller's concern — that derivation is quarantined pending a clean,
-    /// non-NF source (see PacketCrypt / provenance/QUARANTINE-NF.md).
-    /// </summary>
     public void RekeyForWorld(ulong worldKeyInteger)
         => Crypt = new PacketCrypt(worldKeyInteger);
 
@@ -98,10 +72,6 @@ public sealed class GameSession : IDisposable
                 {
                     var (opcode, payload) = GamePacketFrame.Decode(frame!);
 
-                    // World channel: a client container carries one encrypted
-                    // inner game message; unwrap+decrypt and dispatch the inner.
-                    // A malformed container is contained to this message, never
-                    // fatal (the concurrent-multiplayer robustness law).
                     if (Crypt != null && opcode == WorldPacket.ClientContainer)
                     {
                         try
@@ -109,7 +79,7 @@ public sealed class GameSession : IDisposable
                             var (innerOp, innerBody) = WorldPacket.DecodeContainer(payload, Crypt);
                             await _dispatch(this, innerOp, innerBody);
                         }
-                        catch (ArgumentException) { /* drop the bad container */ }
+                        catch (ArgumentException) { }
                     }
                     else
                     {
@@ -133,7 +103,6 @@ public sealed class GameSession : IDisposable
             return false;
         buffer.Slice(0, head.Length).CopyTo(head);
         GamePacketFrame.TryReadLength(head, out int total);
-        // `total` is the whole self-inclusive frame length; wait until buffered.
         if (total < head.Length || buffer.Length < total)
             return false;
         frame = buffer.Slice(0, total).ToArray();
@@ -149,11 +118,6 @@ public sealed class GameSession : IDisposable
         await _socket.SendAsync(frame, SocketFlags.None);
     }
 
-    /// <summary>
-    /// Send a game message on the world channel. When <see cref="Crypt"/> is set
-    /// the message is wrapped in a 0x03DC container and encrypted (exactly the
-    /// captured ServerHello path); otherwise it is a clear direct frame.
-    /// </summary>
     public async Task SendGameMessageAsync(ushort opcode, byte[] body)
     {
         byte[] frame = Crypt != null
@@ -162,12 +126,6 @@ public sealed class GameSession : IDisposable
         await _socket.SendAsync(frame, SocketFlags.None);
     }
 
-    /// <summary>
-    /// Send a message as a CLEAR direct frame ([size][opcode][body]) regardless of
-    /// cipher state — the realm channel's server-&gt;client framing (proven by the
-    /// clear 0x0003 hello the client accepts; the 0x03DC encrypted container is a
-    /// WORLD-channel construct the realm channel does not use for S-&gt;C).
-    /// </summary>
     public async Task SendClearGameMessageAsync(ushort opcode, byte[] body)
     {
         byte[] frame = GamePacketFrame.Encode(opcode, body);

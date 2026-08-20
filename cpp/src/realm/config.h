@@ -1,4 +1,3 @@
-// NexusUnleashed - clean-room authored. C++ port of RealmConfig.cs — realm.json loader.
 #pragma once
 #include <cstdint>
 #include <fstream>
@@ -14,7 +13,7 @@ struct RealmConfig {
     uint16_t sts_port = 6600;
     uint16_t auth_port = 23115;
     uint16_t world_port = 24000;
-    std::string auth_database;   // Server=..;Port=..;User=..;Password=..;Database=authdb
+    std::string auth_database;
 
     static RealmConfig Load(const std::string& path) {
         RealmConfig c;

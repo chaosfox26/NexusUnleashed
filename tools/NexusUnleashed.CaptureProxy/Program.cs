@@ -1,15 +1,3 @@
-// NexusUnleashed - clean-room authored. A PASSIVE capture proxy: forwards bytes
-// between a WildStar client and the behavioral oracle (a running realm) without
-// modifying them, and logs each framed message's (direction, opcode, length).
-// This is how protocol facts get pinned - the operator drives a real client
-// through the proxy and plays; we observe the wire. Observing bytes on a socket
-// is a fact, not reading anyone's code.
-//
-//   proxy <listenPort> <targetHost> <targetPort> <logFile>
-//
-// Point the client's connection at <listenPort>; it reaches <targetHost:targetPort>
-// (the oracle). The size+opcode envelope is visible even when the payload is
-// encrypted, so the opcode SET and message cadence are captured regardless.
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -28,8 +16,6 @@ int listenPort = int.Parse(args[0]);
 string targetHost = args[1];
 int targetPort = int.Parse(args[2]);
 string logPath = args[3];
-// "raw" mode dumps full bytes (hex + printable text) per chunk instead of the
-// opcode-framed envelope - for text protocols like STS login (clear-text on 6600).
 bool raw = args.Length >= 5 && args[4].Equals("raw", StringComparison.OrdinalIgnoreCase);
 
 using var log = new StreamWriter(logPath, append: true) { AutoFlush = true };
@@ -43,9 +29,6 @@ void Log(string line)
 Log($"# capture proxy: :{listenPort} -> {targetHost}:{targetPort}, log {logPath}");
 
 var listener = new TcpListener(IPAddress.Loopback, listenPort);
-// Retry the bind: the port may still be held by the realm until it restarts onto
-// its new port, so the proxy can be started first and will grab the port the
-// moment it frees. Avoids tight start-order coordination.
 for (int attempt = 1; ; attempt++)
 {
     try { listener.Start(); break; }
@@ -83,10 +66,6 @@ async Task HandleAsync(TcpClient client)
     finally { client.Dispose(); }
 }
 
-// Forward bytes verbatim, and opportunistically parse the size(u32 LE, self-
-// inclusive) + opcode(u16 LE) envelope for logging. Framing is PINNED
-// (spec/protocol/frame.md); if a byte run doesn't parse as frames we still
-// forward it and just note the length.
 async Task Pump(NetworkStream from, NetworkStream to, int id, string dir)
 {
     var acc = new List<byte>();
@@ -97,8 +76,7 @@ async Task Pump(NetworkStream from, NetworkStream to, int id, string dir)
         {
             int n = await from.ReadAsync(buf);
             if (n == 0) break;
-            await to.WriteAsync(buf.AsMemory(0, n));   // forward untouched, first
-            if (raw)
+            await to.WriteAsync(buf.AsMemory(0, n));            if (raw)
             {
                 DumpRaw(buf, n, id, dir);
                 continue;
@@ -107,7 +85,7 @@ async Task Pump(NetworkStream from, NetworkStream to, int id, string dir)
             DrainFrames(acc, id, dir);
         }
     }
-    catch { /* peer closed */ }
+    catch { }
 }
 
 void DumpRaw(byte[] buf, int n, int id, string dir)
@@ -129,8 +107,7 @@ void DrainFrames(List<byte> acc, int id, string dir)
     while (acc.Count >= 6)
     {
         uint size = (uint)(acc[0] | acc[1] << 8 | acc[2] << 16 | acc[3] << 24);
-        if (size < 6 || size > 1_000_000) { acc.Clear(); return; }   // not a frame stream (encrypted/unknown) - stop parsing this batch
-        if (acc.Count < size) return;
+        if (size < 6 || size > 1_000_000) { acc.Clear(); return; }        if (acc.Count < size) return;
         ushort opcode = (ushort)(acc[4] | acc[5] << 8);
         int payloadLen = (int)size - 6;
         var sb = new StringBuilder();

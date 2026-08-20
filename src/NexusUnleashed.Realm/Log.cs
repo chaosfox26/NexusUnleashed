@@ -1,4 +1,3 @@
-// NexusUnleashed - clean-room authored. Trivial timestamped console logger.
 using System;
 
 namespace NexusUnleashed.Realm;

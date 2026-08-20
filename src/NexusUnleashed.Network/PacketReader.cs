@@ -1,37 +1,23 @@
-// NexusUnleashed - clean-room authored.
-// Provenance: the WildStar wire format is BIT-PACKED, little-endian, LSB-first
-// within each byte - a fact of Carbine's client protocol (documented in our own
-// datamine). This reader is our own implementation of that fact; the bit-stream
-// algorithm is standard and belongs to no one.
 using System;
 using System.Text;
 
 namespace NexusUnleashed.Network;
 
-/// <summary>
-/// Reads bit-packed fields from a buffer, LSB-first within each byte, in the
-/// order the WildStar client emits them. All game messages are a sequence of
-/// such reads.
-/// </summary>
 public sealed class PacketReader
 {
     private readonly byte[] _data;
     private int _bytePos;
-    private int _bitPos;   // 0..7, LSB-first
-
+    private int _bitPos;
     public PacketReader(byte[] data, int offset = 0)
     {
         _data = data ?? throw new ArgumentNullException(nameof(data));
         _bytePos = offset;
     }
 
-    /// <summary>Total bits consumed so far.</summary>
     public long BitsRead => (long)_bytePos * 8 + _bitPos;
 
-    /// <summary>Bytes remaining (whole bytes only).</summary>
     public int BytesRemaining => _data.Length - _bytePos - (_bitPos > 0 ? 1 : 0);
 
-    /// <summary>Read a single bit as a bool.</summary>
     public bool ReadBit()
     {
         bool value = (_data[_bytePos] & (1 << _bitPos)) != 0;
@@ -43,7 +29,6 @@ public sealed class PacketReader
         return value;
     }
 
-    /// <summary>Read up to 64 bits as an unsigned value, LSB-first.</summary>
     public ulong ReadBits(int count)
     {
         if ((uint)count > 64) throw new ArgumentOutOfRangeException(nameof(count));
@@ -76,7 +61,6 @@ public sealed class PacketReader
         return *(double*)&bits;
     }
 
-    /// <summary>Align the cursor to the next whole byte boundary.</summary>
     public void AlignToByte()
     {
         if (_bitPos != 0)
@@ -86,11 +70,6 @@ public sealed class PacketReader
         }
     }
 
-    /// <summary>
-    /// Read a UTF-16LE wide string of <paramref name="length"/> chars. WildStar
-    /// strings are length-prefixed elsewhere; the prefix width is the caller's
-    /// (message-level) concern.
-    /// </summary>
     public string ReadWideString(int length)
     {
         var sb = new StringBuilder(length);
@@ -99,7 +78,6 @@ public sealed class PacketReader
         return sb.ToString();
     }
 
-    /// <summary>Read <paramref name="count"/> raw bytes (byte-aligns first).</summary>
     public byte[] ReadBytes(int count)
     {
         AlignToByte();

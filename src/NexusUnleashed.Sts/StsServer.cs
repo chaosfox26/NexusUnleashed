@@ -1,6 +1,3 @@
-// NexusUnleashed - clean-room authored. Async STS listener: one StsSession per
-// connection, requests routed by "/Service/Message" URI (the message set is
-// measured from the client - spec/protocol/sts.md).
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -24,15 +21,8 @@ public sealed class StsServer
 
     public int SessionCount => _sessions.Count;
 
-    /// <summary>
-    /// Called for EVERY inbound request before routing — the clean capture hook.
-    /// When a real client logs in, this records exactly what it sends (the STS
-    /// port is clear-text), which pins the login XML schema without reading any
-    /// NF source. Never throws into dispatch.
-    /// </summary>
     public Action<StsRequest>? RequestObserver { get; set; }
 
-    /// <summary>Route an STS URI ("/Auth/LoginStart") to a handler.</summary>
     public void On(string uri, Func<StsSession, StsRequest, Task> handler)
         => _routes[uri] = handler;
 
@@ -60,7 +50,7 @@ public sealed class StsServer
     {
         if (RequestObserver != null)
         {
-            try { RequestObserver(request); } catch { /* capture must never break login */ }
+            try { RequestObserver(request); } catch { }
         }
 
         if (_routes.TryGetValue(request.Uri, out var handler))
@@ -71,23 +61,17 @@ public sealed class StsServer
             }
             catch (Exception ex)
             {
-                // A handler fault must never leave the client hanging (it would
-                // just ping forever). Log it and reply ERROR so the failure is
-                // visible on both ends.
                 Console.WriteLine($"{DateTime.UtcNow:HH:mm:ss.fff} [ERROR] STS handler {request.Uri} threw: {ex.GetType().Name}: {ex.Message}");
                 try { await session.SendAsync(StsReply.Error(request.Sequence, 500)); } catch { }
             }
         }
         else
         {
-            // Unknown message: reply ERROR, never drop the connection - the
-            // client must not be able to wedge the login server.
             await session.SendAsync(StsReply.Error(request.Sequence, 400));
         }
     }
 }
 
-/// <summary>One STS connection; carries the per-login auth state.</summary>
 public sealed class StsSession : IDisposable
 {
     private readonly Socket _socket;
@@ -97,19 +81,15 @@ public sealed class StsSession : IDisposable
     public Guid Id { get; } = Guid.NewGuid();
     public string RemoteAddress => _socket.RemoteEndPoint?.ToString() ?? "?";
 
-    /// <summary>Per-session state bag (the auth flow keeps its SRP state here).</summary>
     public Dictionary<string, object> State { get; } = new();
 
-    private Arc4? _rx, _tx;   // SocketCrypt: ARC4(K), one stream per direction, on after SRP
-
+    private Arc4? _rx, _tx;
     public StsSession(Socket socket, Func<StsSession, StsRequest, Task> dispatch)
     {
         _socket = socket;
         _dispatch = dispatch;
     }
 
-    /// <summary>After the SRP the STS channel is ARC4(sessionKey) — one keystream per
-    /// direction. Call AFTER the (plaintext) M2 reply is sent.</summary>
     public void EnableEncryption(byte[] sessionKey)
     {
         _rx = new Arc4(sessionKey);
@@ -126,8 +106,7 @@ public sealed class StsSession : IDisposable
             catch (SocketException) { break; }
             if (read == 0) break;
 
-            if (_rx != null) _rx.Process(buf, read);   // decrypt the encrypted STS stream
-
+            if (_rx != null) _rx.Process(buf, read);
             _parser.Feed(buf.AsSpan(0, read));
             StsRequest? req;
             while ((req = _parser.TryReadRequest()) != null)
@@ -141,8 +120,7 @@ public sealed class StsSession : IDisposable
         if (_tx != null)
         {
             frame = (byte[])frame.Clone();
-            _tx.Process(frame, frame.Length);            // encrypt the reply stream
-        }
+            _tx.Process(frame, frame.Length);        }
         await _socket.SendAsync(frame, SocketFlags.None);
     }
 
@@ -153,7 +131,6 @@ public sealed class StsSession : IDisposable
     }
 }
 
-/// <summary>Stateful ARC4 (RC4) keystream — the STS SocketCrypt after the SRP.</summary>
 internal sealed class Arc4
 {
     private readonly byte[] _s = new byte[256];
@@ -168,7 +145,6 @@ internal sealed class Arc4
             (_s[i], _s[j]) = (_s[j], _s[i]);
         }
     }
-    /// <summary>XOR the first <paramref name="len"/> bytes of <paramref name="data"/> with the keystream (in place).</summary>
     public void Process(byte[] data, int len)
     {
         for (int n = 0; n < len; n++)

@@ -1,6 +1,3 @@
-// Movement proof: the frozen realm's safety LAWS hold. The exact failure modes
-// (NaN positions, Y snapping to 0/skyward on a terrain miss, leash escape) must
-// NOT reproduce, over many ticks of many wandering creatures.
 using System;
 using System.Numerics;
 using NexusUnleashed.World;
@@ -12,18 +9,15 @@ static class MovementTests
         int pass = 0, fail = 0;
         void Check(string n, bool ok, string d = "") { if (ok) { pass++; Console.WriteLine($"  PASS {n} {d}"); } else { fail++; Console.WriteLine($"  FAIL {n} {d}"); } }
 
-        // Vec laws
         Check("SafeNormalize(zero) == zero (no NaN)", Vec.SafeNormalize(Vector3.Zero) == Vector3.Zero);
         Check("SafeNormalize(tiny) == zero", Vec.SafeNormalize(new Vector3(1e-9f, 0, 0)) == Vector3.Zero);
         Check("IsFinite rejects NaN", !Vec.IsFinite(new Vector3(float.NaN, 0, 0)));
         Check("IsFinite rejects Infinity", !Vec.IsFinite(new Vector3(0, float.PositiveInfinity, 0)));
 
-        // terrain law: a miss keeps Y, never snaps to 0 (world at Y ~= -919)
         var world = new WorldInstance(990u);
         var home = new Vector3(-500, -919f, -2800);
         uint cid = world.Add(new Entity { Position = home });
-        var mgr = new MovementManager(world, new NullTerrain());   // always-miss terrain
-        var gen = new RandomWander(home, leash: 20f, speed: 5f, seed: 7);
+        var mgr = new MovementManager(world, new NullTerrain());        var gen = new RandomWander(home, leash: 20f, speed: 5f, seed: 7);
         float minY = float.MaxValue, maxY = float.MinValue; bool anyNaN = false; float maxLeash = 0;
         for (int t = 0; t < 1000; t++)
         {
@@ -37,7 +31,6 @@ static class MovementTests
         Check("Y never snapped to 0 or skyward (terrain miss keeps Y)", Math.Abs(minY - (-919f)) < 0.01f && Math.Abs(maxY - (-919f)) < 0.01f, $"(Y stayed {minY:F1}..{maxY:F1})");
         Check("stayed within leash", maxLeash <= 20.5f, $"(max {maxLeash:F1})");
 
-        // scale: 200 wanderers x 1000 ticks, assert no NaN ever
         var w2 = new WorldInstance(3335u);
         var mgr2 = new MovementManager(w2, new NullTerrain());
         var gens = new IMovementGenerator[200];

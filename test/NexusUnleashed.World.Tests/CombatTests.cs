@@ -1,5 +1,3 @@
-// Combat health laws: damage never overkills the pool (irregularities.log
-// guard), DelayDeath holds at 1, healing caps at max.
 using System;
 using NexusUnleashed.World;
 
@@ -16,22 +14,17 @@ static class CombatTests
 
         Check("normal damage applies exactly", u.ApplyDamage(300) == 300 && u.Health == 700);
 
-        // overkill: a 5000 hit on 700 removes only 700, never more (the pool guard)
         Check("damage never exceeds the pool", u.ApplyDamage(5000) == 700 && u.Health == 0 && !u.IsAlive);
 
-        // DelayDeath holds at 1
         var d = new UnitEntity(); d.InitHealth(500); d.DelayDeathActive = true;
         uint applied = d.ApplyDamage(9999);
         Check("DelayDeath clamps lethal hit to leave 1", d.Health == 1 && d.IsAlive && applied == 499);
         d.DelayDeathActive = false;
         Check("without DelayDeath the next hit kills", d.ApplyDamage(1) == 1 && !d.IsAlive);
 
-        // healing caps at max, dead units heal from 0 normally (revive is separate)
-        var h = new UnitEntity(); h.InitHealth(200); h.ApplyDamage(150);   // 50 left
-        Check("heal restores up to max only", h.Heal(9999) == 150 && h.Health == 200);
+        var h = new UnitEntity(); h.InitHealth(200); h.ApplyDamage(150);        Check("heal restores up to max only", h.Heal(9999) == 150 && h.Health == 200);
         Check("heal at full does nothing", h.Heal(100) == 0 && h.Health == 200);
 
-        // no underflow / overflow anywhere
         var z = new UnitEntity(); z.InitHealth(0);
         Check("zero-max unit takes no damage and no heal", z.ApplyDamage(10) == 0 && z.Heal(10) == 0);
 

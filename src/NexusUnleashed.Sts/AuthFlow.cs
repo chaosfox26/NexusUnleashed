@@ -1,14 +1,3 @@
-// NexusUnleashed - clean-room authored. The login flow over the measured STS
-// message set (spec/protocol/sts.md):
-//
-//   /Sts/Connect -> /Auth/LoginStart -> /Auth/KeyData -> /Auth/RequestGameToken
-//
-// The FLOW is pinned (client RTTI). The SRP6a crypto underneath is REAL and
-// proven (NexusUnleashed.Cryptography). What is still UNPINNED is only the XML
-// body layout: until one oracle capture fixes the element names, the SRP values
-// (salt, B, A, M1, M2, token) are carried as hex inside minimal <Content> tags.
-// When the schema is captured, only the (de)serialization here changes - the
-// state machine and crypto stay.
 using System;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
@@ -18,10 +7,8 @@ namespace NexusUnleashed.Sts;
 
 public interface IAccountStore
 {
-    /// <summary>Returns (salt, verifier) for the account, or null if unknown.</summary>
     Task<(byte[] Salt, byte[] Verifier)?> GetSrpCredentialsAsync(string loginName);
     Task StoreGameTokenAsync(string loginName, Guid token);
-    /// <summary>The account's numeric id (STS UserId), or 0 if unknown.</summary>
     Task<long> GetUserIdAsync(string loginName);
 }
 
@@ -39,31 +26,17 @@ public static class AuthFlow
 
         server.On("/Auth/LoginStart", async (s, r) =>
         {
-            // Request shape RE'd from the client (spec/protocol/sts.md):
-            //   <Request><LoginName>..</LoginName><NetAddress>..</NetAddress></Request>
             string login = XmlBody.Field(r.BodyText, "LoginName");
             s.State[KeyLogin] = login;
 
             var creds = await accounts.GetSrpCredentialsAsync(login);
             if (creds == null || creds.Value.Verifier.Length == 0)
             {
-                await s.SendAsync(StsReply.Error(r.Sequence, 403));   // no such account
-                return;
+                await s.SendAsync(StsReply.Error(r.Sequence, 403));                return;
             }
 
-            // SCHEMA CONFIRMED from the stock client's StsConnLib64.MT.dll
-            // (NU-deconstruct/StsConnLib64.MT.dll/login-protocol.md). The
-            // LoginStart-reply parser at 0x18002d4e0:
-            //   - reads the <KeyData> field (GetField, base64-decoded to binary),
-            //   - parses [u32 LE saltLen][salt][u32 LE BLen][B], EXACT-consume,
-            //   - validates B < N as a BIG-ENDIAN bignum (error 15 otherwise).
-            // So STS is STANDARD SRP-6a (big-endian), not the game variant. B is
-            // emitted big-endian by StsSrp itself; the reply is base64 KeyData
-            // inside <Content>.
-            // WildStar game SRP (little-endian) — CRACKED against the bot verifier.
             var srp = new StsSrp(creds.Value.Salt, creds.Value.Verifier, login);
-            byte[] B = srp.StartHandshake();                  // 128-byte little-endian
-            s.State[KeySrp] = srp;
+            byte[] B = srp.StartHandshake();            s.State[KeySrp] = srp;
             Console.WriteLine("[STS-SRP] LoginStart: game-SRP (little-endian)");
 
             byte[] blob = KeyDataBlob.Pack(creds.Value.Salt, B);
@@ -74,24 +47,18 @@ public static class AuthFlow
         {
             if (s.State[KeySrp] is not StsSrp srp)
             {
-                await s.SendAsync(StsReply.Error(r.Sequence, 409));   // KeyData before LoginStart
-                return;
+                await s.SendAsync(StsReply.Error(r.Sequence, 409));                return;
             }
 
-            // Client request: <Request><KeyData>base64([u32 LE ALen][A][u32 LE
-            // M1Len][M1])</KeyData></Request> — same packing the reply uses.
             byte[] clientBlob = Convert.FromBase64String(XmlBody.Field(r.BodyText, "KeyData"));
             var parts = KeyDataBlob.Unpack(clientBlob);
             byte[] a = parts.Length > 0 ? parts[0] : Array.Empty<byte>();
             byte[] m1 = parts.Length > 1 ? parts[1] : Array.Empty<byte>();
 
-            // Standard SRP step 2: verify the client proof (searching the M1-recipe
-            // variants against the client's own M1), derive the session key.
             if (!srp.Verify(a, m1, out byte[] m2, out byte[] sessionKey))
             {
                 Console.WriteLine($"[STS-SRP] KeyData proof did NOT verify (A={a.Length}B, M1={Convert.ToHexString(m1)})");
-                await s.SendAsync(StsReply.Error(r.Sequence, 403));   // bad password / proof
-                return;
+                await s.SendAsync(StsReply.Error(r.Sequence, 403));                return;
             }
             Console.WriteLine($"[STS-SRP] proof VERIFIED — variant: {srp.MatchedVariant}");
             Console.WriteLine($"[STS-SRP] K={Convert.ToHexString(sessionKey)}");
@@ -100,14 +67,9 @@ public static class AuthFlow
 
             byte[] blob = KeyDataBlob.Pack(m2);
             await s.SendAsync(StsReply.Ok(r.Sequence, KeyDataBody(blob)));
-            // AFTER M2 (the last plaintext reply) the STS channel is ARC4(K) both ways.
             s.EnableEncryption(sessionKey);
         });
 
-        // After the SRP the client asks the STS to finalize the login; the reply
-        // carries the account/session record (RE'd from the client's LoginFinish
-        // reply handler: AuthType/LocationId/UserId/UserCenter/UserName/AccessMask/
-        // Roles/Status). Encrypted (ARC4) like everything post-SRP.
         server.On("/Auth/LoginFinish", async (s, r) =>
         {
             string login = s.State.TryGetValue(KeyLogin, out var lo) ? (string)lo : "";
@@ -126,21 +88,12 @@ public static class AuthFlow
             await s.SendAsync(StsReply.Ok(r.Sequence, body));
         });
 
-        // The client lists the game accounts under this STS user. One WildStar game
-        // account per user. Array reply (<Reply type="array"><Items><Item>…). The
-        // per-Item fields are RE'd from the client's account-list parser; the UserId
-        // must match what the client sent (it verifies).
         server.On("/GameAccount/ListMyAccounts", async (s, r) =>
         {
             Console.WriteLine($"[STS] ListMyAccounts req: {r.BodyText.Replace("\n", " ")}");
             string login = s.State.TryGetValue(KeyLogin, out var lo) ? (string)lo : "";
             long uid = await accounts.GetUserIdAsync(login);
             string e = System.Security.SecurityElement.Escape(login) ?? "";
-            // StsConnLib parses records via [reply+0x60]=first record, [item+0xc0]=field.
-            // NO <Items>/type="array" wrapper (those strings don't exist in the client);
-            // the records are direct child elements of <Reply>. The full field set is
-            // read from the client's own account object (StsConnLib strings): every
-            // string getter must be non-null or the game strlen()s null and crashes.
             string alias = login.Contains('@') ? login[..login.IndexOf('@')] : login;
             string ea = System.Security.SecurityElement.Escape(alias) ?? "";
             string body =
@@ -170,9 +123,6 @@ public static class AuthFlow
             {
                 Guid token = NewToken();
                 await accounts.StoreGameTokenAsync((string)login, token);
-                // Bridge the authenticated account to the realm channel that follows
-                // (same process). Account-keyed so any account — including the
-                // operator's own — is served its characters by the identical path.
                 long uid = await accounts.GetUserIdAsync((string)login);
                 AuthSession.Register(token.ToString("N"), uid);
                 await s.SendAsync(StsReply.Ok(r.Sequence,
@@ -180,18 +130,10 @@ public static class AuthFlow
             }
             else
             {
-                await s.SendAsync(StsReply.Error(r.Sequence, 401));   // not authenticated
-            }
+                await s.SendAsync(StsReply.Error(r.Sequence, 401));            }
         });
     }
 
-    /// <summary>Build the STS reply body:
-    /// &lt;Reply&gt;\n&lt;KeyData&gt;BASE64(blob)&lt;/KeyData&gt;\n&lt;/Reply&gt;\n.
-    /// Envelope + field + encoding + formatting confirmed BYTE-FOR-BYTE against a
-    /// live capture of the frozen realm's own STS (behavioral oracle): the reply
-    /// body root is &lt;Reply&gt; (NOT &lt;Content&gt;), the SRP blob rides a base64
-    /// &lt;KeyData&gt; child. The client's reply parser fetches this body object,
-    /// GetField("KeyData"), base64-decodes to the binary SRP blob.</summary>
     private static string KeyDataBody(byte[] blob)
         => "<Reply>\n<KeyData>" + Convert.ToBase64String(blob) + "</KeyData>\n</Reply>\n";
 
@@ -203,12 +145,10 @@ public static class AuthFlow
     }
 }
 
-/// <summary>Minimal XML body helpers used while schemas are UNPINNED.</summary>
 internal static class XmlBody
 {
     public static string Fields(params (string Tag, string Value)[] fields)
     {
-        // STS reply body root is <Reply> (confirmed against the frozen STS wire).
         var sb = new System.Text.StringBuilder("<Reply>\n");
         foreach (var (tag, val) in fields)
             sb.Append('<').Append(tag).Append('>')
@@ -217,7 +157,6 @@ internal static class XmlBody
         return sb.Append("</Reply>\n").ToString();
     }
 
-    /// <summary>Value of a named element, or "".</summary>
     public static string Field(string xml, string tag)
     {
         string open = "<" + tag + ">", close = "</" + tag + ">";
@@ -228,7 +167,6 @@ internal static class XmlBody
         return j < 0 ? "" : xml[i..j];
     }
 
-    /// <summary>First text content between any tag pair, or null.</summary>
     public static string? FirstText(string xml)
     {
         int gt = xml.IndexOf('>');
@@ -240,13 +178,6 @@ internal static class XmlBody
     }
 }
 
-/// <summary>
-/// The KeyData binary blob (base64'd inside the STS &lt;KeyData&gt; element). The
-/// SRP values (salt+B one way, A+M1 the other) are packed here. LAYOUT IS A
-/// CANDIDATE - each field as [u32 LE length][bytes] - pending confirmation from
-/// the client's own KeyData request (RE'd from the client, never from NF). When
-/// the captured client blob shows the true packing, this is corrected to match.
-/// </summary>
 internal static class KeyDataBlob
 {
     public static byte[] Pack(params byte[][] parts)

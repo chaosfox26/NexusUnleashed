@@ -1,6 +1,3 @@
-// NexusUnleashed - clean-room authored. C++ port of PacketWriter.cs / PacketReader.cs.
-// The bit-packed wire format, LSB-first within each byte, matching the client's reader
-// (loads an LE word, shifts right by the bit position, masks). 1:1 with the C# reference.
 #pragma once
 #include <cstdint>
 #include <cstring>
@@ -10,7 +7,6 @@
 
 namespace nexus::net {
 
-/// Writes bit-packed fields, LSB-first, matching the client's reader.
 class PacketWriter {
 public:
     void WriteBit(bool value) {
@@ -41,8 +37,6 @@ public:
         uint64_t bits; std::memcpy(&bits, &v, 8); WriteUInt64(bits);
     }
 
-    /// Wide string: each char16 written as 16 bits (no length prefix — callers that
-    /// need the client's length-prefixed string encode the prefix themselves).
     void WriteWideString(const std::u16string& s) {
         for (char16_t c : s) WriteUInt16(static_cast<uint16_t>(c));
     }
@@ -54,16 +48,13 @@ public:
         data_.insert(data_.end(), p, p + n);
     }
 
-    /// Snapshot the written buffer (byte-aligned).
     std::vector<uint8_t> ToArray() { AlignToByte(); return data_; }
 
 private:
     std::vector<uint8_t> data_;
-    int bit_pos_ = 0;  // 0..7 within the current (last) byte
+    int bit_pos_ = 0;
 };
 
-/// Reads bit-packed fields, LSB-first — the inverse of PacketWriter, and the same
-/// semantics as the client's bit reader.
 class PacketReader {
 public:
     PacketReader(const uint8_t* data, size_t size) : data_(data), size_(size) {}
@@ -92,10 +83,8 @@ public:
 
     void AlignToByte() { bit_pos_ = (bit_pos_ + 7) & ~static_cast<size_t>(7); }
 
-    /// Full bytes remaining from the current (rounded-up) byte position.
     size_t BytesRemaining() const { return size_ - ((bit_pos_ + 7) >> 3); }
 
-    /// Byte-aligned read of n bytes (aligns first, matching the C# reader).
     std::vector<uint8_t> ReadBytes(size_t n) {
         AlignToByte();
         size_t byte = bit_pos_ >> 3;

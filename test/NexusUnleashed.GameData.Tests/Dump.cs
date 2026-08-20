@@ -4,8 +4,6 @@ using NexusUnleashed.GameData;
 
 static class Dump
 {
-    // Dump: <tbl> emits "rowIndex\tcol0\tcol1\t..." for a fixed sample of rows,
-    // all columns, so an external proven reader can diff it cell-for-cell.
     public static int Run(string tblPath)
     {
         var t = GameTableReader.Read(tblPath);

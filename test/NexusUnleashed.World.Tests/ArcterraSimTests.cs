@@ -1,6 +1,3 @@
-// The living world runs on ARCTERRA (world 3335): real spawns wander, a player
-// moves through, hostile/aggressive creatures engage and leash, vision tracks -
-// all systems together, 600 ticks, stable.
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -31,8 +28,6 @@ static class ArcterraSimTests
             uint g = world.Add(new Entity { CreatureId = s.CreatureId, RawType = s.Type, Faction = s.Faction, Position = home, Facing = s.Yaw });
             if (s.Type == (byte)EntityKind.Creature || s.Type == 0)
             {
-                // aggressive if the client marks it so is unknown here; treat a
-                // sample as aggressive to exercise engagement, rest wander.
                 bool aggressive = (g % 5 == 0);
                 sim.Register(g, new CreatureSimState {
                     Wander = new RandomWander(home, 12f, 4f, seed: (int)g),
@@ -43,24 +38,19 @@ static class ArcterraSimTests
         }
         Check("creatures registered for sim", creatures > 0, $"({creatures})");
 
-        // drop a player that walks a line across the zone
         var start = new Vector3(arcterra[0].X, arcterra[0].Y, arcterra[0].Z);
-        var player = new PlayerEntity { Faction = 166u, Position = start };  // an Exile-ish faction
-        uint pg = world.Add(player);
+        var player = new PlayerEntity { Faction = 166u, Position = start };        uint pg = world.Add(player);
 
         bool anyNaN = false; int maxEngaged = 0; float maxLeashSeen = 0;
         var rng = new Random(5);
         for (int t = 0; t < 600; t++)
         {
-            // player drifts
             world.Move(pg, player.Position + new Vector3((float)(rng.NextDouble()-0.5)*3, 0, (float)(rng.NextDouble()-0.5)*3));
             sim.Tick(0.1f);
 
             foreach (var kv in world.Entities)
                 if (!Vec.IsFinite(kv.Value.Position)) anyNaN = true;
 
-            // count creatures currently engaged
-            // (we can't see AI state from outside cheaply; sample leash distances)
         }
         Check("600 ticks on Arcterra: zero NaN", !anyNaN);
         Check("player has a vision set after the walk", player.Visible.Count >= 0, $"({player.Visible.Count} visible)");

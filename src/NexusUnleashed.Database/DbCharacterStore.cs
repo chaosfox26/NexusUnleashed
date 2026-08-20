@@ -1,7 +1,3 @@
-// NexusUnleashed - clean-room authored. Reads an account's characters from
-// characterdb.character (our own DB schema) into the network CharacterRecord the
-// 0x0117 serializer consumes. Generic + account-keyed: whichever account
-// authenticated, its own characters are served by the identical path.
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using MySqlConnector;
@@ -13,8 +9,6 @@ public sealed class DbCharacterStore
 {
     private readonly string _connectionString;
 
-    /// <summary>Derives the characterdb connection from the auth connection
-    /// (same server, swap the database name) so one config line drives both.</summary>
     public DbCharacterStore(string authConnectionString)
     {
         var b = new MySqlConnectionStringBuilder(authConnectionString) { Database = "characterdb" };

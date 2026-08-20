@@ -1,7 +1,3 @@
-// NexusUnleashed - clean-room authored. Database-backed account store over the
-// authdb `account` table. Schema (our own DB): id, email, s (SRP salt, hex),
-// v (SRP verifier, hex), gameToken, sessionKey, createTime. SRP6a itself comes
-// from NexusUnleashed.Cryptography. MySqlConnector is MIT-licensed.
 using System;
 using System.Globalization;
 using System.Threading.Tasks;
@@ -52,7 +48,6 @@ public sealed class DbAccountStore : IAccountStore
         await conn.OpenAsync();
         await using var cmd = new MySqlCommand(
             "UPDATE account SET gameToken = @tok WHERE email = @email", conn);
-        // gameToken is varchar(32): 16 bytes as 32 hex chars, matching the salt width.
         cmd.Parameters.AddWithValue("@tok", token.ToString("N"));
         cmd.Parameters.AddWithValue("@email", loginName);
         await cmd.ExecuteNonQueryAsync();

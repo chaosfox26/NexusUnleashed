@@ -1,7 +1,3 @@
-// NexusUnleashed - clean-room authored. C++ port of StsServer.cs — the async STS login
-// listener (Asio coroutines). One session per connection; requests routed by URI; after
-// the SRP the channel is ARC4(sessionKey) both ways. Handlers are synchronous and return
-// a reply (+ an optional key that turns encryption on AFTER the reply is sent).
 #pragma once
 #include <cstdint>
 #include <functional>
@@ -16,7 +12,6 @@
 
 namespace nexus::sts {
 
-/// Per-connection login state (mirrors StsSession.State).
 struct StsSessionState {
     std::string login;
     std::shared_ptr<crypto::StsSrp> srp;
@@ -24,8 +19,6 @@ struct StsSessionState {
     std::vector<uint8_t> session_key;
 };
 
-/// A handler's result: the reply bytes, and (optionally) the key that enables the
-/// ARC4 stream cipher on both directions once this reply has been sent.
 struct HandlerResult {
     std::vector<uint8_t> reply;
     std::optional<std::vector<uint8_t>> enable_encryption;
@@ -38,9 +31,9 @@ public:
     StsServer(asio::io_context& io, const std::string& address, uint16_t port);
 
     void On(std::string uri, StsHandler handler) { routes_[std::move(uri)] = std::move(handler); }
-    std::function<void(const StsRequest&)> request_observer;   // clean capture hook
+    std::function<void(const StsRequest&)> request_observer;
 
-    void Start();   // co_spawn the acceptor
+    void Start();
 
 private:
     asio::awaitable<void> AcceptLoop();

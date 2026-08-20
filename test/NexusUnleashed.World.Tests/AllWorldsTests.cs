@@ -1,6 +1,3 @@
-// The operator's target: EVERY world resident at once, ticking. Instantiates a
-// WorldInstance for all World.tbl ids, populates from content, runs a global
-// tick in parallel. Proves the whole game loads simultaneously.
 using System;
 using System.Diagnostics;
 using System.Linq;
@@ -25,7 +22,6 @@ static class AllWorldsTests
         sw.Stop();
         Check("every world resident at once", mgr.WorldCount == worldIds.Count, $"({mgr.WorldCount:N0} in {sw.ElapsedMilliseconds} ms)");
 
-        // populate from content
         var content = WorldContent.Load(contentRoot);
         foreach (var s in content.Spawns)
         {
@@ -36,15 +32,12 @@ static class AllWorldsTests
         }
         Check("all spawns placed across the resident worlds", mgr.TotalEntities() == content.Spawns.Count, $"({mgr.TotalEntities():N0} entities)");
 
-        // global tick across EVERY world in parallel - the "all at once" proof
         long before = GC.GetTotalMemory(true);
         sw.Restart();
         int ticks = 10;
         for (int t = 0; t < ticks; t++)
             mgr.Tick(0.1f, (w, dt) =>
             {
-                // touch every world: a trivial per-world pass (vision-less here;
-                // the point is all worlds tick together without contention)
                 _ = w.EntityCount;
             });
         sw.Stop();

@@ -1,5 +1,3 @@
-// NexusUnleashed - clean-room authored. Realm host entry point (C++ port of Program.cs).
-// Boots the STS login server + the realm/auth channel; the world channel arrives later.
 #include <cstdio>
 #include <cstdlib>
 #include <thread>
@@ -19,17 +17,15 @@
 using namespace nexus;
 
 int main() {
-    std::setvbuf(stdout, nullptr, _IONBF, 0);   // unbuffered: log lines flush immediately
+    std::setvbuf(stdout, nullptr, _IONBF, 0);
     realm::RealmConfig cfg = realm::RealmConfig::Load("realm.json");
     std::printf("=== %s realm host (C++) starting ===\n", cfg.realm_name.c_str());
     std::printf("bind %s | sts %u | auth %u | world %u\n",
                 cfg.bind_address.c_str(), cfg.sts_port, cfg.auth_port, cfg.world_port);
-    // realm.json is the single source of truth for the client-facing realm name.
     realm::WorldHandshake::RealmName = cfg.realm_name;
     std::printf("realm name: \"%s\"\n", cfg.realm_name.c_str());
     if (cfg.auth_database.empty()) { std::printf("FATAL: AuthDatabase not set in realm.json\n"); return 1; }
 
-    // Client data tables (facts from the 16042 client, zero NF) drive the engine.
     size_t ccRows = proto::GameData::LoadCharacterCreation("data/character-creation.tsv");
     std::printf("game-data: CharacterCreation table loaded (%zu rows)\n", ccRows);
     size_t cuRows = proto::GameData::LoadCharacterCustomization("data/character-customization.tsv");
@@ -37,7 +33,6 @@ int main() {
 
     asio::io_context io;
 
-    // ---- STS login server ----
     db::DbAccountStore accounts(cfg.auth_database);
     sts::StsServer stsServer(io, cfg.bind_address, cfg.sts_port);
     stsServer.request_observer = [](const sts::StsRequest& r) {
@@ -47,24 +42,18 @@ int main() {
     stsServer.Start();
     std::printf("sts login server listening on %u\n", cfg.sts_port);
 
-    // ---- realm/auth channel (clear 0x0003 hello, then container) ----
     db::DbCharacterStore charStore(cfg.auth_database);
     realm::WorldHandshake::CharacterListBodyProvider = [&charStore](long acc) {
         auto chars = charStore.GetCharacters(acc);
         std::printf("realm: character-list provider: account %ld has %zu character(s)\n", acc, chars.size());
         return proto::CharacterListMessage::Build(chars);
     };
-    // Create a character on 0x5CD5. The 298B body is decrypted but bit-packed; field parsing is
-    // pending the message-definition table, so fields are placeholders for now (the name arrives
-    // in a separate name-check). Goal: persist + let Enter Game advance into world entry.
     realm::WorldHandshake::CreateCharacterProvider = [&charStore](long acc, const std::vector<uint8_t>& body) -> uint64_t {
         db::NewCharacter nc;
         proto::CharacterCreateRequest req;
         bool parsed = proto::CharacterCreateRequest::Parse(body, req);
         nc.Name = (parsed && !req.Name.empty()) ? req.Name : "NexusHero";
 
-        // Resolve race/class/sex/faction from the client's OWN CharacterCreation table (the
-        // create packet only carries the creation ID). Authoritative, client-data-only.
         if (const auto* row = proto::GameData::Creation(req.CreationId)) {
             nc.Race = row->RaceId; nc.Class = row->ClassId;
             nc.Sex = row->Sex; nc.FactionId = row->FactionId;
@@ -74,9 +63,9 @@ int main() {
             std::printf("realm: WARNING creationId %u not in CharacterCreation table; using defaults\n", req.CreationId);
             nc.Sex = 0; nc.Race = 1; nc.Class = 1; nc.FactionId = 167;
         }
-        nc.ActivePath = 0;   // TODO: path is a separate field still to pin
-        nc.WorldId = 0; nc.WorldZoneId = 0;   // TODO: from startEnum -> starting zone
-        nc.Customization = req.Customization;   // decoded sliders -> stored + resolved to visuals
+        nc.ActivePath = 0;
+        nc.WorldId = 0; nc.WorldZoneId = 0;
+        nc.Customization = req.Customization;
         uint64_t id = charStore.CreateCharacter(acc, nc);
         std::printf("realm: create-character provider: account %ld name='%s' race=%u class=%u sliders=%zu -> new char id %llu\n",
                     acc, nc.Name.c_str(), nc.Race, nc.Class, nc.Customization.size(), (unsigned long long)id);
@@ -88,12 +77,11 @@ int main() {
                     acc, (unsigned long long)charId, ok ? "deleted" : "not found");
         return ok;
     };
-    net::GameServer realmServer(io, cfg.bind_address, cfg.auth_port, /*worldChannel=*/false);
+    net::GameServer realmServer(io, cfg.bind_address, cfg.auth_port, false);
     realm::WorldHandshake::Register(realmServer);
     realmServer.Start();
     std::printf("realm/auth server listening on %u\n", cfg.auth_port);
 
-    // ---- load the recorded world-load burst (reproduce step for 0x07DD Enter Game) ----
     {
         std::FILE* wf = std::fopen("captures/world-entry-replay.bin", "rb");
         if (wf) {
@@ -116,18 +104,11 @@ int main() {
         }
     }
 
-    // ---- realm CONNECTION (client dials 127.0.0.1:world_port after 0x3db → char-select) ----
-    // The 0x3db handshake hands the client this address; it opens a NEW socket here. First we
-    // just observe what it sends so we can answer with the op-3 that creates the char screen.
-    net::GameServer realmConn(io, cfg.bind_address, cfg.world_port, /*worldChannel=*/false);
+    net::GameServer realmConn(io, cfg.bind_address, cfg.world_port, false);
     realm::WorldHandshake::RegisterRealmConnection(realmConn);
     realmConn.Start();
     std::printf("realm connection server listening on %u\n", cfg.world_port);
 
-    // ---- run the io_context across a worker pool (spread across CPU cores) ----
-    // Default: one worker per hardware thread. The launcher (nusl.exe) can override the count via
-    // NUSL_THREADS to match the CPU-cores slider; the process affinity mask it sets then pins the
-    // pool to those cores.
     unsigned n = std::max(2u, std::thread::hardware_concurrency());
     if (const char* t = std::getenv("NUSL_THREADS")) {
         int req = std::atoi(t);

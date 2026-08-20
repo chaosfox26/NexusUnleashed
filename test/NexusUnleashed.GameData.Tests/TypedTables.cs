@@ -1,5 +1,3 @@
-// Proof: the GENERATED typed models load real client tables with typed field
-// access, and counts match the known table sizes.
 using System;
 using System.Linq;
 using NexusUnleashed.GameData.Generated;
@@ -26,7 +24,6 @@ Check("Spell4 row count", spells.Count == 66383, $"({spells.Count})");
 
 var worlds = WorldTable.Load(P("World"));
 Check("World has rows", worlds.Count > 0, $"({worlds.Count})");
-// world 990 (Everstar) and 3335 (Arcterra) exist in the client table
 var wids = worlds.Select(w => w.ID).ToHashSet();
 Check("world 990 present", wids.Contains(990u));
 Check("world 3335 present", wids.Contains(3335u));

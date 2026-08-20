@@ -1,6 +1,3 @@
-// NexusUnleashed - clean-room authored. Proves the bit packer round-trips every
-// width and type: what the writer emits, the reader must return identically.
-// This is the parity discipline applied to the smallest unit of the protocol.
 using System;
 using NexusUnleashed.Network;
 
@@ -18,7 +15,6 @@ static class RoundTrip
     {
         Console.WriteLine("PacketReader/PacketWriter round-trip:");
 
-        // mixed-width bit fields
         var w = new PacketWriter();
         w.WriteBits(0b101, 3);
         w.WriteBits(0xDEAD, 16);
@@ -30,7 +26,6 @@ static class RoundTrip
         Check("single bit", r.ReadBit());
         Check("63-bit field", r.ReadBits(63) == 0x7FFFFFFFFFFFFFFF);
 
-        // typed primitives
         var w2 = new PacketWriter();
         w2.WriteUInt32(0xCAFEBABE);
         w2.WriteInt16(-1234);
@@ -46,7 +41,6 @@ static class RoundTrip
         Check("bool false", r2.ReadBool() == false);
         Check("widestring", r2.ReadWideString(5) == "Nexus");
 
-        // byte-alignment behavior
         var w3 = new PacketWriter();
         w3.WriteBits(0b11, 2);
         w3.WriteBytes(new byte[] { 0xAA, 0xBB });

@@ -1,10 +1,3 @@
-// NexusUnleashed - clean-room authored. A reference SRP6a *client*, matching the
-// WildStar server primitive (SRP6a.cs) parameter-for-parameter. Two uses:
-//   * validate an SrpServer end to end without a live client capture, and
-//   * give anyone running this engine a way to test their auth setup.
-// The math mirrors the server primitive exactly (same N, g, k, the same
-// ReverseUInt32 blockwise byte order, the same interleaved session-key
-// derivation), so a successful round trip proves the server path is correct.
 using System;
 using System.Numerics;
 using System.Security.Cryptography;
@@ -21,8 +14,6 @@ public sealed class SrpClientResult
 
 public static class SrpReferenceClient
 {
-    // WildStar SRP group N (2048-bit), little-endian byte order, as carried by
-    // the server primitive SRP6a.cs.
     private static readonly byte[] N =
     {
         0xE3, 0x06, 0xEB, 0xC0, 0x2F, 0x1D, 0xC6, 0x9F, 0x5B, 0x43, 0x76, 0x83, 0xFE, 0x38, 0x51, 0xFD,
@@ -36,11 +27,6 @@ public static class SrpReferenceClient
     };
     private static readonly byte[] gBytes = { 2, 0, 0, 0 };
 
-    /// <summary>
-    /// Run the client side against a server's B. Salt/verifier live server-side;
-    /// the client uses the password. Returns (A, M1) to send and the session key
-    /// it derived (which must equal the server's on success).
-    /// </summary>
     public static SrpClientResult Respond(string saltHex, string accountName, string password, byte[] serverB)
     {
         using var sha = SHA256.Create();
@@ -51,11 +37,9 @@ public static class SrpReferenceClient
         byte[] I = sha.ComputeHash(Encoding.UTF8.GetBytes(accountName));
         byte[] salt = FromHex(saltHex);
 
-        // x = ReverseUInt32(SHA256(salt || SHA256(name ":" pass)))  (server's CalculateX)
         byte[] p = sha.ComputeHash(Encoding.UTF8.GetBytes(accountName + ":" + password));
         BigInteger x = LeToBig(ReverseUInt32(sha.ComputeHash(Combine(salt, p))));
 
-        // client ephemeral a, A = g^a mod N
         byte[] aBytes = Rng.GenerateRandomKey(0x20);
         BigInteger a = LeToBig(aBytes);
         BigInteger A = BigInteger.ModPow(gbn, a, Nbn);
@@ -63,10 +47,8 @@ public static class SrpReferenceClient
 
         BigInteger B = LeToBig(serverB);
 
-        // u = ReverseUInt32(SHA256(A || B))
         BigInteger u = LeToBig(ReverseUInt32(sha.ComputeHash(Combine(Asend, serverB))));
 
-        // S = (B - k * g^x) ^ (a + u*x) mod N
         BigInteger gx = BigInteger.ModPow(gbn, x, Nbn);
         BigInteger baseVal = ((B - k * gx) % Nbn + Nbn) % Nbn;
         BigInteger S = BigInteger.ModPow(baseVal, a + u * x, Nbn);
@@ -77,11 +59,6 @@ public static class SrpReferenceClient
         return new SrpClientResult { PublicA = Asend, ProofM1 = m1, SessionKey = sessionKey };
     }
 
-    /// <summary>
-    /// Compute the SRP verifier for account registration: v = g^x mod N, where
-    /// x = ReverseUInt32(SHA256(salt || SHA256(name ":" pass))). Returns the
-    /// verifier as the little-endian hex the authdb `v` column stores.
-    /// </summary>
     public static string ComputeVerifier(string saltHex, string accountName, string password)
     {
         using var sha = SHA256.Create();
@@ -94,14 +71,12 @@ public static class SrpReferenceClient
         return ToHex(BigToLe(v));
     }
 
-    // --- helpers mirroring SRP6a.cs exactly ---
 
     private static BigInteger LeToBig(byte[] le) => new BigInteger(Combine(le, new byte[] { 0 }));
 
     private static byte[] BigToLe(BigInteger v)
     {
-        byte[] b = v.ToByteArray();   // already little-endian, may carry a sign byte
-        return b;
+        byte[] b = v.ToByteArray();        return b;
     }
 
     private static byte[] ReverseUInt32(byte[] data)

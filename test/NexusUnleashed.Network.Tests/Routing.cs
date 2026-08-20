@@ -1,5 +1,3 @@
-// Router proof over a LIVE socket: a framed message reaches the opcode-keyed
-// handler with the correct payload, and an unpinned opcode is flagged once.
 using System;
 using System.Collections.Generic;
 using System.Linq;

@@ -1,7 +1,3 @@
-// NexusUnleashed - clean-room authored. A thin dispatch layer over GameServer:
-// registers opcode-keyed handlers and logs the first sighting of any opcode that
-// is handled but not yet pinned in the Opcodes registry (never fatal). As world
-// messages are pinned from captures, their handlers register here.
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -15,7 +11,6 @@ public sealed class WorldMessageRouter
 
     public WorldMessageRouter(Action<string>? log = null) => _log = log;
 
-    /// <summary>Register a handler for one opcode on the server.</summary>
     public void On(GameServer server, ushort opcode, Func<GameSession, byte[], Task> handler)
     {
         server.On(opcode, (session, payload) =>

@@ -1,10 +1,3 @@
-// NexusUnleashed - clean-room authored. One running world (map): its entities,
-// the spatial grid, and interest management. Vision uses HYSTERESIS - the frozen
-// realm's own proven fix for the vanish/flicker bug (enter at 128, leave at
-// ~141): an entity becomes visible inside the enter radius and stays visible
-// until it passes the larger leave radius, so entities hovering at the edge do
-// not churn in and out. That behavior is a measured fact about our realm, not
-// copied code.
 using System;
 using System.Collections.Generic;
 using System.Numerics;
@@ -26,7 +19,6 @@ public sealed class WorldInstance
     private readonly SpatialGrid _grid;
     private uint _nextGuid = 1;
 
-    // Interest thresholds. Enter/leave differ by design (hysteresis).
     public float VisionEnter { get; }
     public float VisionLeave { get; }
 
@@ -62,18 +54,10 @@ public sealed class WorldInstance
         if (_entities.Remove(guid)) _grid.Remove(guid);
     }
 
-    /// <summary>
-    /// Recompute a player's visible set with hysteresis. Returns which entities
-    /// entered and left vision this pass (the wire layer sends creates/destroys
-    /// from this). Never drops an entity that is still inside the leave radius -
-    /// the bug that made mobs vanish while plainly in range.
-    /// </summary>
     public VisionDelta UpdateVision(PlayerEntity viewer)
     {
         var delta = new VisionDelta();
         var candidates = new List<uint>();
-        // pre-filter with the LARGER (leave) radius so currently-visible edge
-        // entities are always reconsidered, never silently dropped.
         _grid.QueryNeighborhood(viewer.Position, VisionLeave, candidates);
 
         var stillVisible = new HashSet<uint>();
@@ -85,16 +69,13 @@ public sealed class WorldInstance
             float dist = Vector3.Distance(viewer.Position, e.Position);
             bool wasVisible = viewer.Visible.Contains(guid);
 
-            bool visible = wasVisible ? dist <= VisionLeave    // stay until leave radius
-                                      : dist <= VisionEnter;   // appear at enter radius
-            if (visible)
+            bool visible = wasVisible ? dist <= VisionLeave                                      : dist <= VisionEnter;            if (visible)
             {
                 stillVisible.Add(guid);
                 if (!wasVisible) delta.Added.Add(guid);
             }
         }
 
-        // anything previously visible but no longer a candidate / in range leaves
         foreach (uint guid in viewer.Visible)
             if (!stillVisible.Contains(guid))
                 delta.Removed.Add(guid);

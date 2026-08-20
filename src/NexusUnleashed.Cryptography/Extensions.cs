@@ -1,4 +1,4 @@
-﻿// Copyright (c) Arctium.
+// Copyright (c) Arctium.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using System;
@@ -24,7 +24,6 @@ namespace NexusUnleashed.Cryptography
 
         public static bool IsSigned(this Type t) => Convert.ToBoolean(t.GetField("MinValue").GetRawConstantValue());
 
-        // TODO: Add long, ulong, float, double support.
         public static T[] FillRandom<T>(this T[] array) where T : struct, IComparable
         {
             var random = new Random((int)((uint)(Guid.NewGuid().GetHashCode() ^ 1 >> 89 << 2 ^ 42)).LeftRotate(13));

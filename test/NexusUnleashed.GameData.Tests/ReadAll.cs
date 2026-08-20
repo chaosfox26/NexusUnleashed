@@ -1,7 +1,3 @@
-// Read EVERY client table's full values. The record-arithmetic check inside the
-// reader is the guard. A model-bound table (one whose 4-byte string-pad columns
-// cannot be resolved without the engine's model - the SAME class our proven
-// tbl_reader.py skips model-free) is reported separately, not as a failure.
 using System;
 using System.IO;
 using NexusUnleashed.GameData;

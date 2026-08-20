@@ -1,12 +1,3 @@
-// NexusUnleashed - clean-room authored. End-to-end loopback: a synthetic client
-// drives the real world GameServer + WorldHandshake over a real TCP socket, proving
-// the full two-phase encrypted handshake without the game client:
-//
-//   connect -> receive 0x0003 hello (AUTH key) -> send 0x058F (AUTH key container)
-//           -> server re-keys -> receive 0x0981 world-init (WORLD key) -> verify.
-//
-// This is the client-as-oracle loop's mechanism, self-contained: the real 16042
-// client simply replaces this synthetic one. Both directions, both key phases.
 using System;
 using System.Net.Sockets;
 using System.Threading;
@@ -21,18 +12,14 @@ void Check(string n, bool ok, string d = "") { if (ok) { pass++; Console.WriteLi
 const int port = 24099;
 using var cts = new CancellationTokenSource();
 
-// 1) stand up the real world server with the real handshake.
 var world = new GameServer("127.0.0.1", port, worldChannel: true);
 WorldHandshake.Register(world);
 var serverTask = world.ListenAsync(cts.Token);
-await Task.Delay(300);   // let it bind
-
-// 2) synthetic client connects.
+await Task.Delay(300);
 using var client = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
 await client.ConnectAsync("127.0.0.1", port);
 Console.WriteLine("-- loopback client connected --");
 
-// read one complete self-inclusive frame -> (opcode, payload)
 async Task<(ushort Op, byte[] Payload)> ReadFrame()
 {
     byte[] sizeBuf = await ReadExact(4);
@@ -55,22 +42,17 @@ async Task<byte[]> ReadExact(int n)
     return buf;
 }
 
-// 3) AUTH phase: receive the 0x0003 hello, decrypt with the auth key.
 var authCrypt = new PacketCrypt(PacketCrypt.AuthChannelKey);
 var (op0, pay0) = await ReadFrame();
 Check("hello frame is a 0x03DC container", op0 == WorldPacket.ServerContainer, $"(0x{op0:X4})");
 var (helloOp, _) = WorldPacket.DecodeContainer(pay0, authCrypt);
 Check("hello decrypts (auth key) to inner opcode 0x0003", helloOp == 0x0003, $"(0x{helloOp:X4})");
 
-// 4) send the 0x058F client hello, wrapped + encrypted with the auth key.
 var clientAuth = new PacketCrypt(PacketCrypt.AuthChannelKey);
-byte[] helloBody = new byte[41];   // token-bearing body (contents don't matter to the re-key seam here)
-byte[] clientFrame = WorldPacket.EncodeClient(0x058F, helloBody, clientAuth);
+byte[] helloBody = new byte[41];byte[] clientFrame = WorldPacket.EncodeClient(0x058F, helloBody, clientAuth);
 await client.SendAsync(clientFrame, SocketFlags.None);
 Console.WriteLine("-- sent 0x058F; server should re-key + stream world entry --");
 
-// 5) WORLD phase: the server re-keyed to the dev world key; decrypt the
-//    world-init with that same world key.
 var worldCrypt = new PacketCrypt(WorldHandshake.DevWorldKey);
 var (op1, pay1) = await ReadFrame();
 Check("world frame is a 0x03DC container", op1 == WorldPacket.ServerContainer, $"(0x{op1:X4})");

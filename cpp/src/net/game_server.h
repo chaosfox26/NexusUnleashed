@@ -1,8 +1,3 @@
-// NexusUnleashed - clean-room authored. C++ port of GameServer.cs / GameSession.cs. Asio
-// TCP acceptor that spins a session per connection; frames are length-prefixed; a client
-// 0x0244 container (world/realm channel) is decrypted and its inner message dispatched.
-// Handlers are keyed by opcode and are coroutines (they co_await sends). Unknown opcodes
-// are logged, never fatal.
 #pragma once
 #include <cstdint>
 #include <functional>
@@ -23,14 +18,12 @@ public:
 
     asio::awaitable<void> Run();
 
-    // S->C realm channel uses CLEAR frames; the encrypted container is world-channel.
     asio::awaitable<void> SendClearGameMessage(uint16_t opcode, std::vector<uint8_t> body);
     asio::awaitable<void> SendGameMessage(uint16_t opcode, std::vector<uint8_t> body);
-    // Send in a container with an explicit container opcode (0x76 conn / 0x03DC account/world).
     asio::awaitable<void> SendGameMessageVia(uint16_t containerOpcode, uint16_t opcode, std::vector<uint8_t> body);
 
-    std::optional<crypto::PacketCrypt> crypt;   // set on the realm/world channel
-    long account_id = 0;                          // correlation (set from AuthSession)
+    std::optional<crypto::PacketCrypt> crypt;
+    long account_id = 0;
     std::string remote() const;
 
 private:

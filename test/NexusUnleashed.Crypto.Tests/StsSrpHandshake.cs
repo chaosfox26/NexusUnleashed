@@ -1,8 +1,3 @@
-// STS game-SRP self-consistency: the STS server (StsSrp, little-endian game SRP)
-// against the confirmed reference client (SrpReferenceClient). A successful round
-// trip — the client's own proof verifies on the server and the session keys agree
-// — proves the STS path uses the same WildStar game SRP the real client does
-// (confirmed independently by cracking the bot account's stored verifier).
 using System;
 using System.Linq;
 using NexusUnleashed.Cryptography;
@@ -19,7 +14,6 @@ public static int Run()
     byte[] salt = Rng.GenerateRandomKey(16);
     string saltHex = Convert.ToHexString(salt).ToLowerInvariant();
 
-    // register (game-SRP verifier, little-endian hex as authdb stores it)
     string vHex = SrpReferenceClient.ComputeVerifier(saltHex, user, pw);
     byte[] verifier = Convert.FromHexString(vHex);
 
@@ -33,7 +27,6 @@ public static int Run()
     Check("session keys AGREE", ok && K.SequenceEqual(cli.SessionKey), ok ? $"({K.Length}B)" : "");
     Check("server returns M2", ok && m2.Length == 32);
 
-    // wrong password rejected
     var bad = SrpReferenceClient.Respond(saltHex, user, "wrong", B);
     var srv2 = new StsSrp(salt, verifier, user); srv2.StartHandshake();
     Check("wrong password rejected", !srv2.Verify(bad.PublicA, bad.ProofM1, out _, out _));

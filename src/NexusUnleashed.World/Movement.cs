@@ -1,6 +1,3 @@
-// NexusUnleashed - clean-room authored. Per-tick movement. A generator proposes
-// the next position for an entity; the manager applies it through the safety
-// laws (finite-only, terrain-Y kept on a miss) and updates the grid.
 using System;
 using System.Numerics;
 
@@ -8,7 +5,6 @@ namespace NexusUnleashed.World;
 
 public interface IMovementGenerator
 {
-    /// <summary>Propose the next position given the current one and elapsed seconds.</summary>
     Vector3 Next(Vector3 current, float dt);
     bool Done { get; }
 }
@@ -24,14 +20,11 @@ public sealed class MovementManager
         _terrain = terrain ?? new NullTerrain();
     }
 
-    /// <summary>Advance one entity by its generator, applying the safety laws.</summary>
     public void Step(uint guid, IMovementGenerator gen, float dt)
     {
         if (!_world.Entities.TryGetValue(guid, out var e)) return;
         Vector3 proposed = gen.Next(e.Position, dt);
-        if (!Vec.IsFinite(proposed)) return;              // LAW: never move to a non-finite point
-
-        // LAW: terrain miss keeps current Y (null, not 0, not NaN).
+        if (!Vec.IsFinite(proposed)) return;
         float? h = _terrain.HeightAt(_world.WorldId, proposed.X, proposed.Z);
         float y = h ?? e.Position.Y;
         if (!float.IsFinite(y)) y = e.Position.Y;
@@ -40,11 +33,6 @@ public sealed class MovementManager
     }
 }
 
-/// <summary>
-/// Random wander within a leash radius of a home point. Creatures pick a target
-/// inside the leash and walk to it, then pick another. Pure X/Z; Y comes from
-/// terrain in the manager.
-/// </summary>
 public sealed class RandomWander : IMovementGenerator
 {
     private readonly Vector3 _home;
@@ -60,13 +48,11 @@ public sealed class RandomWander : IMovementGenerator
         _target = home;
     }
 
-    public bool Done => false;   // wanders forever
-
+    public bool Done => false;
     public Vector3 Next(Vector3 current, float dt)
     {
         if (Vec.HorizontalDistance(current, _target) < 1f)
         {
-            // pick a new target within the leash
             double ang = _rng.NextDouble() * Math.PI * 2;
             float r = (float)(_rng.NextDouble()) * _leash;
             _target = new Vector3(_home.X + r * (float)Math.Cos(ang), _home.Y,
@@ -75,7 +61,6 @@ public sealed class RandomWander : IMovementGenerator
         Vector3 dir = Vec.SafeNormalize(new Vector3(_target.X - current.X, 0, _target.Z - current.Z));
         Vector3 step = dir * (_speed * dt);
         Vector3 next = current + step;
-        // never overshoot past the leash from home
         if (Vec.HorizontalDistance(next, _home) > _leash)
             next = new Vector3(current.X, current.Y, current.Z);
         return next;

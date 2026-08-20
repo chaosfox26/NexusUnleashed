@@ -1,20 +1,12 @@
-// NexusUnleashed - clean-room authored. STS text-protocol message model.
-// Provenance: framing and tokens measured from the client's own
-// StsConnLib64.MT.dll (spec/protocol/sts.md). HTTP-shaped text protocol:
-//   POST /<Service>/<Message> STS/1.0   |   STS/1.0 <code> <text>
-//   l:<body bytes>  s:<sequence>        |   same headers
-//   blank line, then an XML body.
 using System;
 using System.Collections.Generic;
 using System.Text;
 
 namespace NexusUnleashed.Sts;
 
-/// <summary>A parsed STS request (client -> server).</summary>
 public sealed class StsRequest
 {
     public string Method = "POST";
-    /// <summary>e.g. "/Auth/LoginStart" — service + message, the routing key.</summary>
     public string Uri = "";
     public Dictionary<string, string> Headers = new(StringComparer.OrdinalIgnoreCase);
     public byte[] Body = Array.Empty<byte>();
@@ -23,20 +15,14 @@ public sealed class StsRequest
     public string BodyText => Encoding.UTF8.GetString(Body);
 }
 
-/// <summary>Builds an STS reply (server -> client).</summary>
 public static class StsReply
 {
-    public const string Version = "STS/1.0";   // measured client token
-
-    // Status line matches the frozen realm's own STS byte-for-byte: "200" then
-    // TWO spaces then "OK" (a status the client parses; single-space was silently
-    // discarded, causing a timeout-retry then error 15).
+    public const string Version = "STS/1.0";
     public const string OkStatus = Version + " 200  OK";
 
     public static byte[] Ok(int sequence, string xmlBody)
         => Build(OkStatus, sequence, Encoding.UTF8.GetBytes(xmlBody));
 
-    /// <summary>200 OK with a RAW byte body.</summary>
     public static byte[] OkRaw(int sequence, byte[] body)
         => Build(OkStatus, sequence, body);
 
@@ -58,10 +44,6 @@ public static class StsReply
     }
 }
 
-/// <summary>
-/// Incremental parser: feed bytes, get complete requests. Tolerant of partial
-/// frames (returns null until a full head+body is buffered).
-/// </summary>
 public sealed class StsParser
 {
     private readonly List<byte> _buffer = new();
@@ -71,10 +53,8 @@ public sealed class StsParser
         foreach (byte b in data) _buffer.Add(b);
     }
 
-    /// <summary>Try to pull one complete request off the buffer.</summary>
     public StsRequest? TryReadRequest()
     {
-        // find the blank line that ends the head
         int headEnd = IndexOfDoubleNewline(out int bodyStart);
         if (headEnd < 0) return null;
 
@@ -82,7 +62,6 @@ public sealed class StsParser
         string[] lines = head.Split('\n');
         var req = new StsRequest();
 
-        // request line: POST /Service/Message STS/1.0
         string[] rl = lines[0].Trim('\r').Split(' ');
         if (rl.Length >= 2) { req.Method = rl[0]; req.Uri = rl[1]; }
 
@@ -95,8 +74,7 @@ public sealed class StsParser
         }
 
         int bodyLen = req.Headers.TryGetValue("l", out var l) && int.TryParse(l, out var v) ? v : 0;
-        if (_buffer.Count < bodyStart + bodyLen) return null;   // body not yet complete
-
+        if (_buffer.Count < bodyStart + bodyLen) return null;
         req.Body = _buffer.GetRange(bodyStart, bodyLen).ToArray();
         _buffer.RemoveRange(0, bodyStart + bodyLen);
         return req;
@@ -109,9 +87,7 @@ public sealed class StsParser
         {
             if (_buffer[i] == (byte)'\n')
             {
-                // \n\n
                 if (_buffer[i + 1] == (byte)'\n') { bodyStart = i + 2; return i + 1; }
-                // \n\r\n
                 if (i + 2 < _buffer.Count && _buffer[i + 1] == (byte)'\r' && _buffer[i + 2] == (byte)'\n')
                 { bodyStart = i + 3; return i + 1; }
             }

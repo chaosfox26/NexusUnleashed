@@ -1,12 +1,3 @@
-// NexusUnleashed - clean-room authored. The engine's native world-content
-// model and loader. Field set = game facts (an entity spawn IS a creature id
-// at a position in a world with a facing, faction and display); the schema
-// and file layout are OURS, defined here, not inherited from any emulator.
-//
-// Content root layout (all TSV):
-//   spawns.tsv     entity placements (the world population)
-//   kits.tsv       creature spell kits (creatureId -> spell4 list)
-//   patrols.tsv    movement paths (entityId -> ordered nodes)
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -21,8 +12,6 @@ public sealed record SpawnRecord(
 
 public sealed record KitEntry(uint CreatureId, uint Spell4Id, string Label);
 
-// A patrol wire: entity -> client Spline2 path (nodes live in the client
-// tables; the DB carries the attachment, mode, speed and an offset).
 public sealed record PatrolWire(ulong EntityId, uint SplineId, uint Mode, float Speed, float Fx, float Fy, float Fz);
 
 public sealed class WorldContent

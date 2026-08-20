@@ -1,4 +1,3 @@
-// NexusUnleashed - clean-room authored. See game_server.h. 1:1 with GameServer/GameSession.
 #include "net/game_server.h"
 #include "net/frame.h"
 #include "net/world_packet.h"
@@ -12,8 +11,7 @@ using asio::use_awaitable;
 
 namespace nexus::net {
 
-// ---- GameSession ----
-GameSession::GameSession(tcp::socket sock, GameServer& server, bool /*worldChannel*/)
+GameSession::GameSession(tcp::socket sock, GameServer& server, bool)
     : sock_(std::move(sock)), server_(server) {}
 
 std::string GameSession::remote() const {
@@ -45,7 +43,7 @@ awaitable<void> GameSession::Dispatch(uint16_t opcode, std::vector<uint8_t> payl
     if (it != server_.handlers_.end())
         co_await it->second(*this, payload);
     else if (server_.on_unhandled)
-        server_.on_unhandled(*this, opcode, payload);   // logged, never fatal
+        server_.on_unhandled(*this, opcode, payload);
     co_return;
 }
 
@@ -59,7 +57,6 @@ awaitable<void> GameSession::Run() {
             if (n == 0) break;
             buf_.insert(buf_.end(), tmp.begin(), tmp.begin() + n);
 
-            // Slice complete frames by the self-inclusive length prefix.
             for (;;) {
                 size_t total = 0;
                 if (!GamePacketFrame::TryReadLength(buf_.data(), buf_.size(), total)) break;
@@ -68,7 +65,6 @@ awaitable<void> GameSession::Run() {
                 buf_.erase(buf_.begin(), buf_.begin() + total);
 
                 auto [opcode, payload] = GamePacketFrame::Decode(frame);
-                // RAW inbound trace (diagnostic): outer opcode, size, first bytes.
                 {
                     std::string hex; char hb[4];
                     for (size_t i = 0; i < frame.size() && i < 40; ++i) { std::snprintf(hb, sizeof hb, "%02x ", frame[i]); hex += hb; }
@@ -79,17 +75,16 @@ awaitable<void> GameSession::Run() {
                         auto [innerOp, innerBody] = WorldPacket::DecodeContainer(payload, *crypt);
                         std::printf("realm: [RAW IN] container inner=0x%04X (%zuB)\n", innerOp, innerBody.size());
                         co_await Dispatch(innerOp, innerBody);
-                    } catch (const std::exception&) { /* drop the bad container, never fatal */ }
+                    } catch (const std::exception&) {}
                 } else {
                     co_await Dispatch(opcode, payload);
                 }
             }
         }
-    } catch (const std::exception&) { /* connection closed/reset */ }
+    } catch (const std::exception&) {}
     co_return;
 }
 
-// ---- GameServer ----
 GameServer::GameServer(asio::io_context& io, const std::string& address, uint16_t port, bool worldChannel)
     : io_(io), acceptor_(io, tcp::endpoint(asio::ip::make_address(address), port)), world_channel_(worldChannel) {}
 
@@ -100,7 +95,6 @@ awaitable<void> GameServer::AcceptLoop() {
         tcp::socket sock = co_await acceptor_.async_accept(use_awaitable);
         auto session = std::make_shared<GameSession>(std::move(sock), *this, world_channel_);
         if (world_channel_) session->crypt.emplace(WorldPacket::WorldChannelSeed);
-        // Keep the session alive for the duration of its coroutine.
         co_spawn(io_, [session]() -> awaitable<void> { co_await session->Run(); }, detached);
     }
 }

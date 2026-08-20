@@ -1,4 +1,3 @@
-// NexusUnleashed - clean-room authored. See world_packet.h. 1:1 with WorldPacket.cs.
 #include "net/world_packet.h"
 #include "net/frame.h"
 #include <stdexcept>
@@ -15,9 +14,6 @@ static void WriteU32LE(uint8_t* b, uint32_t v) {
     b[2] = static_cast<uint8_t>(v >> 16); b[3] = static_cast<uint8_t>(v >> 24);
 }
 
-// container payload = [u32 innerLen self-inclusive][encrypted [u16 op][body]].
-// serverToClient selects the cipher: S->C uses the QWORD cipher (EncryptForClient); C->S uses
-// the BYTE cipher (Encrypt) — the two directions differ (see packet_crypt.h).
 static std::vector<uint8_t> BuildContainerPayload(uint16_t innerOpcode,
                                                   const std::vector<uint8_t>& innerBody,
                                                   crypto::PacketCrypt& crypt, bool serverToClient) {

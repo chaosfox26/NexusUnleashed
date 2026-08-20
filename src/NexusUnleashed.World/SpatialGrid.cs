@@ -1,7 +1,3 @@
-// NexusUnleashed - clean-room authored. A uniform spatial hash over the X/Z
-// plane (Y is up) for interest management: which entities are near a point.
-// Cell size is chosen so a vision radius spans a small, fixed neighborhood -
-// the classic grid partition every MMO uses; the shape is standard, not copied.
 using System;
 using System.Collections.Generic;
 using System.Numerics;
@@ -63,12 +59,6 @@ public sealed class SpatialGrid
         }
     }
 
-    /// <summary>
-    /// All entity guids whose CELL is within the neighborhood covering `radius`
-    /// around `center`. A coarse pre-filter - the caller does the exact distance
-    /// test. Never misses an in-range entity (that was the frozen realm's vanish
-    /// bug: a search that missed an entity plainly inside range).
-    /// </summary>
     public void QueryNeighborhood(Vector3 center, float radius, List<uint> outGuids)
     {
         outGuids.Clear();

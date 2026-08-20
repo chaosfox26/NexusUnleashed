@@ -1,16 +1,12 @@
-// NexusUnleashed - clean-room authored. The write side of the bit-packed wire
-// format (see PacketReader for provenance). LSB-first within each byte.
 using System;
 using System.Collections.Generic;
 
 namespace NexusUnleashed.Network;
 
-/// <summary>Writes bit-packed fields, LSB-first, matching the client's reader.</summary>
 public sealed class PacketWriter
 {
     private readonly List<byte> _data = new();
-    private int _bitPos;   // 0..7 within the current (last) byte
-
+    private int _bitPos;
     public long BitsWritten => (long)(_data.Count == 0 ? 0 : _data.Count - 1) * 8
                                + (_bitPos == 0 && _data.Count > 0 ? 8 : _bitPos);
 
@@ -63,7 +59,6 @@ public sealed class PacketWriter
             _data.Add(b);
     }
 
-    /// <summary>Snapshot the written buffer (byte-aligned).</summary>
     public byte[] ToArray()
     {
         AlignToByte();

@@ -1,13 +1,3 @@
-// NexusUnleashed - clean-room authored. Reads Carbine's .tbl (GameTable) binary
-// format. Provenance: the format is documented entirely in OUR OWN datamine and
-// implemented in our Python tbl_reader.py (equivalence-gated to 10.27M values
-// against the engine). The binary layout is a fact about Carbine's files; this
-// C# reader is authored from our own spec, not from any server's source.
-//
-// Layout (our datamine): signature 'LBTD' 0x4454424C, then a 96-byte header
-// (Version + 11 u64), field defs (24 bytes each: nameLen u64, nameOff u64,
-// type u16, +u16 +u32), a 16-aligned UTF-16LE column-name blob, fixed-size
-// records, then a UTF-16LE string table.
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -34,22 +24,14 @@ public sealed class GameTable
 {
     public string Name = "";
     public IReadOnlyList<GameField> Fields = Array.Empty<GameField>();
-    /// <summary>Row values, boxed by column. uint / float / ulong / string / bool.</summary>
     public IReadOnlyList<object[]> Rows = Array.Empty<object[]>();
 }
 
 public static class GameTableReader
 {
-    private const uint Signature = 0x4454424C;   // 'LBTD'
-    private const int HeaderSize = 96;
+    private const uint Signature = 0x4454424C;    private const int HeaderSize = 96;
     private const int FieldSize = 24;
 
-    /// <summary>
-    /// Read only the table's schema (name + typed field definitions), skipping
-    /// all row parsing. This is what the code generator needs, and it is immune
-    /// to row-layout quirks (e.g. the string-column padding) that only affect
-    /// value reads.
-    /// </summary>
     public static GameTable ReadSchema(string path)
     {
         byte[] data = File.ReadAllBytes(path);
@@ -94,10 +76,6 @@ public static class GameTableReader
         if (sig != Signature)
             throw new InvalidDataException($"{Path.GetFileName(path)}: bad signature 0x{sig:X8}");
 
-        // header: u32 sig, u32 version, then 11 u64 (offsets from our datamine
-        // spec / tbl_reader.py): nameLen@8, unk1@16, recordSize@24,
-        // fieldCount@32, fieldOffset@40, recordCount@48, totalRecordSize@56,
-        // recordOffset@64, maxId@72, lookupOffset@80, unk2@88.
         ulong recordSize = s.U64(24);
         ulong fieldCount = s.U64(32);
         ulong fieldOffset = s.U64(40);
@@ -105,7 +83,6 @@ public static class GameTableReader
         ulong totalRecordSize = s.U64(56);
         ulong recordOffset = s.U64(64);
 
-        // field definitions
         var fields = new List<(int nameLen, int nameOff, FieldType type)>();
         int pos = HeaderSize + (int)fieldOffset;
         for (ulong i = 0; i < fieldCount; i++)
@@ -117,7 +94,6 @@ public static class GameTableReader
             pos += FieldSize;
         }
 
-        // column names: 16-aligned blob between field defs and records
         int namesStart = (HeaderSize + (int)fieldOffset + FieldSize * (int)fieldCount + 15) & ~15;
         var cols = new List<GameField>();
         for (int i = 0; i < fields.Count; i++)
@@ -129,7 +105,6 @@ public static class GameTableReader
             cols.Add(new GameField { Name = name, Type = ftype });
         }
 
-        // string table sits after the fixed-size records
         long recordsBytes = (long)recordSize * (long)recordCount;
         int stOff = HeaderSize + (int)recordOffset + (int)recordsBytes;
         int stLen = (int)((long)totalRecordSize - recordsBytes);
@@ -137,10 +112,6 @@ public static class GameTableReader
         int stEnd = stOff + stLen;
         string StringAt(int off)
         {
-            // UTF-16LE, double-null terminated, char-aligned. Offsets are clamped
-            // to the string-table bounds (matching the proven tbl_reader.py, whose
-            // slice semantics clamp rather than throw) so a stray offset yields ""
-            // instead of crashing the whole table read.
             int p = stOff + off;
             if (off < 0 || p >= stEnd) return "";
             int end = p;
@@ -149,14 +120,6 @@ public static class GameTableReader
             return Encoding.Unicode.GetString(data, p, end - p);
         }
 
-        // Structural pad mask (file-true, ported from our own tbl_reader.py which
-        // is equivalence-gated to the engine's dumps). The engine pads 4 bytes
-        // after SOME string columns; the condition is model-bound and invisible to
-        // a model-free reader, so we recover it from record arithmetic: base field
-        // widths + 4*pads must equal recordSize exactly. Candidate pad columns are
-        // string columns whose row-0 first offset is 0 and whose next field is not
-        // a string; trailing candidates are dropped until the arithmetic closes,
-        // which reproduces the engine's suppression byte-for-byte.
         int[] widths = new int[fields.Count];
         int baseWidth = 0;
         for (int f = 0; f < fields.Count; f++)
@@ -230,7 +193,6 @@ public static class GameTableReader
         };
     }
 
-    /// <summary>Little-endian primitive reads over the file bytes.</summary>
     private readonly struct SpanCursor
     {
         private readonly byte[] _d;

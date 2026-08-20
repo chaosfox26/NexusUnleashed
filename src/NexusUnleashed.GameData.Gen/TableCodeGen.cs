@@ -1,8 +1,3 @@
-// NexusUnleashed - clean-room authored. Generates strongly-typed C# records from
-// a client .tbl schema. The schema IS a fact about Carbine's file (field names +
-// types), read by our own GameTableReader; the emitted code is mechanical. This
-// is the architecture's "facts -> generated" path: table models are not hand
-// authored, they are produced from the client's own column definitions.
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -35,7 +30,6 @@ public static class TableCodeGen
         _ => $"(uint)row[{index}]",
     };
 
-    // C# identifier from a column name (dedupe/sanitize kept deterministic).
     private static string Ident(string raw, HashSet<string> used)
     {
         var sb = new StringBuilder();
@@ -51,7 +45,6 @@ public static class TableCodeGen
 
     private static char ToUpperInvariantFirst(char c) => char.ToUpperInvariant(c);
 
-    /// <summary>Emit a record + reader for one table into `namespace`.</summary>
     public static string Generate(string tblPath, string ns)
     {
         GameTable t = GameTableReader.ReadSchema(tblPath);
@@ -73,13 +66,11 @@ public static class TableCodeGen
         sb.AppendLine($"namespace {ns};");
         sb.AppendLine();
 
-        // record
         sb.Append($"public sealed record {typeName}Entry(");
         sb.Append(string.Join(", ", props.Select(p => $"{ClrType(p.Type)} {p.Prop}")));
         sb.AppendLine(");");
         sb.AppendLine();
 
-        // reader
         sb.AppendLine($"public static class {typeName}Table");
         sb.AppendLine("{");
         sb.AppendLine($"    public static IReadOnlyList<{typeName}Entry> Load(string tblPath)");

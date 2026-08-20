@@ -1,4 +1,3 @@
-// NexusUnleashed - clean-room authored. See sts_srp.h. 1:1 with StsSrp.cs.
 #include "crypto/sts_srp.h"
 #include <openssl/bn.h>
 #include <openssl/sha.h>
@@ -8,7 +7,6 @@
 
 namespace nexus::crypto {
 
-// WildStar SRP modulus N (128 bytes, little-endian) and generator g = 2.
 static const uint8_t NB[128] = {
     0xE3,0x06,0xEB,0xC0,0x2F,0x1D,0xC6,0x9F,0x5B,0x43,0x76,0x83,0xFE,0x38,0x51,0xFD,
     0x9A,0xAA,0x6E,0x97,0xF4,0xCB,0xD4,0x2F,0xC0,0x6C,0x72,0x05,0x3C,0xBC,0xED,0x68,
@@ -33,19 +31,17 @@ static Bytes combine(std::initializer_list<Bytes> parts) {
     for (auto& p : parts) r.insert(r.end(), p.begin(), p.end());
     return r;
 }
-// Word-order reversal in 4-byte groups (ReverseUInt32).
 static Bytes reverse_uint32(const Bytes& d) {
     Bytes r(d.size());
     for (size_t i = 0; i < d.size(); i += 4)
         std::copy(d.begin() + i, d.begin() + i + 4, r.begin() + (r.size() - (i + 4)));
     return r;
 }
-// BIGNUM helpers (LE wire <-> BN).
 static BIGNUM* le_to_bn(const uint8_t* le, size_t len) { return BN_lebin2bn(le, static_cast<int>(len), nullptr); }
 static BIGNUM* le_to_bn(const Bytes& le) { return le_to_bn(le.data(), le.size()); }
 static Bytes bn_to_le(const BIGNUM* v, int count) {
     Bytes out(static_cast<size_t>(count));
-    BN_bn2lebinpad(v, out.data(), count);   // pads/truncates to `count` LE bytes
+    BN_bn2lebinpad(v, out.data(), count);
     return out;
 }
 
@@ -63,34 +59,31 @@ StsSrp::StsSrp(const Bytes& salt, const Bytes& verifier, const std::string& user
     : p_(std::make_unique<Impl>()) {
     p_->N = le_to_bn(NB, 128);
     p_->g = BN_new(); BN_set_word(p_->g, 2);
-    // k = H(N | g) with word-order reversal, read LE.
     Bytes kh = reverse_uint32(sha256(combine({ Bytes(NB, NB + 128), Bytes(gBytes, gBytes + 4) })));
     p_->k = le_to_bn(kh);
     p_->salt = salt;
-    p_->v = le_to_bn(verifier);                       // authdb v is little-endian
+    p_->v = le_to_bn(verifier);
     p_->I = sha256(Bytes(username.begin(), username.end()));
 }
 
 StsSrp::~StsSrp() = default;
 
 std::vector<uint8_t> StsSrp::StartHandshake() {
-    // b random 0x20 bytes -> LE bignum.
     uint8_t rnd[0x20];
     if (RAND_bytes(rnd, sizeof(rnd)) != 1) throw std::runtime_error("RAND_bytes failed");
     p_->b = le_to_bn(rnd, sizeof(rnd));
 
     BN_CTX* ctx = p_->ctx;
-    BIGNUM* gb = BN_new(); BN_mod_exp(gb, p_->g, p_->b, p_->N, ctx);   // g^b mod N
-    BIGNUM* kv = BN_new(); BN_mul(kv, p_->k, p_->v, ctx);             // k*v
-    BIGNUM* sum = BN_new(); BN_add(sum, kv, gb);                       // k*v + g^b
-    BIGNUM* B = BN_new(); BN_mod(B, sum, p_->N, ctx);                  // mod N
+    BIGNUM* gb = BN_new(); BN_mod_exp(gb, p_->g, p_->b, p_->N, ctx);
+    BIGNUM* kv = BN_new(); BN_mul(kv, p_->k, p_->v, ctx);
+    BIGNUM* sum = BN_new(); BN_add(sum, kv, gb);
+    BIGNUM* B = BN_new(); BN_mod(B, sum, p_->N, ctx);
 
     b_wire_ = bn_to_le(B, 0x80);
     BN_free(gb); BN_free(kv); BN_free(sum); BN_free(B);
     return b_wire_;
 }
 
-// The WildStar interleaved session key from S (128-byte LE).
 static Bytes interleave_session_key(const Bytes& s) {
     auto it0 = std::find(s.begin(), s.end(), uint8_t(0));
     int first0 = (it0 == s.end()) ? -1 : static_cast<int>(it0 - s.begin());
@@ -120,18 +113,15 @@ bool StsSrp::Verify(const Bytes& aLe, const Bytes& m1, Bytes& m2, Bytes& session
     if (BN_is_zero(A) || BN_is_zero(Amod)) { BN_free(A); BN_free(Amod); return false; }
     BN_free(Amod);
 
-    // u = H(A | B) word-reversed, LE.
     Bytes uh = reverse_uint32(sha256(combine({ aLe, b_wire_ })));
     BIGNUM* u = le_to_bn(uh);
 
-    // S = (A * v^u mod N)^b mod N
     BIGNUM* vu = BN_new(); BN_mod_exp(vu, p_->v, u, p_->N, ctx);
     BIGNUM* base = BN_new(); BN_mod_mul(base, A, vu, p_->N, ctx);
     BIGNUM* S = BN_new(); BN_mod_exp(S, base, p_->b, p_->N, ctx);
 
     Bytes K = interleave_session_key(bn_to_le(S, 0x80));
 
-    // M1 = H( H(N)^H(g) | I | salt | A | B | K )
     Bytes nH = sha256(Bytes(NB, NB + 128));
     Bytes gH = sha256(Bytes(gBytes, gBytes + 4));
     for (size_t i = 0; i < nH.size(); ++i) nH[i] ^= gH[i];
@@ -141,7 +131,7 @@ bool StsSrp::Verify(const Bytes& aLe, const Bytes& m1, Bytes& m2, Bytes& session
     if (ok) { int d = 0; for (size_t i = 0; i < expected.size(); ++i) d |= expected[i] ^ m1[i]; ok = (d == 0); }
 
     if (ok) {
-        m2 = sha256(combine({ aLe, m1, K }));   // M2 = H(A | M1 | K)
+        m2 = sha256(combine({ aLe, m1, K }));
         sessionKey = K;
     }
     BN_free(A); BN_free(u); BN_free(vu); BN_free(base); BN_free(S);

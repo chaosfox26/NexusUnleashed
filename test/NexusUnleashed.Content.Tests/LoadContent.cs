@@ -1,5 +1,3 @@
-// Content-loader proof against the REAL exported realm data:
-// counts must equal the live DB's own counts (measured at export time).
 using System;
 using System.Linq;
 using NexusUnleashed.Content;
@@ -21,7 +19,6 @@ Check("patrol wires", c.Patrols.Count == 8059, $"({c.Patrols.Count})");
 Check("kit entries", c.Kits.Values.Sum(k => k.Count) == 20020, $"({c.Kits.Values.Sum(k => k.Count)})");
 Check("kit creatures", c.Kits.Count > 3000, $"({c.Kits.Count})");
 
-// spot checks: a known spawn world and a known kit
 var worlds = c.SpawnsByWorld.Select(g => g.Key).ToHashSet();
 Check("world 990 populated", worlds.Contains(990u), $"({c.SpawnsByWorld[990u].Count()} spawns)");
 Check("world 3335 (Arcterra) populated", worlds.Contains(3335u), $"({c.SpawnsByWorld[3335u].Count()} spawns)");

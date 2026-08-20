@@ -1,4 +1,4 @@
-﻿// Copyright (c) Arctium.
+// Copyright (c) Arctium.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using System;
@@ -94,7 +94,6 @@ namespace NexusUnleashed.Cryptography
         {
             A = a.ToBigInteger();
 
-            // Don't continue if A == 0 (mod N)
             if (A.IsZero || (A % BN).IsZero)
                 return false;
 
@@ -151,7 +150,6 @@ namespace NexusUnleashed.Cryptography
             for (var i = 0; i < NHash.Length; i++)
                 NHash[i] ^= gHash[i];
 
-            // Concat all variables for M1 hash
             var hash = NHash.Combine(I, S, a, B, SessionKey);
 
             ClientM = sha256.ComputeHash(hash);

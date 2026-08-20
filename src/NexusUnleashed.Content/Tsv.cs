@@ -1,6 +1,3 @@
-// NexusUnleashed - clean-room authored. TSV table reader: the native content
-// format of this engine. Header row of column names, tab-separated, UTF-8.
-// Our restoration data (spawns, kits, patrols, floors) ships in this format.
 using System;
 using System.Collections.Generic;
 using System.Globalization;

@@ -1,7 +1,3 @@
-// NexusUnleashed - clean-room authored. The server host entry point. Boots the
-// STS login server and the world GameServer from config and runs until
-// stopped. Systems attach to this host as they are built and pinned against
-// the oracle.
 using System;
 using System.Collections.Concurrent;
 using System.Threading;
@@ -23,16 +19,12 @@ internal static class Program
         using var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
 
-        // STS login server - flow pinned from the client, bodies UNPINNED.
         var sts = new StsServer(cfg.BindAddress, cfg.StsPort);
         IAccountStore accounts = string.IsNullOrWhiteSpace(cfg.AuthDatabase)
             ? new InMemoryAccountStore()
             : new NexusUnleashed.Database.DbAccountStore(cfg.AuthDatabase);
         AuthFlow.Register(sts, accounts);
 
-        // Clean capture hook: record exactly what a real client sends to STS (the
-        // port is clear-text), which pins the login XML schema from the client's
-        // OWN bytes — the clean source #1. Writes sts-capture.log beside the exe.
         var stsCapturePath = "sts-capture.log";
         sts.RequestObserver = req =>
         {
@@ -47,14 +39,6 @@ internal static class Program
         };
         Log.Info($"sts login server listening ({accounts.GetType().Name}; capturing client requests -> {stsCapturePath}).");
 
-        // Auth game server - CLEAR channel (port 23115). Sends the clear 0x0003
-        // hello on connect and logs every client opcode (capture stage).
-        // The realm/auth connection (port 23115): opens with a CLEAR 0x0003 hello,
-        // then speaks the auth-key encrypted container protocol (0x0244 in). The
-        // same WorldHandshake serves it — its OnConnected keys off Crypt==null to
-        // bootstrap clear then switch to container mode.
-        // Character-list provider: serve the authenticated account's own characters
-        // from characterdb, serialized to the client-derived 0x0117 layout.
         if (!string.IsNullOrWhiteSpace(cfg.AuthDatabase))
         {
             var charStore = new NexusUnleashed.Database.DbCharacterStore(cfg.AuthDatabase);
@@ -70,9 +54,6 @@ internal static class Program
         WorldHandshake.Register(auth);
         Log.Info($"realm/auth server listening on {cfg.AuthPort} (clear 0x0003 hello, then container).");
 
-        // World game server - encrypted packed-container channel (0x03DC/0x0244,
-        // static-seeded PacketCrypt). The handshake sends the 0x0003 hello on
-        // connect and routes the client's login messages toward world entry.
         var world = new GameServer(cfg.BindAddress, cfg.WorldPort, worldChannel: true);
         WorldHandshake.Register(world);
         world.OnUnhandled = (s, opcode, body) =>
@@ -90,11 +71,6 @@ internal static class Program
     }
 }
 
-/// <summary>
-/// Development account store: accounts live in memory until the DB layer
-/// lands. SRP credentials are generated on first sight so the flow can be
-/// exercised end to end without a database.
-/// </summary>
 internal sealed class InMemoryAccountStore : IAccountStore
 {
     private readonly ConcurrentDictionary<string, (byte[] Salt, byte[] Verifier)> _accounts = new(StringComparer.OrdinalIgnoreCase);
@@ -108,8 +84,7 @@ internal sealed class InMemoryAccountStore : IAccountStore
         {
             byte[] salt = new byte[32];
             System.Security.Cryptography.RandomNumberGenerator.Fill(salt);
-            return (salt, Array.Empty<byte>());   // verifier computed when SRP bodies are pinned
-        });
+            return (salt, Array.Empty<byte>());        });
         return Task.FromResult<(byte[], byte[])?>(creds);
     }
 

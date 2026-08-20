@@ -1,7 +1,3 @@
-// NexusUnleashed - clean-room authored. The game-data service: loads the core
-// client tables + localization once and exposes typed lookups for the world
-// layer (spawning needs Creature2, casting needs Spell4, etc.). All data is
-// Carbine's; this is the query surface over it.
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -34,7 +30,6 @@ public sealed class GameDataService
         if (File.Exists(bin)) Text = TextTable.Read(bin);
     }
 
-    /// <summary>Localized display name of a creature, or "" if unknown.</summary>
     public string CreatureName(uint creatureId)
         => Creatures.TryGetValue(creatureId, out var c) && Text.TryGetValue(c.LocalizedTextIdName, out var n) ? n : "";
 

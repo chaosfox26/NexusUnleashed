@@ -1,5 +1,3 @@
-// STS parser proof: framed requests survive parse, including split delivery
-// (bytes arriving in fragments) and pipelined back-to-back messages.
 using System;
 using System.Text;
 using NexusUnleashed.Sts;
@@ -19,7 +17,6 @@ byte[] Frame(string uri, int seq, string body)
 }
 byte[] Combine(byte[] a, byte[] b) { var r = new byte[a.Length + b.Length]; a.CopyTo(r, 0); b.CopyTo(r, a.Length); return r; }
 
-// 1. whole frame
 {
     var p = new StsParser();
     p.Feed(Frame("/Auth/LoginStart", 3, "<Content>chara</Content>"));
@@ -30,7 +27,6 @@ byte[] Combine(byte[] a, byte[] b) { var r = new byte[a.Length + b.Length]; a.Co
     Check("body", r.BodyText == "<Content>chara</Content>");
     Check("buffer drained", p.TryReadRequest() == null);
 }
-// 2. byte-at-a-time delivery
 {
     var p = new StsParser();
     byte[] f = Frame("/Sts/Connect", 1, "<c/>");
@@ -38,7 +34,6 @@ byte[] Combine(byte[] a, byte[] b) { var r = new byte[a.Length + b.Length]; a.Co
     foreach (byte b in f) { p.Feed(new[] { b }); r ??= p.TryReadRequest(); }
     Check("fragmented delivery", r != null && r.Uri == "/Sts/Connect" && r.BodyText == "<c/>");
 }
-// 3. two pipelined frames in one feed
 {
     var p = new StsParser();
     p.Feed(Combine(Frame("/Sts/Ping", 5, ""), Frame("/Auth/KeyData", 6, "<k>x</k>")));
@@ -46,7 +41,6 @@ byte[] Combine(byte[] a, byte[] b) { var r = new byte[a.Length + b.Length]; a.Co
     Check("pipelined #1", a != null && a.Uri == "/Sts/Ping" && a.Body.Length == 0);
     Check("pipelined #2", b != null && b.Uri == "/Auth/KeyData" && b.BodyText == "<k>x</k>");
 }
-// 4. reply framer shape
 {
     string reply = Encoding.ASCII.GetString(StsReply.Ok(7, "<T>ok</T>"));
     Check("reply status line", reply.StartsWith("STS/1.0 200 OK\r\n"));

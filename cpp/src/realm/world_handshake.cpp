@@ -1,10 +1,9 @@
-// NexusUnleashed - clean-room authored. See world_handshake.h. 1:1 with WorldHandshake.cs.
 #include "realm/world_handshake.h"
 #include "net/world_packet.h"
 #include "proto/character_list.h"
 #include "proto/character_create.h"
 #include "proto/account_realm.h"
-#include "sts/auth_flow.h"        // AuthSession
+#include "sts/auth_flow.h"
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -13,9 +12,6 @@
 #include <vector>
 
 namespace {
-// Experimentation injector: inject.txt lines "<opcodeHex> <bodyHex>" are sent as CLEAR
-// frames on realm-enter (before the char list). Lets us probe the account-retrieval
-// handshake without rebuilding. Absent file = no-op.
 struct InjectMsg { uint16_t opcode; std::vector<uint8_t> body; };
 static std::vector<InjectMsg> LoadInject() {
     std::vector<InjectMsg> out;
@@ -36,7 +32,6 @@ static std::vector<InjectMsg> LoadInject() {
     return out;
 }
 
-// Canonical hex+ascii dump (16 bytes/row) for pinning unknown wire payloads offline.
 static std::string HexDump(const std::vector<uint8_t>& b) {
     static const char* H = "0123456789abcdef";
     std::string out;
@@ -69,18 +64,14 @@ std::function<std::vector<uint8_t>(long)> WorldHandshake::CharacterListBodyProvi
 std::function<uint64_t(long, const std::vector<uint8_t>&)> WorldHandshake::CreateCharacterProvider;
 std::function<bool(long, uint64_t)> WorldHandshake::DeleteCharacterProvider;
 std::vector<std::pair<uint16_t, std::vector<uint8_t>>> WorldHandshake::WorldEntrySequence;
-bool WorldHandshake::SendAccountData = false;  // these break the realm connection if sent at the
-bool WorldHandshake::SendRealmList = false;    // "Connecting to realm" stage; hold until the right step.
+bool WorldHandshake::SendAccountData = false;
+bool WorldHandshake::SendRealmList = false;
 bool WorldHandshake::IncludeRealm = true;
-std::string WorldHandshake::RealmName = "Evindra";  // overridden from realm.json at boot (main.cpp)
+std::string WorldHandshake::RealmName = "Evindra";
 std::string WorldHandshake::RealmHost = "127.0.0.1";
 uint32_t WorldHandshake::RealmPort = 24000;
 
-// The captured 0x0003 hello body (47 bytes after the opcode).
 std::vector<uint8_t> WorldHandshake::HelloBody() {
-    // Byte-for-byte the C# HelloBodyHex (WorldHandshake.cs): the 0b14332f01 stamp sits
-    // at byte 26. The client validates message definitions from this — a shifted stamp
-    // is "Message Definitions Mismatch".
     static const uint8_t b[] = {
         0xaa,0x3e,0x00,0x00,0x01,0x00,0x00,0x00,0x15,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
         0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x0b,0x14,0x33,0x2f,0x01,0x00,
@@ -91,55 +82,31 @@ std::vector<uint8_t> WorldHandshake::HelloBody() {
 
 void WorldHandshake::Register(net::GameServer& server) {
     server.on_connected = [](net::GameSession& s) -> awaitable<void> {
-        // Auth/realm channel: the client accepts a CLEAR 0x0003 hello, then speaks the
-        // auth-key container protocol. Send clear, then switch to container mode.
         std::printf("realm: client connected %s - clear 0x0003 hello, then container mode\n", s.remote().c_str());
         co_await s.SendClearGameMessage(0x0003, HelloBody());
         s.crypt.emplace(net::WorldPacket::WorldChannelSeed);
         co_return;
     };
 
-    // Client realm-enter (token-bearing). Serve the char list (validated wire format).
     server.On(0x0592, [](net::GameSession& s, const std::vector<uint8_t>& body) -> awaitable<void> {
         std::printf("realm: <- 0x0592 realm-enter (%zuB)\n", body.size());
 
-        // Realm-hello RESPONSE: opcode 0x0591 (u32, bit0 = flag). The client's connection
-        // dispatcher (WS+0x370D0) advances the connection from state 6 -> state 9 on receiving
-        // this (guard: state must be 6 or 8, which is exactly where it parks). Without it the
-        // connection never completes and the account state never arms. Derived from the client.
         {
-            std::vector<uint8_t> b = { 0x01, 0x00, 0x00, 0x00 }; // u32=1 (bit0 set)
-            co_await s.SendGameMessage(0x0591, b);   // 0x76 container (PROVEN: decrypts + reaches
+            std::vector<uint8_t> b = { 0x01, 0x00, 0x00, 0x00 };
+            co_await s.SendGameMessage(0x0591, b);
             std::printf("realm: -> 0x0591 realm-hello response (0x76 container; conn 6->9)\n");
         }
-        // 0x3db: connection handshake step 2 (at state 9) -> installs the SECOND (0x3dc) cipher,
-        // state 9->10.
         {
             auto b3db = proto::AccountRealmMessages::Build3db();
             co_await s.SendGameMessage(0x03db, b3db);
             std::printf("realm: -> 0x03db conn handshake step 2 (0x76 container; conn 9->10, %zuB)\n", b3db.size());
         }
-        // NOTE: connection completion (op-3 on the realm lane) does NOT happen over this socket —
-        // the realm lane is its OWN connection. After 0x3db the client dials the realm address we
-        // put in the 0x3db body (127.0.0.1:world_port) and the char-select handshake happens there.
 
-        // Experimentation: inject probe messages (inject.txt) before the char list.
         for (const auto& m : LoadInject()) {
             co_await s.SendClearGameMessage(m.opcode, m.body);
             std::printf("realm: -> [inject] 0x%04X (%zuB)\n", m.opcode, m.body.size());
         }
 
-        // Account-retrieval handshake: advance past "Retrieving Account Information".
-        //   0x7A1 account data -> account state 1->2
-        //   0x761 realm list   -> fires RealmListChanged + NetworkStatus(nil) => overlay clears,
-        //                         client advances to RealmSelect. Empty list still advances.
-        // Realm-channel S->C is CLEAR framing (PROVEN LIVE 2026-08-20): the client's inner-msg
-        // Read runs on a clear 0x761 (eax=0) but NOT on a 0x03DC container (client can't decode
-        // our S->C container). So encryption/container is a red herring here; the block is that
-        // the connection handshake never completes, so the account state never arms to dispatch.
-        // Account/realm/char data go via the SECOND (0x03DC) container, whose decrypt cipher the
-        // client installs when it processes 0x3db (state 9->10). The connection handshake (0x591,
-        // 0x3db) uses 0x76; account data uses 0x03DC (a different channel -> the account state).
         if (SendAccountData) {
             auto acctBody = proto::AccountRealmMessages::BuildAccountData();
             co_await s.SendGameMessageVia(0x03DC, proto::AccountRealmMessages::OpAccountData, acctBody);
@@ -150,8 +117,8 @@ void WorldHandshake::Register(net::GameServer& server) {
             if (IncludeRealm) {
                 proto::RealmEntry r;
                 r.Id = 1; r.Name = RealmName;
-                r.PvpType = 2; r.Status = 4; r.Population = 0;   // 2 = RP-PvE, Status 4 = Up (online; 0 showed "?"). See 0x07A4 handler.
-                r.Host = RealmHost; r.AddrField10 = RealmPort;   // reconnect target (NEEDS LIVE VERIFY)
+                r.PvpType = 2; r.Status = 4; r.Population = 0;
+                r.Host = RealmHost; r.AddrField10 = RealmPort;
                 realms.push_back(r);
             }
             auto realmBody = proto::AccountRealmMessages::BuildRealmList(realms);
@@ -178,17 +145,9 @@ void WorldHandshake::Register(net::GameServer& server) {
 
 void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
     server.on_connected = [](net::GameSession& s) -> awaitable<void> {
-        // The connection object is already at state 10 (set by 0x3db on the auth socket); this
-        // socket is bound to its realm lane (channel index 1). A CLEAR 0x0003 takes the client's
-        // hello path, which validates against a fixed channel id and is dropped on the realm lane
-        // (proven: it never reached the connection dispatcher). An ENCRYPTED 0x76 container routes
-        // through the multi-lane dispatch, matches the realm lane, and op-3 hits sub_140038120 —
-        // which creates the account object and completes the connection (state 10->11).
         s.crypt.emplace(net::WorldPacket::WorldChannelSeed);
         std::printf("realm-conn: -> 0x0003 (encrypted 0x76 container) on realm lane\n");
         co_await s.SendGameMessage(0x0003, HelloBody());
-        // The client is now at char-select ("Retrieving Characters"). Serve the account's
-        // character list (0x0117). Empty list -> the "Create Character" button (char creator).
         long acc = sts::AuthSession::LastAccountId();
         if (CharacterListBodyProvider) {
             auto charBody = CharacterListBodyProvider(acc);
@@ -197,28 +156,18 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
         }
         co_return;
     };
-    // 0x058F = the client's realm-enter (token-bearing). It is the LAST message ciphered with
-    // the auth key (WorldChannelSeed): right after sending it, the client re-keys its channel to
-    // the fixed realm-lane key. So we re-key our session cipher here too — every C->S message
-    // after this (the char-create bundle, world-enter requests) is RealmLaneKey, not WorldChannelSeed.
-    // (This message itself was already decoded with the auth key before this handler ran.)
+
     server.On(0x058F, [](net::GameSession& s, const std::vector<uint8_t>& body) -> awaitable<void> {
         std::printf("realm-conn: <- 0x058F realm-enter (%zuB) -> RE-KEY channel to RealmLaneKey\n", body.size());
         s.crypt.emplace(net::WorldPacket::RealmLaneKey);
         co_return;
     });
 
-    // 0x07A4 = the client's realm-list REQUEST (the "Change Your Realm" screen). Without a reply it
-    // hangs on "Retrieving realm list". Answer with the realm list (0x0761) carrying our realm entry
-    // (Evindra). Post-re-key the realm lane is the world channel, so it rides the 0x03DC container.
     server.On(0x07A4, [](net::GameSession& s, const std::vector<uint8_t>&) -> awaitable<void> {
         std::vector<proto::RealmEntry> realms;
         proto::RealmEntry r;
         r.Id = 1; r.Name = RealmName;
-        r.PvpType = 2; r.Status = 4; r.Population = 0;   // Status 4 = Up (online; 0=Unknown showed "?")   // 2 = RP-PvE (restoration-ready; the stock
-                                                         // client shows "PvE" until its UI archive
-                                                         // gains the RP branch — see
-                                                         // Claude/Context/RP-PVE-CLIENT-UI-BLOCKER.md)
+        r.PvpType = 2; r.Status = 4; r.Population = 0;
         r.Host = RealmHost; r.AddrField10 = RealmPort;
         realms.push_back(r);
         auto realmBody = proto::AccountRealmMessages::BuildRealmList(realms);
@@ -228,9 +177,6 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
         co_return;
     });
 
-    // 0x07DF = the client entered the selected realm from the "Change Your Realm" screen
-    // (body = u32 realm id). Without a reply it hangs on "Retrieving Characters". Serve the
-    // account's character list (0x0117) so char-select comes up, same as the initial connect.
     server.On(0x07DF, [](net::GameSession& s, const std::vector<uint8_t>&) -> awaitable<void> {
         long acc = sts::AuthSession::LastAccountId();
         if (CharacterListBodyProvider) {
@@ -241,31 +187,21 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
         co_return;
     });
 
-    // 0x025C = ClientCharacterCreate (Enter Game on the creator's Finalize page). After the
-    // realm-lane re-key the body is readable: [u32 total][u16 0x025B][u32 flags][wide name]
-    // [u32 appearance...]. We parse the name, persist, refresh the list, and send the 0xDC result.
     server.On(proto::CharacterCreateRequest::Opcode, [](net::GameSession& s, const std::vector<uint8_t>& body) -> awaitable<void> {
         std::printf("realm-conn: <- 0x025C CharacterCreate (%zuB)\n%s\n",
                     body.size(), HexDump(body).c_str());
         long acc = sts::AuthSession::LastAccountId();
 
-        // Persist the new character (host-wired). The name is NOT in this packet (the client
-        // sends it in a separate name-check); fields are best-effort for now — the milestone
-        // is making Enter Game advance into world entry.
         uint64_t newId = 0;
         if (CreateCharacterProvider) newId = CreateCharacterProvider(acc, body);
 
         if (newId == 0) {
-            // Could not create → tell the client it failed rather than hang. Post-re-key ->0x03DC.
             co_await s.SendGameMessageVia(0x03DC, proto::CharacterCreateResult::Opcode,
                 proto::CharacterCreateResult::Build(0, proto::CharacterCreateResult::GenericFail));
             std::printf("realm-conn: -> 0x00DC create result FAIL via 0x03DC (no id)\n");
             co_return;
         }
 
-        // Success: refresh the character list so the client learns the new character, then send
-        // the 0xDC result (code 3). The client looks the new char up in its list and enters world.
-        // Post-re-key the char-select S->C messages ride the 0x03DC world-channel container.
         if (CharacterListBodyProvider) {
             auto charBody = CharacterListBodyProvider(acc);
             co_await s.SendGameMessageVia(0x03DC, proto::CharacterListMessage::Opcode, charBody);
@@ -278,10 +214,6 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
         co_return;
     });
 
-    // 0x0352 = ClientCharacterDelete (the char-select Delete button). Client sends message 850
-    // with body = u64 characterId (sub_140024C10). We soft-delete it, then send the 0xE6 result;
-    // the client's dispatcher (sub_140020EA0, opcode 230) removes the character from its list when
-    // result == 0, which frees the slot. Body is two byte-aligned u32s {result, 0}.
     server.On(0x0352, [](net::GameSession& s, const std::vector<uint8_t>& body) -> awaitable<void> {
         uint64_t charId = 0;
         for (size_t i = 0; i < body.size() && i < 8; ++i) charId |= (uint64_t)body[i] << (8 * i);
@@ -291,19 +223,13 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
                     (unsigned long long)charId, acc, ok ? "deleted" : "FAILED");
 
         std::vector<uint8_t> result(8, 0);
-        uint32_t code = ok ? 0u : 1u;              // 0 = removed (client drops it); nonzero = fail
+        uint32_t code = ok ? 0u : 1u;
         std::memcpy(result.data(), &code, 4);
-        // Post-re-key the realm lane is the world channel: S->C rides the 0x03DC container (the
-        // one the world-entry replay proved works here), NOT the pre-re-key 0x0076 container.
         co_await s.SendGameMessageVia(0x03DC, 0x00E6, result);
         std::printf("realm-conn: -> 0x00E6 delete result via 0x03DC (code %u)\n", code);
         co_return;
     });
 
-    // 0x07DD = Enter Game on a selected character (body = u64 characterId). This is the world-
-    // entry trigger. First reproduce step: stream the recorded world-load burst (0x0988, zone
-    // blobs, player self, entity spawns) so the client leaves char-select and loads the world.
-    // Sent via the 0x03DC world container (matching the capture) on the current cipher.
     server.On(0x07DD, [](net::GameSession& s, const std::vector<uint8_t>& body) -> awaitable<void> {
         uint64_t charId = 0;
         for (size_t i = 0; i < body.size() && i < 8; ++i) charId |= (uint64_t)body[i] << (8 * i);

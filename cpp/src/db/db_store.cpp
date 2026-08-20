@@ -1,4 +1,3 @@
-// NexusUnleashed - clean-room authored. See db_store.h. 1:1 with the C# DB stores.
 #include "db/db_store.h"
 #include "proto/game_data.h"
 #include <mysql/mysql.h>
@@ -25,7 +24,6 @@ ConnInfo ParseConnString(const std::string& s) {
         size_t eq = part.find('=');
         if (eq != std::string::npos) {
             std::string k = lower(part.substr(0, eq));
-            // trim spaces from key
             k.erase(std::remove_if(k.begin(), k.end(), [](unsigned char c){ return std::isspace(c); }), k.end());
             std::string v = part.substr(eq + 1);
             if (k == "server" || k == "host" || k == "data source") ci.host = v;
@@ -53,7 +51,6 @@ static Bytes from_hex(const std::string& hex) {
     return b;
 }
 
-// RAII connection.
 namespace {
 struct Conn {
     MYSQL* m = nullptr;
@@ -115,7 +112,7 @@ void DbAccountStore::StoreGameToken(const std::string& login, const std::string&
 }
 
 DbCharacterStore::DbCharacterStore(const std::string& authConnString) : ci_(ParseConnString(authConnString)) {
-    ci_.database = "characterdb";   // same server, swap db (matches DbCharacterStore.cs)
+    ci_.database = "characterdb";
 }
 
 std::vector<proto::CharacterRecord> DbCharacterStore::GetCharacters(long accountId) {
@@ -146,8 +143,6 @@ std::vector<proto::CharacterRecord> DbCharacterStore::GetCharacters(long account
     }
     mysql_free_result(res);
 
-    // Attach each character's stored visuals (character_appearance: slot -> displayId). This is
-    // what dresses the char-select model; without it the client renders a black silhouette.
     for (auto& r : list) {
         std::string aq = "SELECT slot, displayId FROM character_appearance WHERE id="
                          + std::to_string(r.Id) + " ORDER BY slot";
@@ -167,7 +162,6 @@ uint64_t DbCharacterStore::CreateCharacter(long accountId, const NewCharacter& n
     if (accountId <= 0) return 0;
     Conn c(ci_, ci_.database);
 
-    // Assign the next id (character.id is a manual PK, no AUTO_INCREMENT).
     uint64_t newId = 1;
     {
         const char* mq = "SELECT COALESCE(MAX(id),0)+1 FROM `character`";
@@ -198,9 +192,7 @@ uint64_t DbCharacterStore::CreateCharacter(long accountId, const NewCharacter& n
 
     if (mysql_real_query(c.m, q.c_str(), (unsigned long)q.size()) != 0) return 0;
 
-    // Persist the chosen sliders + their resolved visuals so the character renders on reconnect.
     if (!nc.Customization.empty()) {
-        // 1) raw sliders -> character_customisation (id, label, value)
         std::string cq = "INSERT INTO character_customisation (id, label, value) VALUES ";
         std::vector<proto::CustomizationChoice> choices;
         bool first = true;
@@ -212,7 +204,6 @@ uint64_t DbCharacterStore::CreateCharacter(long accountId, const NewCharacter& n
         }
         mysql_real_query(c.m, cq.c_str(), (unsigned long)cq.size());
 
-        // 2) resolve via the client's own CharacterCustomization table -> character_appearance
         auto visuals = proto::GameData::ResolveAppearance(nc.Race, nc.Sex, choices);
         if (!visuals.empty()) {
             std::string aq = "INSERT INTO character_appearance (id, slot, displayId) VALUES ";
@@ -231,8 +222,6 @@ uint64_t DbCharacterStore::CreateCharacter(long accountId, const NewCharacter& n
 bool DbCharacterStore::DeleteCharacter(long accountId, uint64_t characterId) {
     if (accountId <= 0 || characterId == 0) return false;
     Conn c(ci_, ci_.database);
-    // Scoped to the account so a client can only delete a character it owns. Soft-delete keeps the
-    // row (and its appearance/customisation) recoverable; GetCharacters excludes deleteTime != NULL.
     std::string q = "UPDATE `character` SET deleteTime=NOW() WHERE id=" + std::to_string(characterId) +
                     " AND accountId=" + std::to_string(accountId) + " AND deleteTime IS NULL";
     if (mysql_real_query(c.m, q.c_str(), (unsigned long)q.size()) != 0) return false;

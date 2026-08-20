@@ -1,5 +1,3 @@
-// CLI: generate typed table models. Usage:
-//   gen <tblDir> <outDir> <namespace> <Table1> <Table2> ...
 using System;
 using System.IO;
 using NexusUnleashed.GameData.Gen;

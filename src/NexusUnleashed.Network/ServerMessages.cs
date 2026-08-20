@@ -1,9 +1,3 @@
-// NexusUnleashed - clean-room authored. Typed server->client message models,
-// each PINNED from a live capture of the oracle (field layout recovered by
-// analyzing thousands of real samples) and validated against real bytes with
-// our own PacketReader. The payload as captured is [u16 LE opcode][body]; each
-// Parse skips the opcode then reads the body. Field names are ours (inferred
-// roles); the layout is a protocol fact from Carbine's wire.
 using System;
 
 namespace NexusUnleashed.Network;
@@ -13,19 +7,16 @@ public interface IServerMessage
     GameMessageOpcode Opcode { get; }
 }
 
-/// <summary>0x0355: a small per-entity state update (guid + one flag byte).</summary>
 public sealed record ServerEntitySmallUpdate(uint Guid, byte Flag) : IServerMessage
 {
     public GameMessageOpcode Opcode => GameMessageOpcode.ServerEntitySmallUpdate;
     public static ServerEntitySmallUpdate Parse(byte[] payload)
     {
         var r = new PacketReader(payload);
-        r.ReadBits(16);                       // opcode
-        return new ServerEntitySmallUpdate(r.ReadUInt32(), r.ReadByte());
+        r.ReadBits(16);        return new ServerEntitySmallUpdate(r.ReadUInt32(), r.ReadByte());
     }
 }
 
-/// <summary>0x0811: apply a spell buff (buffId + stack count + target guid).</summary>
 public sealed record ServerSpellBuffAdd(uint BuffId, uint Count, uint TargetGuid) : IServerMessage
 {
     public GameMessageOpcode Opcode => (GameMessageOpcode)0x0811;
@@ -37,7 +28,6 @@ public sealed record ServerSpellBuffAdd(uint BuffId, uint Count, uint TargetGuid
     }
 }
 
-/// <summary>0x0813: remove a spell buff (buffId + target guid).</summary>
 public sealed record ServerSpellBuffRemove(uint BuffId, uint TargetGuid) : IServerMessage
 {
     public GameMessageOpcode Opcode => GameMessageOpcode.ServerSpellBuffRemove;
@@ -49,10 +39,6 @@ public sealed record ServerSpellBuffRemove(uint BuffId, uint TargetGuid) : IServ
     }
 }
 
-/// <summary>
-/// 0x0937 / 0x0938: entity update carrying a guid and two 16-bit fields + a
-/// trailing byte (exact semantics of the u16s pending; the layout is pinned).
-/// </summary>
 public sealed record ServerEntityUpdate(ushort Opcode16, uint Guid, ushort FieldA, ushort FieldB, byte Tail) : IServerMessage
 {
     public GameMessageOpcode Opcode => (GameMessageOpcode)Opcode16;
@@ -64,12 +50,6 @@ public sealed record ServerEntityUpdate(ushort Opcode16, uint Guid, ushort Field
     }
 }
 
-/// <summary>
-/// 0x0935: the entity position broadcast (the world heartbeat) - guid + a
-/// 4-byte packed movement field + a trailing byte. The movement field's exact
-/// decode (position/delta/time) is pending correlation; the framing is pinned
-/// and the guid is validated.
-/// </summary>
 public sealed record ServerEntityPositionUpdate(uint Guid, uint MovementData, byte Tail) : IServerMessage
 {
     public GameMessageOpcode Opcode => GameMessageOpcode.ServerEntityPositionUpdate;
@@ -81,38 +61,20 @@ public sealed record ServerEntityPositionUpdate(uint Guid, uint MovementData, by
     }
 }
 
-/// <summary>
-/// 0x0262: entity create - what makes a client SEE an entity (the world's most
-/// important server message). Header is pinned (opcode + guid); the BODY is
-/// heavily BIT-PACKED and variable (type, creatureId, position, faction,
-/// display, optional sections), lengths 270..2416 across samples. Position is
-/// NOT byte-aligned, so the body needs dedicated bit-level analysis correlated
-/// with known worlddb entities - a focused effort, not a byte scan. Marked here
-/// so the next pass does not repeat the byte-aligned dead end.
-/// </summary>
 public sealed record ServerEntityCreate(uint Guid, float X, float Y, float Z) : IServerMessage
 {
     public GameMessageOpcode Opcode => GameMessageOpcode.ServerEntityCreate;
 
-    // Position sits at bit offset 289 of the payload (3x float32), recovered by a
-    // bit-shift search over the capture and validated against real world coords
-    // (decoded -804.80/-925.40/-2387.10, an actual Everstar spot). Confirmed for
-    // the common entity layout; type-specific variants are the remaining decode
-    // work (task #47) - creatureId, faction, display still pending.
     private const int PositionBit = 289;
 
     public static ServerEntityCreate Parse(byte[] payload)
     {
         var r = new PacketReader(payload);
-        r.ReadBits(16);                       // opcode (pinned)
-        uint guid = r.ReadUInt32();           // guid (pinned, validated)
-        int skip = PositionBit - 48;          // advance to the position field
-        while (skip > 0) { int c = System.Math.Min(32, skip); r.ReadBits(c); skip -= c; }
+        r.ReadBits(16);        uint guid = r.ReadUInt32();        int skip = PositionBit - 48;        while (skip > 0) { int c = System.Math.Min(32, skip); r.ReadBits(c); skip -= c; }
         return new ServerEntityCreate(guid, r.ReadSingle(), r.ReadSingle(), r.ReadSingle());
     }
 }
 
-/// <summary>0x0876: an entity relation - source guid + target guid (e.g. X acts on Y).</summary>
 public sealed record ServerEntityRelation(uint SourceGuid, uint TargetGuid) : IServerMessage
 {
     public GameMessageOpcode Opcode => (GameMessageOpcode)0x0876;
@@ -124,8 +86,6 @@ public sealed record ServerEntityRelation(uint SourceGuid, uint TargetGuid) : IS
     }
 }
 
-/// <summary>0x092F: an entity value update - guid + a u32 value + trailing bytes
-/// (value observed constant 1200 in the sample set; likely a stat/vital).</summary>
 public sealed record ServerEntityValue(uint Guid, uint Value) : IServerMessage
 {
     public GameMessageOpcode Opcode => (GameMessageOpcode)0x092F;
@@ -137,14 +97,6 @@ public sealed record ServerEntityValue(uint Guid, uint Value) : IServerMessage
     }
 }
 
-/// <summary>
-/// 0x0981: a world-init id list sent one-shot at world entry - a u32 count then
-/// that many u32 ids (byte-aligned, not bit-packed). Pinned from the captured
-/// world-entry stream: count 251, ids a near-sequential 1..252 set. The exact
-/// id domain (what the list enumerates) is semantic work; the WIRE STRUCTURE is
-/// pinned and reproduced byte-for-byte. The server both parses and BUILDS it -
-/// Build reproduces the captured bytes exactly (real-wire test).
-/// </summary>
 public sealed record ServerWorldInit(uint[] Ids) : IServerMessage
 {
     public GameMessageOpcode Opcode => (GameMessageOpcode)0x0981;
@@ -152,14 +104,12 @@ public sealed record ServerWorldInit(uint[] Ids) : IServerMessage
     public static ServerWorldInit Parse(byte[] payload)
     {
         var r = new PacketReader(payload);
-        r.ReadBits(16);                       // opcode
-        uint count = r.ReadUInt32();
+        r.ReadBits(16);        uint count = r.ReadUInt32();
         var ids = new uint[count];
         for (uint i = 0; i < count; i++) ids[i] = r.ReadUInt32();
         return new ServerWorldInit(ids);
     }
 
-    /// <summary>Full payload ([u16 op][u32 count][ids]) ready to send.</summary>
     public byte[] Build()
     {
         var w = new PacketWriter();
@@ -170,7 +120,6 @@ public sealed record ServerWorldInit(uint[] Ids) : IServerMessage
     }
 }
 
-/// <summary>0x07FE: a single u32 (a counter/index; the smallest server message).</summary>
 public sealed record ServerCounter(uint Value) : IServerMessage
 {
     public GameMessageOpcode Opcode => (GameMessageOpcode)0x07FE;

@@ -1,20 +1,9 @@
-// NexusUnleashed — clean-room authored. The STS (login) SRP server.
-//
-// CRACKED 2026-08-19 via the bot account's known password + stored verifier as a
-// ground-truth oracle (sts-cracker.py): the STS uses WildStar's GAME SRP — the
-// modulus read LITTLE-ENDIAN, ReverseUInt32 (word-order) hashing, little-endian
-// bignums, interleaved session key. NOT standard big-endian SRP. My earlier
-// big-endian attempts were byte-order-wrong at every layer.
-//
-// This mirrors SrpReferenceClient.cs (the confirmed client) parameter-for-
-// parameter on the SERVER side, so the client's own proof verifies.
 using System;
 using System.Numerics;
 using System.Security.Cryptography;
 
 namespace NexusUnleashed.Cryptography;
 
-/// <summary>WildStar game-SRP server for the STS channel (little-endian).</summary>
 public sealed class StsSrp
 {
     private static readonly byte[] NB =
@@ -34,8 +23,7 @@ public sealed class StsSrp
     private readonly BigInteger _N, _g, _k, _v;
     private readonly byte[] _salt, _I;
     private BigInteger _b;
-    public byte[] B { get; private set; } = Array.Empty<byte>();   // little-endian wire form
-    public string MatchedVariant { get; private set; } = "game-SRP (little-endian)";
+    public byte[] B { get; private set; } = Array.Empty<byte>();    public string MatchedVariant { get; private set; } = "game-SRP (little-endian)";
 
     public StsSrp(byte[] salt, byte[] verifier, string username = "")
     {
@@ -43,11 +31,9 @@ public sealed class StsSrp
         _g = new BigInteger(2);
         _k = LeToBig(ReverseUInt32(_sha.ComputeHash(Combine(NB, gBytes))));
         _salt = salt;
-        _v = LeToBig(verifier);                                     // authdb v is little-endian
-        _I = _sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes(username));
+        _v = LeToBig(verifier);        _I = _sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes(username));
     }
 
-    /// <summary>b random, B = (k*v + g^b) mod N; returns B as 128-byte little-endian.</summary>
     public byte[] StartHandshake()
     {
         _b = LeToBig(Rng.GenerateRandomKey(0x20));
@@ -56,7 +42,6 @@ public sealed class StsSrp
         return B;
     }
 
-    /// <summary>Verify the client proof. A and M1 are the little-endian wire bytes.</summary>
     public bool Verify(byte[] aLe, byte[] m1, out byte[] m2, out byte[] sessionKey)
     {
         m2 = Array.Empty<byte>(); sessionKey = Array.Empty<byte>();
@@ -69,8 +54,7 @@ public sealed class StsSrp
 
         byte[] expected = ComputeM1(aLe, K);
         if (!FixedEquals(expected, m1)) return false;
-        m2 = _sha.ComputeHash(Combine(aLe, m1, K));                 // M2 = H(A | M1 | K)
-        sessionKey = K;
+        m2 = _sha.ComputeHash(Combine(aLe, m1, K));        sessionKey = K;
         return true;
     }
 
@@ -78,10 +62,8 @@ public sealed class StsSrp
     {
         byte[] nH = _sha.ComputeHash(NB), gH = _sha.ComputeHash(gBytes);
         for (int i = 0; i < nH.Length; i++) nH[i] ^= gH[i];
-        return _sha.ComputeHash(Combine(nH, _I, _salt, A, B, K));   // H(H(N)^H(g) | I | salt | A | B | K)
-    }
+        return _sha.ComputeHash(Combine(nH, _I, _salt, A, B, K));    }
 
-    // --- helpers mirroring SrpReferenceClient / SRP6a exactly ---
     private static BigInteger LeToBig(byte[] le) => new BigInteger(Combine(le, new byte[] { 0 }));
     private static byte[] BigToLe(BigInteger v) => v.ToByteArray();
     private static byte[] ReverseUInt32(byte[] d)

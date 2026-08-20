@@ -19,16 +19,11 @@ static class DataServiceTest
         Check("worlds indexed", gd.Worlds.Count == 2729, $"({gd.Worlds.Count})");
         Check("text table loaded", gd.Text.Count > 100000, $"({gd.Text.Count:N0} strings)");
 
-        // name resolution: of creatures that CARRY a name id, almost all resolve
-        // (unnamed internal rows legitimately have LocalizedTextIdName == 0).
         var withName = gd.Creatures.Values.Where(c => c.LocalizedTextIdName != 0).ToList();
         int resolved = withName.Count(c => gd.TextOf(c.LocalizedTextIdName).Length > 0);
         double frac = withName.Count == 0 ? 0 : (double)resolved / withName.Count;
-        // EXACTLY matches our proven tbl_reader+read_text_table (49603/53131);
-        // the unresolved rows carry name ids that map to empty strings in the client.
         Check("named creatures resolve == proven reader", resolved == 49603 && withName.Count == 53131, $"({resolved}/{withName.Count} = {frac:P1})");
 
-        // print a few real names as evidence
         foreach (var id in new uint[] { 27402u, 21729u, 28454u })
         {
             string nm = gd.CreatureName(id);

@@ -1,4 +1,3 @@
-// NexusUnleashed - clean-room authored. See sts_message.h. 1:1 with StsMessage.cs.
 #include "sts/sts_message.h"
 #include <algorithm>
 #include <cctype>
@@ -54,7 +53,6 @@ void StsParser::Feed(const uint8_t* data, size_t len) {
     buffer_.insert(buffer_.end(), data, data + len);
 }
 
-// find the blank line ending the head; returns head length and sets body_start, or -1.
 static int IndexOfDoubleNewline(const std::vector<uint8_t>& buf, size_t& body_start) {
     for (size_t i = 0; i + 1 < buf.size(); ++i) {
         if (buf[i] == '\n') {
@@ -75,7 +73,6 @@ std::optional<StsRequest> StsParser::TryReadRequest() {
     std::string head(buffer_.begin(), buffer_.begin() + head_end);
     StsRequest req;
 
-    // split head into lines by '\n'
     std::vector<std::string> lines;
     size_t pos = 0;
     while (pos <= head.size()) {
@@ -85,7 +82,6 @@ std::optional<StsRequest> StsParser::TryReadRequest() {
         pos = nl + 1;
     }
 
-    // request line: POST /Service/Message STS/1.0
     if (!lines.empty()) {
         std::string rl = trim(lines[0]);
         size_t sp1 = rl.find(' ');

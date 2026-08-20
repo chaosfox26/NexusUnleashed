@@ -1,4 +1,3 @@
-// NexusUnleashed - clean-room authored. See auth_flow.h. 1:1 with AuthFlow.cs/AuthSession.cs.
 #include "sts/auth_flow.h"
 #include "crypto/sts_srp.h"
 #include <openssl/rand.h>
@@ -11,7 +10,6 @@ namespace nexus::sts {
 
 using Bytes = std::vector<uint8_t>;
 
-// ---- AuthSession bridge ----
 namespace {
     std::mutex g_mtx;
     std::unordered_map<std::string, long> g_token_to_account;
@@ -28,7 +26,6 @@ long AuthSession::ResolveToken(const std::string& tokenHex) {
 }
 long AuthSession::LastAccountId() { return g_last_account.load(); }
 
-// ---- helpers ----
 static const char* B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 static std::string base64_encode(const Bytes& in) {
@@ -69,7 +66,6 @@ static Bytes base64_decode(const std::string& s) {
     return out;
 }
 
-// SecurityElement.Escape equivalent.
 static std::string xml_escape(const std::string& s) {
     std::string o; o.reserve(s.size());
     for (char c : s) switch (c) {
@@ -79,7 +75,6 @@ static std::string xml_escape(const std::string& s) {
     }
     return o;
 }
-// Value of <tag>...</tag>, or "".
 static std::string xml_field(const std::string& xml, const std::string& tag) {
     std::string open = "<" + tag + ">", close = "</" + tag + ">";
     size_t i = xml.find(open); if (i == std::string::npos) return "";
@@ -88,7 +83,6 @@ static std::string xml_field(const std::string& xml, const std::string& tag) {
     return j == std::string::npos ? "" : xml.substr(i, j - i);
 }
 
-// KeyDataBlob: [u32 LE len][bytes] per part.
 static Bytes blob_pack(std::initializer_list<Bytes> parts) {
     Bytes buf;
     for (const auto& p : parts) {
@@ -124,7 +118,6 @@ static std::string key_data_body(const Bytes& blob) {
     return "<Reply>\n<KeyData>" + base64_encode(blob) + "</KeyData>\n</Reply>\n";
 }
 
-// ---- the transaction ----
 void AuthFlow::Register(StsServer& server, IAccountStore& accounts) {
     server.On("/Sts/Connect", [](StsSessionState&, const StsRequest& r) -> HandlerResult {
         return { StsReply::Ok(r.sequence(), ""), std::nullopt };
@@ -137,9 +130,9 @@ void AuthFlow::Register(StsServer& server, IAccountStore& accounts) {
         st.login = xml_field(r.body_text(), "LoginName");
         auto creds = accounts.GetSrpCredentials(st.login);
         if (!creds || creds->second.empty())
-            return { StsReply::Error(r.sequence(), 403), std::nullopt };   // no such account
+            return { StsReply::Error(r.sequence(), 403), std::nullopt };
         st.srp = std::make_shared<crypto::StsSrp>(creds->first, creds->second, st.login);
-        Bytes B = st.srp->StartHandshake();                                // 128-byte LE
+        Bytes B = st.srp->StartHandshake();
         std::printf("[STS-SRP] LoginStart: game-SRP (little-endian)\n");
         Bytes blob = blob_pack({ creds->first, B });
         return { StsReply::Ok(r.sequence(), key_data_body(blob)), std::nullopt };
@@ -147,7 +140,7 @@ void AuthFlow::Register(StsServer& server, IAccountStore& accounts) {
 
     server.On("/Auth/KeyData", [](StsSessionState& st, const StsRequest& r) -> HandlerResult {
         if (!st.srp)
-            return { StsReply::Error(r.sequence(), 409), std::nullopt };   // KeyData before LoginStart
+            return { StsReply::Error(r.sequence(), 409), std::nullopt };
         Bytes clientBlob = base64_decode(xml_field(r.body_text(), "KeyData"));
         auto parts = blob_unpack(clientBlob);
         Bytes a  = parts.size() > 0 ? parts[0] : Bytes{};
@@ -155,13 +148,12 @@ void AuthFlow::Register(StsServer& server, IAccountStore& accounts) {
         Bytes m2, K;
         if (!st.srp->Verify(a, m1, m2, K)) {
             std::printf("[STS-SRP] KeyData proof did NOT verify (A=%zuB)\n", a.size());
-            return { StsReply::Error(r.sequence(), 403), std::nullopt };   // bad proof
+            return { StsReply::Error(r.sequence(), 403), std::nullopt };
         }
         std::printf("[STS-SRP] proof VERIFIED (game-SRP little-endian)\n");
         st.authed = true;
         st.session_key = K;
         Bytes blob = blob_pack({ m2 });
-        // AFTER M2 (last plaintext reply) the channel is ARC4(K) both ways.
         return { StsReply::Ok(r.sequence(), key_data_body(blob)), K };
     });
 

@@ -1,4 +1,3 @@
-// NexusUnleashed - clean-room authored. See sts_server.h. 1:1 with StsServer.cs/StsSession.
 #include "sts/sts_server.h"
 #include "crypto/arc4.h"
 #include <cstdio>
@@ -29,7 +28,7 @@ HandlerResult StsServer::Dispatch(StsSessionState& st, const StsRequest& req) {
     if (request_observer) { try { request_observer(req); } catch (...) {} }
     auto it = routes_.find(req.uri);
     if (it == routes_.end())
-        return { StsReply::Error(req.sequence(), 400), std::nullopt };   // unknown message
+        return { StsReply::Error(req.sequence(), 400), std::nullopt };
     try {
         return it->second(st, req);
     } catch (const std::exception& ex) {
@@ -48,15 +47,14 @@ awaitable<void> StsServer::Session(tcp::socket sock) {
         for (;;) {
             std::size_t n = co_await sock.async_read_some(asio::buffer(buf), use_awaitable);
             if (n == 0) break;
-            if (enc) rx.ProcessBuffer(buf.data(), n);   // decrypt inbound after SRP
+            if (enc) rx.ProcessBuffer(buf.data(), n);
             parser.Feed(buf.data(), n);
 
             while (auto req = parser.TryReadRequest()) {
                 HandlerResult res = Dispatch(st, *req);
                 std::vector<uint8_t> frame = std::move(res.reply);
-                if (enc) tx.ProcessBuffer(frame);        // encrypt the reply after SRP
+                if (enc) tx.ProcessBuffer(frame);
                 co_await asio::async_write(sock, asio::buffer(frame), use_awaitable);
-                // Enable the ARC4 streams AFTER sending the (plaintext) M2 reply.
                 if (res.enable_encryption) {
                     rx.PrepareKey(*res.enable_encryption);
                     tx.PrepareKey(*res.enable_encryption);
@@ -65,7 +63,6 @@ awaitable<void> StsServer::Session(tcp::socket sock) {
             }
         }
     } catch (const std::exception&) {
-        // connection closed / reset — never fatal to the server
     }
     co_return;
 }

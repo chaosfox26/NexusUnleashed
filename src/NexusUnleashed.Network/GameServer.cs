@@ -1,6 +1,3 @@
-// NexusUnleashed - clean-room authored. A minimal async TCP acceptor that spins
-// a GameSession per connection and routes messages through a registered handler
-// table. Modern .NET sockets; our own code end to end.
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -12,11 +9,6 @@ using NexusUnleashed.Cryptography;
 
 namespace NexusUnleashed.Network;
 
-/// <summary>
-/// Accepts connections and dispatches decoded messages to handlers keyed by
-/// opcode. A handler receives the session and the raw payload bytes; message
-/// classes (IGamePacket) decode the payload themselves.
-/// </summary>
 public sealed class GameServer
 {
     private readonly IPEndPoint _endpoint;
@@ -25,17 +17,8 @@ public sealed class GameServer
     private readonly Dictionary<ushort, Func<GameSession, byte[], Task>> _handlers = new();
     private Socket? _listener;
 
-    /// <summary>
-    /// Invoked once per new connection after the session (and its cipher, on the
-    /// world channel) is set up. The place to send the server hello.
-    /// </summary>
     public Func<GameSession, Task>? OnConnected { get; set; }
 
-    /// <param name="worldChannel">
-    /// true = this server speaks the encrypted packed container (world server);
-    /// each session gets a PacketCrypt seeded with the static world channel seed.
-    /// false = clear direct frames (auth server).
-    /// </param>
     public GameServer(string address, int port, bool worldChannel = false)
     {
         _endpoint = new IPEndPoint(IPAddress.Parse(address), port);
@@ -44,14 +27,9 @@ public sealed class GameServer
 
     public int SessionCount => _sessions.Count;
 
-    /// <summary>Register a handler for an opcode (a protocol fact).</summary>
     public void On(ushort opcode, Func<GameSession, byte[], Task> handler)
         => _handlers[opcode] = handler;
 
-    /// <summary>
-    /// Called for any opcode with no registered handler — the capture hook for
-    /// pinning a channel's vocabulary. Receives (session, opcode, payload).
-    /// </summary>
     public Action<GameSession, ushort, byte[]>? OnUnhandled { get; set; }
 
     public async Task ListenAsync(CancellationToken ct = default)
@@ -91,7 +69,5 @@ public sealed class GameServer
             await handler(session, payload);
         else
             OnUnhandled?.Invoke(session, opcode, payload);
-        // Unknown opcodes are recorded, never fatal — the client must never be
-        // able to crash the server with an unrecognized message.
     }
 }

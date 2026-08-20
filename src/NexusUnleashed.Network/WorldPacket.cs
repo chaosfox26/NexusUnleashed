@@ -1,73 +1,34 @@
-// NexusUnleashed - clean-room authored. The world channel's encrypted packed
-// container (spec/protocol/containers.md), decoded byte-for-byte from a real
-// login capture. Every world game message rides inside a container:
-//
-//   outer frame : [u32 size][u16 containerOpcode][container payload]
-//   container   : [u32 innerLen self-inclusive][encrypted inner]
-//   inner (dec) : [u16 opcode][bit-packed body]
-//
-// containerOpcode = 0x03DC server->client, 0x0244 client->server. The inner
-// message is enciphered with the static build-seeded PacketCrypt; the cipher's
-// length counter keys on the inner message length. All of this is a protocol
-// fact (the client runs the identical cipher and framing); the code is ours.
 using System;
 using System.Collections.Generic;
 using NexusUnleashed.Cryptography;
 
 namespace NexusUnleashed.Network;
 
-/// <summary>
-/// Encode/decode the world channel's encrypted packed container. Proven against
-/// the real captured ServerHello: a decode of the captured 0x03DC yields inner
-/// opcode 0x0003, and an encode of that inner reproduces the captured bytes.
-/// </summary>
 public static class WorldPacket
 {
-    /// <summary>Server-&gt;client container opcode (encrypted envelope).</summary>
     public const ushort ServerContainer = 0x03DC;
-    /// <summary>Client-&gt;server container opcode (encrypted envelope).</summary>
     public const ushort ClientContainer = 0x0244;
 
-    /// <summary>
-    /// The AUTH-phase cipher key (== PacketCrypt.AuthChannelKey, the static build
-    /// key observed on the wire). The channel opens with this for the hello, then
-    /// RE-KEYS to the world keyInteger after login (two-phase keying). Kept as a
-    /// const so the acceptor can seed a session before auth completes.
-    /// </summary>
     public const ulong WorldChannelSeed = PacketCrypt.AuthChannelKey;
 
-    /// <summary>
-    /// Build a complete on-wire server-&gt;client frame carrying one encrypted game
-    /// message. Returns the full outer frame bytes ([size][0x03DC][container]).
-    /// </summary>
     public static byte[] EncodeServer(ushort innerOpcode, byte[] innerBody, PacketCrypt crypt)
     {
         byte[] payload = BuildContainerPayload(innerOpcode, innerBody, crypt);
         return GamePacketFrame.Encode(ServerContainer, payload);
     }
 
-    /// <summary>
-    /// Build a complete on-wire client-&gt;server frame (mirror of the server path;
-    /// same container + symmetric cipher). Used by the reference client / tests.
-    /// </summary>
     public static byte[] EncodeClient(ushort innerOpcode, byte[] innerBody, PacketCrypt crypt)
     {
         byte[] payload = BuildContainerPayload(innerOpcode, innerBody, crypt);
         return GamePacketFrame.Encode(ClientContainer, payload);
     }
 
-    /// <summary>
-    /// Decode a received container's PAYLOAD (the bytes after [size][opcode], i.e.
-    /// what GamePacketFrame.Decode hands back) into the inner game message. The
-    /// payload begins with the self-inclusive innerLen u32.
-    /// </summary>
     public static (ushort Opcode, byte[] Body) DecodeContainer(byte[] containerPayload, PacketCrypt crypt)
     {
         if (containerPayload.Length < 4)
             throw new ArgumentException("container payload shorter than its length field");
 
-        uint innerLen = ReadU32LE(containerPayload, 0);        // self-inclusive
-        if (innerLen < 4 || innerLen > containerPayload.Length)
+        uint innerLen = ReadU32LE(containerPayload, 0);        if (innerLen < 4 || innerLen > containerPayload.Length)
             throw new ArgumentException($"container innerLen {innerLen} out of range ({containerPayload.Length})");
 
         int cipherLen = (int)innerLen - 4;
@@ -84,7 +45,6 @@ public static class WorldPacket
         return (opcode, body);
     }
 
-    // container payload = [u32 innerLen self-inclusive][encrypted [u16 op][body]]
     private static byte[] BuildContainerPayload(ushort innerOpcode, byte[] innerBody, PacketCrypt crypt)
     {
         var inner = new byte[2 + innerBody.Length];
@@ -92,9 +52,6 @@ public static class WorldPacket
         inner[1] = (byte)(innerOpcode >> 8);
         Array.Copy(innerBody, 0, inner, 2, innerBody.Length);
 
-        // Server->client (and the symmetric client->server) encrypt is the exact
-        // inverse of Decrypt, so the peer's Decrypt-mirroring receive path recovers
-        // the plaintext. The forward-register Encrypt is the wrong pairing here.
         byte[] cipher = crypt.EncryptForClient(inner, inner.Length);
 
         uint innerLen = (uint)(4 + cipher.Length);

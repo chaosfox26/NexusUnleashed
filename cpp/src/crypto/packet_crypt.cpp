@@ -1,5 +1,3 @@
-// NexusUnleashed - clean-room authored. See packet_crypt.h. Reversed 1:1 from the client
-// (WS+0xC2EB0/0xC2BD0/0xC2D10/0xC2DE0) and validated byte-exact against a captured pair.
 #include "crypto/packet_crypt.h"
 
 namespace nexus::crypto {
@@ -14,7 +12,6 @@ static void WriteU64LE(uint8_t* p, uint64_t v) {
 PacketCrypt::PacketCrypt(uint64_t seed) {
     uint64_t q = (kSeedInitial + seed) * kMultiplier;
     for (int i = 0; i < 16; ++i) { keyq_[i] = q; q = (q + seed) * kMultiplier; }
-    // Fold the key table into the initial feedback register (client ctor WS+0xC2BD0).
     uint64_t reg = kSeedInitial;
     for (int i = 0; i < 16; ++i) reg = (keyq_[i] + reg) * kMultiplier;
     register_ = reg;
@@ -44,10 +41,10 @@ std::vector<uint8_t> PacketCrypt::Process(const uint8_t* data, size_t length, bo
 }
 
 std::vector<uint8_t> PacketCrypt::Encrypt(const uint8_t* data, size_t length) const {
-    return Process(data, length, /*feedbackOutput=*/true);
+    return Process(data, length, true);
 }
 std::vector<uint8_t> PacketCrypt::Decrypt(const uint8_t* data, size_t length) const {
-    return Process(data, length, /*feedbackOutput=*/false);
+    return Process(data, length, false);
 }
 
 } // namespace nexus::crypto
