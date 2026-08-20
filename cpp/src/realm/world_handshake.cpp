@@ -223,23 +223,24 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
         if (CreateCharacterProvider) newId = CreateCharacterProvider(acc, body);
 
         if (newId == 0) {
-            // Could not create → tell the client it failed rather than hang.
-            co_await s.SendGameMessage(proto::CharacterCreateResult::Opcode,
+            // Could not create → tell the client it failed rather than hang. Post-re-key ->0x03DC.
+            co_await s.SendGameMessageVia(0x03DC, proto::CharacterCreateResult::Opcode,
                 proto::CharacterCreateResult::Build(0, proto::CharacterCreateResult::GenericFail));
-            std::printf("realm-conn: -> 0x00DC create result FAIL (no id)\n");
+            std::printf("realm-conn: -> 0x00DC create result FAIL via 0x03DC (no id)\n");
             co_return;
         }
 
         // Success: refresh the character list so the client learns the new character, then send
         // the 0xDC result (code 3). The client looks the new char up in its list and enters world.
+        // Post-re-key the char-select S->C messages ride the 0x03DC world-channel container.
         if (CharacterListBodyProvider) {
             auto charBody = CharacterListBodyProvider(acc);
-            co_await s.SendGameMessage(proto::CharacterListMessage::Opcode, charBody);
-            std::printf("realm-conn: -> 0x0117 refreshed character list (%zuB)\n", charBody.size());
+            co_await s.SendGameMessageVia(0x03DC, proto::CharacterListMessage::Opcode, charBody);
+            std::printf("realm-conn: -> 0x0117 refreshed character list via 0x03DC (%zuB)\n", charBody.size());
         }
-        co_await s.SendGameMessage(proto::CharacterCreateResult::Opcode,
+        co_await s.SendGameMessageVia(0x03DC, proto::CharacterCreateResult::Opcode,
             proto::CharacterCreateResult::Build(newId, proto::CharacterCreateResult::Ok));
-        std::printf("realm-conn: -> 0x00DC create result OK, new char id %llu\n",
+        std::printf("realm-conn: -> 0x00DC create result OK via 0x03DC, new char id %llu\n",
                     (unsigned long long)newId);
         co_return;
     });
@@ -259,8 +260,10 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
         std::vector<uint8_t> result(8, 0);
         uint32_t code = ok ? 0u : 1u;              // 0 = removed (client drops it); nonzero = fail
         std::memcpy(result.data(), &code, 4);
-        co_await s.SendGameMessage(0x00E6, result);
-        std::printf("realm-conn: -> 0x00E6 delete result (code %u)\n", code);
+        // Post-re-key the realm lane is the world channel: S->C rides the 0x03DC container (the
+        // one the world-entry replay proved works here), NOT the pre-re-key 0x0076 container.
+        co_await s.SendGameMessageVia(0x03DC, 0x00E6, result);
+        std::printf("realm-conn: -> 0x00E6 delete result via 0x03DC (code %u)\n", code);
         co_return;
     });
 
