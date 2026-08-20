@@ -147,4 +147,41 @@ std::vector<proto::CharacterRecord> DbCharacterStore::GetCharacters(long account
     return list;
 }
 
+uint64_t DbCharacterStore::CreateCharacter(long accountId, const NewCharacter& nc) {
+    if (accountId <= 0) return 0;
+    Conn c(ci_, ci_.database);
+
+    // Assign the next id (character.id is a manual PK, no AUTO_INCREMENT).
+    uint64_t newId = 1;
+    {
+        const char* mq = "SELECT COALESCE(MAX(id),0)+1 FROM `character`";
+        if (mysql_real_query(c.m, mq, (unsigned long)std::strlen(mq)) == 0) {
+            if (MYSQL_RES* r = mysql_store_result(c.m)) {
+                if (MYSQL_ROW row = mysql_fetch_row(r)) if (row[0]) newId = std::stoull(row[0]);
+                mysql_free_result(r);
+            }
+        }
+    }
+
+    auto f = [](float v){ return std::to_string(v); };
+    std::string q =
+        "INSERT INTO `character` "
+        "(id, accountId, name, sex, race, class, level, factionId, activePath, "
+        " worldId, worldZoneId, locationX, locationY, locationZ) VALUES ("
+        + std::to_string(newId) + ", "
+        + std::to_string(accountId) + ", '"
+        + c.escape(nc.Name) + "', "
+        + std::to_string(nc.Sex) + ", "
+        + std::to_string(nc.Race) + ", "
+        + std::to_string(nc.Class) + ", 1, "
+        + std::to_string(nc.FactionId) + ", "
+        + std::to_string(nc.ActivePath) + ", "
+        + std::to_string(nc.WorldId) + ", "
+        + std::to_string(nc.WorldZoneId) + ", "
+        + f(nc.LocationX) + ", " + f(nc.LocationY) + ", " + f(nc.LocationZ) + ")";
+
+    if (mysql_real_query(c.m, q.c_str(), (unsigned long)q.size()) != 0) return 0;
+    return newId;
+}
+
 } // namespace nexus::db

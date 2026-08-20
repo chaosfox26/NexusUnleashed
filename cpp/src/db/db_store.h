@@ -30,10 +30,22 @@ private:
     ConnInfo ci_;
 };
 
+// Fields the client sends in a 0x5CD5 create request (name + race/class/path/sex/faction
+// + a start location the server assigns). Appearance/bones are carried separately.
+struct NewCharacter {
+    std::string Name;
+    uint32_t Sex = 0, Race = 0, Class = 0, FactionId = 0, ActivePath = 0;
+    uint32_t WorldId = 0, WorldZoneId = 0;
+    float LocationX = 0.f, LocationY = 0.f, LocationZ = 0.f;
+};
+
 class DbCharacterStore {
 public:
     explicit DbCharacterStore(const std::string& authConnString);  // swaps db -> characterdb
     std::vector<proto::CharacterRecord> GetCharacters(long accountId);
+    // Insert a new character for the account; returns its assigned id (0 on failure).
+    // Id is generated as MAX(id)+1 because the character.id column is a manual PK.
+    uint64_t CreateCharacter(long accountId, const NewCharacter& nc);
 private:
     ConnInfo ci_;
 };

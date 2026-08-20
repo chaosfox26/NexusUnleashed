@@ -1,5 +1,36 @@
 # Spec: the world-entry message sequence (the script to render the world)
 
+## LIVE RESULT 2026-08-20: THE CLIENT LOADS INTO THE WORLD
+Replaying the recorded world-load burst on `0x07DD` **works**: the real 16042 client leaves
+character-select, shows the **zone loading screen**, and begins streaming `0x038C` player
+movement (position floats changing every message) — i.e. the player is placed in the world.
+Reproduce path (implemented): `captures/world-entry-replay.bin` = the 651 one-shot S->C
+messages from the capture (`0x0988` → first `0x0935`, wire `0x03DC` envelopes stripped),
+loaded at boot, streamed via the `0x03DC` container on the realm-lane cipher when `0x07DD`
+arrives. `main.cpp` loader + `WorldHandshake::WorldEntrySequence` + the `0x07DD` handler.
+
+**Still stuck on the loading screen (the last mile):** the burst is truncated at the first
+heartbeat and the server ignores the client's `0x038C` movement, so the client never gets the
+"load complete" it needs to drop into the zone. Next: (a) extend the replay past the first
+heartbeat / keep the steady-state stream flowing, and (b) answer the client's `0x038C`
+movement (echo/broadcast) so the world-ready handshake completes. The world stream is present
+and accepted; this is generalization, not a new wall.
+
+Extractor: `<scratch>/extract-world-entry.py`. The captured session's player is a
+DIFFERENT character than the one entering (id 22), so the replayed player block is not yet
+generated per-character — that generalization is also pending.
+
+## THE TRIGGER (pinned live 2026-08-20)
+"Enter Game" on a character at char-select sends, on the realm lane (RealmLaneKey,
+see realm-lane-rekey.md), **C->S opcode `0x07DD`, body = u64 characterId** (observed:
+`16 00 00 00 00 00 00 00` = char 22). The server must answer with the world-entry
+sequence below. This is the last unbuilt wall to "standing in the world". Note: the
+captured sequence rode a session whose reconnect used `0x058F`; the char-select enter
+uses `0x07DD` — same downstream world stream. Open question to resolve on first test:
+does the world stream stay on RealmLaneKey, or does 0x07DD trigger a further re-key to
+a session world key? (Try RealmLaneKey first; the client's DEC hook confirms.)
+
+
 **Status: ORDER PINNED; ALL PAYLOADS NOW DECRYPTABLE (cipher solved) — pinned
 message-by-message.**
 

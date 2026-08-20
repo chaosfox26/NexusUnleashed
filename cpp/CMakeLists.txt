@@ -24,6 +24,8 @@ add_library(nexus_core
   src/net/world_packet.cpp
   src/crypto/packet_crypt.cpp
   src/proto/character_list.cpp
+  src/proto/character_create.cpp
+  src/proto/game_data.cpp
   src/proto/account_realm.cpp
   src/crypto/sts_srp.cpp
   src/crypto/arc4.cpp

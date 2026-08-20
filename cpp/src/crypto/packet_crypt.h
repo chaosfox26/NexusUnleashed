@@ -21,6 +21,12 @@ class PacketCrypt {
 public:
     static constexpr uint64_t AuthChannelKey    = 0xD283F5B34A8DC685ull;
     static constexpr uint64_t WorldChannelSeed  = AuthChannelKey;
+    // The realm-lane key. The client re-keys to this fixed constant right after it sends 0x058F
+    // (its realm-enter); every C->S message after that (the char-create bundle, etc.) is
+    // ciphered with it, not WorldChannelSeed. RECOVERED live from the client's cipher object
+    // (Frida: obj key-table @+0x28 inverts to this seed) and CONFIRMED offline — the create
+    // bundle decrypts to its sub-message headers 0x025C/0x025B. See spec/protocol/realm-lane-rekey.md.
+    static constexpr uint64_t RealmLaneKey      = 0x9A868DE642EF9906ull;
 
     explicit PacketCrypt(uint64_t seed);
 

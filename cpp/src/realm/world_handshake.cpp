@@ -2,6 +2,7 @@
 #include "realm/world_handshake.h"
 #include "net/world_packet.h"
 #include "proto/character_list.h"
+#include "proto/character_create.h"
 #include "proto/account_realm.h"
 #include "sts/auth_flow.h"        // AuthSession
 #include <cstdio>
@@ -33,6 +34,30 @@ static std::vector<InjectMsg> LoadInject() {
     }
     return out;
 }
+
+// Canonical hex+ascii dump (16 bytes/row) for pinning unknown wire payloads offline.
+static std::string HexDump(const std::vector<uint8_t>& b) {
+    static const char* H = "0123456789abcdef";
+    std::string out;
+    for (size_t off = 0; off < b.size(); off += 16) {
+        char pfx[10];
+        std::snprintf(pfx, sizeof(pfx), "%04zx  ", off);
+        out += pfx;
+        std::string ascii;
+        for (size_t i = 0; i < 16; ++i) {
+            if (off + i < b.size()) {
+                uint8_t c = b[off + i];
+                out += H[c >> 4]; out += H[c & 0xF]; out += ' ';
+                ascii += (c >= 0x20 && c < 0x7f) ? (char)c : '.';
+            } else {
+                out += "   ";
+            }
+            if (i == 7) out += ' ';
+        }
+        out += " |" + ascii + "|\n";
+    }
+    return out;
+}
 }
 
 using asio::awaitable;
@@ -40,6 +65,8 @@ using asio::awaitable;
 namespace nexus::realm {
 
 std::function<std::vector<uint8_t>(long)> WorldHandshake::CharacterListBodyProvider;
+std::function<uint64_t(long, const std::vector<uint8_t>&)> WorldHandshake::CreateCharacterProvider;
+std::vector<std::pair<uint16_t, std::vector<uint8_t>>> WorldHandshake::WorldEntrySequence;
 bool WorldHandshake::SendAccountData = false;  // these break the realm connection if sent at the
 bool WorldHandshake::SendRealmList = false;    // "Connecting to realm" stage; hold until the right step.
 bool WorldHandshake::IncludeRealm = true;
@@ -168,8 +195,73 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
         }
         co_return;
     };
+    // 0x058F = the client's realm-enter (token-bearing). It is the LAST message ciphered with
+    // the auth key (WorldChannelSeed): right after sending it, the client re-keys its channel to
+    // the fixed realm-lane key. So we re-key our session cipher here too — every C->S message
+    // after this (the char-create bundle, world-enter requests) is RealmLaneKey, not WorldChannelSeed.
+    // (This message itself was already decoded with the auth key before this handler ran.)
+    server.On(0x058F, [](net::GameSession& s, const std::vector<uint8_t>& body) -> awaitable<void> {
+        std::printf("realm-conn: <- 0x058F realm-enter (%zuB) -> RE-KEY channel to RealmLaneKey\n", body.size());
+        s.crypt.emplace(net::WorldPacket::RealmLaneKey);
+        co_return;
+    });
+
+    // 0x025C = ClientCharacterCreate (Enter Game on the creator's Finalize page). After the
+    // realm-lane re-key the body is readable: [u32 total][u16 0x025B][u32 flags][wide name]
+    // [u32 appearance...]. We parse the name, persist, refresh the list, and send the 0xDC result.
+    server.On(proto::CharacterCreateRequest::Opcode, [](net::GameSession& s, const std::vector<uint8_t>& body) -> awaitable<void> {
+        std::printf("realm-conn: <- 0x025C CharacterCreate (%zuB)\n%s\n",
+                    body.size(), HexDump(body).c_str());
+        long acc = sts::AuthSession::LastAccountId();
+
+        // Persist the new character (host-wired). The name is NOT in this packet (the client
+        // sends it in a separate name-check); fields are best-effort for now — the milestone
+        // is making Enter Game advance into world entry.
+        uint64_t newId = 0;
+        if (CreateCharacterProvider) newId = CreateCharacterProvider(acc, body);
+
+        if (newId == 0) {
+            // Could not create → tell the client it failed rather than hang.
+            co_await s.SendGameMessage(proto::CharacterCreateResult::Opcode,
+                proto::CharacterCreateResult::Build(0, proto::CharacterCreateResult::GenericFail));
+            std::printf("realm-conn: -> 0x00DC create result FAIL (no id)\n");
+            co_return;
+        }
+
+        // Success: refresh the character list so the client learns the new character, then send
+        // the 0xDC result (code 3). The client looks the new char up in its list and enters world.
+        if (CharacterListBodyProvider) {
+            auto charBody = CharacterListBodyProvider(acc);
+            co_await s.SendGameMessage(proto::CharacterListMessage::Opcode, charBody);
+            std::printf("realm-conn: -> 0x0117 refreshed character list (%zuB)\n", charBody.size());
+        }
+        co_await s.SendGameMessage(proto::CharacterCreateResult::Opcode,
+            proto::CharacterCreateResult::Build(newId, proto::CharacterCreateResult::Ok));
+        std::printf("realm-conn: -> 0x00DC create result OK, new char id %llu\n",
+                    (unsigned long long)newId);
+        co_return;
+    });
+
+    // 0x07DD = Enter Game on a selected character (body = u64 characterId). This is the world-
+    // entry trigger. First reproduce step: stream the recorded world-load burst (0x0988, zone
+    // blobs, player self, entity spawns) so the client leaves char-select and loads the world.
+    // Sent via the 0x03DC world container (matching the capture) on the current cipher.
+    server.On(0x07DD, [](net::GameSession& s, const std::vector<uint8_t>& body) -> awaitable<void> {
+        uint64_t charId = 0;
+        for (size_t i = 0; i < body.size() && i < 8; ++i) charId |= (uint64_t)body[i] << (8 * i);
+        std::printf("realm-conn: <- 0x07DD EnterWorld charId=%llu -> replaying %zu world messages\n",
+                    (unsigned long long)charId, WorldHandshake::WorldEntrySequence.size());
+        size_t sent = 0, bytes = 0;
+        for (const auto& m : WorldHandshake::WorldEntrySequence) {
+            co_await s.SendGameMessageVia(0x03DC, m.first, m.second);
+            ++sent; bytes += m.second.size();
+        }
+        std::printf("realm-conn: -> world-entry replay complete (%zu msgs, %zu body bytes)\n", sent, bytes);
+        co_return;
+    });
+
     server.on_unhandled = [](net::GameSession&, uint16_t op, const std::vector<uint8_t>& body) {
-        std::printf("realm-conn: <- op=0x%04X (%zuB)\n", op, body.size());
+        std::printf("realm-conn: <- op=0x%04X (%zuB)\n%s\n", op, body.size(), HexDump(body).c_str());
     };
 }
 
