@@ -11,11 +11,18 @@
 #include <objidl.h>   // IStream etc. — GDI+ headers need these (trimmed by LEAN_AND_MEAN)
 #include <psapi.h>
 #include <gdiplus.h>
+#include <dwmapi.h>   // dark title bar
+#include <uxtheme.h>  // dark scrollbar theme
 #include <string>
 #include <vector>
 #include <cstdio>
 #pragma comment(lib, "gdiplus.lib")
 #pragma comment(lib, "psapi.lib")
+#pragma comment(lib, "dwmapi.lib")
+#pragma comment(lib, "uxtheme.lib")
+#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
+#define DWMWA_USE_IMMERSIVE_DARK_MODE 20
+#endif
 using namespace Gdiplus;
 
 // ---- palette (roadmap: black canvas, magenta + blue accents, white text) ----
@@ -194,15 +201,19 @@ static void DrawSlider(Graphics& g, RectF track, int val, int lo, int hi, Color 
     Pen kp(accent, 2.5f); g.DrawEllipse(&kp, cx - 8.f, cy - 8.f, 16.f, 16.f);
 }
 
+static void CenterText(Graphics& g, const wchar_t* t, const Font& f, Color c, RectF r) {
+    SolidBrush b(c); StringFormat sf; sf.SetAlignment(StringAlignmentCenter); sf.SetLineAlignment(StringAlignmentCenter);
+    g.DrawString(t, -1, &f, r, &sf, &b);
+}
 static void DrawButton(Graphics& g, RectF r, Color accent, const wchar_t* label, const Font& f, bool enabled, bool hover, bool press) {
     if (!enabled) { FillRound(g, r.X, r.Y, r.Width, r.Height, 10, Color(255, 34, 34, 51)); StrokeRound(g, r.X, r.Y, r.Width, r.Height, 10, Color(255, 48, 48, 72), 1);
-        Text(g, label, f, cDim, r.X, r.Y, r.Width, StringAlignmentCenter); return; }
+        CenterText(g, label, f, cDim, r); return; }
     Color top = accent, bot(255, accent.GetR() * 8 / 10, accent.GetG() * 8 / 10, accent.GetB() * 8 / 10);
     if (press) { Color tmp = top; top = bot; bot = tmp; }
     if (hover) Glow(g, r.X + r.Width / 2, r.Y + r.Height / 2, r.Width / 1.6f, accent, 70);
     GradRoundV(g, r.X, r.Y, r.Width, r.Height, 10, top, bot);
     StrokeRound(g, r.X, r.Y, r.Width, r.Height, 10, Color(255, min(255, accent.GetR() + 40), min(255, accent.GetG() + 40), min(255, accent.GetB() + 40)), 1);
-    Text(g, label, f, cWhite, r.X, r.Y - 1, r.Width, StringAlignmentCenter);
+    CenterText(g, label, f, cWhite, r);
 }
 
 static void Paint(HWND h) {
@@ -301,6 +312,12 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         g_log = CreateWindowExW(0, L"EDIT", L"", WS_CHILD | WS_VISIBLE | WS_VSCROLL | ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL,
                                 26, 396, 100, 180, h, (HMENU)IDC_LOG, nullptr, nullptr);
         SendMessageW(g_log, WM_SETFONT, (WPARAM)g_editFont, TRUE);
+        // dark mode: allow dark app theming, then give the log a dark (grey) scrollbar
+        if (HMODULE ux = LoadLibraryW(L"uxtheme.dll")) {
+            typedef int(WINAPI* SetPreferredAppModeFn)(int);
+            if (auto spam = (SetPreferredAppModeFn)GetProcAddress(ux, MAKEINTRESOURCEA(135))) spam(1); // AllowDark
+        }
+        SetWindowTheme(g_log, L"DarkMode_Explorer", nullptr);
         AppendLog(L"[launcher] Nexus Unleashed Server Launcher ready.");
         wchar_t hw[128]; swprintf(hw, 128, L"[launcher] this machine: %d logical cores, %d GB cap available.", g_maxCores, g_maxMemGB); AppendLog(hw);
         SetTimer(h, IDT_POLL, 500, nullptr); return 0;
@@ -349,6 +366,7 @@ int WINAPI wWinMain(HINSTANCE hi, HINSTANCE, PWSTR, int show) {
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW); wc.hbrBackground = nullptr; RegisterClassW(&wc);
     g_hwnd = CreateWindowW(wc.lpszClassName, L"Nexus Unleashed Server Launcher",
                            (WS_OVERLAPPEDWINDOW & ~WS_MAXIMIZEBOX), CW_USEDEFAULT, CW_USEDEFAULT, 600, 660, nullptr, nullptr, hi, nullptr);
+    { BOOL dark = TRUE; DwmSetWindowAttribute(g_hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark)); }  // dark title bar
     ShowWindow(g_hwnd, show); UpdateWindow(g_hwnd);
     MSG msg; while (GetMessageW(&msg, nullptr, 0, 0)) { TranslateMessage(&msg); DispatchMessageW(&msg); }
     GdiplusShutdown(g_gdip); return 0;
