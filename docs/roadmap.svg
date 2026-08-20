@@ -1,26 +1,26 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1200" font-family="Segoe UI, Helvetica, Arial, sans-serif">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#0a0e17"/><stop offset="1" stop-color="#0c1119"/>
+      <stop offset="0" stop-color="#08080e"/><stop offset="1" stop-color="#0b0b16"/>
     </linearGradient>
     <radialGradient id="glowc" cx="80%" cy="0%" r="70%">
-      <stop offset="0" stop-color="#33e0cf" stop-opacity="0.12"/><stop offset="1" stop-color="#33e0cf" stop-opacity="0"/>
+      <stop offset="0" stop-color="#ff2d9b" stop-opacity="0.16"/><stop offset="1" stop-color="#ff2d9b" stop-opacity="0"/>
     </radialGradient>
     <radialGradient id="glowv" cx="10%" cy="100%" r="60%">
-      <stop offset="0" stop-color="#8f7dff" stop-opacity="0.10"/><stop offset="1" stop-color="#8f7dff" stop-opacity="0"/>
+      <stop offset="0" stop-color="#3f7dff" stop-opacity="0.14"/><stop offset="1" stop-color="#3f7dff" stop-opacity="0"/>
     </radialGradient>
     <linearGradient id="spine" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#3fd18a"/><stop offset="0.58" stop-color="#33e0cf"/>
-      <stop offset="0.72" stop-color="#ff7a66"/><stop offset="0.88" stop-color="#b3801d"/><stop offset="1" stop-color="#f5b53f"/>
+      <stop offset="0" stop-color="#3f7dff"/><stop offset="0.62" stop-color="#6a5cff"/>
+      <stop offset="1" stop-color="#ff2d9b"/>
     </linearGradient>
     <linearGradient id="card" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#151d2c"/><stop offset="1" stop-color="#111825"/>
+      <stop offset="0" stop-color="#14141f"/><stop offset="1" stop-color="#0e0e18"/>
     </linearGradient>
     <linearGradient id="title" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#b9c8dc"/>
+      <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#cfd2ea"/>
     </linearGradient>
-    <linearGradient id="amber" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#f5b53f"/><stop offset="1" stop-color="#ffd98a"/>
+    <linearGradient id="mag" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ff2d9b"/><stop offset="1" stop-color="#ff8fd0"/>
     </linearGradient>
   </defs>
 
@@ -29,31 +29,31 @@
   <rect width="900" height="1200" fill="url(#glowv)"/>
 
   <!-- header -->
-  <text x="60" y="66" fill="#33e0cf" font-size="13" letter-spacing="4" font-weight="700">◈ NEXUSUNLEASHED · CLEAN-ROOM ENGINE</text>
+  <text x="60" y="66" fill="#ff2d9b" font-size="13" letter-spacing="4" font-weight="700">◈ NEXUSUNLEASHED · CLEAN-ROOM ENGINE</text>
   <text x="58" y="118" fill="url(#title)" font-size="44" font-weight="800" letter-spacing="-1">The road to standing in the world</text>
-  <text x="60" y="150" fill="#9fb0c6" font-size="16">A from-scratch WildStar server engine — owing no upstream license anything.</text>
+  <text x="60" y="150" fill="#a6a8c8" font-size="16">A from-scratch WildStar server engine — owing no upstream license anything.</text>
 
   <!-- metrics -->
   <g font-family="Consolas, monospace">
     <g transform="translate(60,180)">
-      <rect width="185" height="62" rx="12" fill="url(#card)" stroke="#1f2b3e"/>
-      <text x="16" y="34" fill="#33e0cf" font-size="26" font-weight="800">157</text>
-      <text x="16" y="52" fill="#5f7086" font-size="11" font-family="Segoe UI">OPCODES PINNED</text>
+      <rect width="185" height="62" rx="12" fill="url(#card)" stroke="#26264a"/>
+      <text x="16" y="34" fill="#ff2d9b" font-size="26" font-weight="800">157</text>
+      <text x="16" y="52" fill="#6c6e8c" font-size="11" font-family="Segoe UI">OPCODES PINNED</text>
     </g>
     <g transform="translate(255,180)">
-      <rect width="185" height="62" rx="12" fill="url(#card)" stroke="#1f2b3e"/>
-      <text x="16" y="34" fill="#e8eef7" font-size="26" font-weight="800">384</text>
-      <text x="16" y="52" fill="#5f7086" font-size="11" font-family="Segoe UI">TABLES TYPED</text>
+      <rect width="185" height="62" rx="12" fill="url(#card)" stroke="#26264a"/>
+      <text x="16" y="34" fill="#ffffff" font-size="26" font-weight="800">384</text>
+      <text x="16" y="52" fill="#6c6e8c" font-size="11" font-family="Segoe UI">TABLES TYPED</text>
     </g>
     <g transform="translate(450,180)">
-      <rect width="185" height="62" rx="12" fill="url(#card)" stroke="#1f2b3e"/>
-      <text x="16" y="34" fill="#e8eef7" font-size="26" font-weight="800">2,729</text>
-      <text x="16" y="52" fill="#5f7086" font-size="11" font-family="Segoe UI">WORLDS RESIDENT</text>
+      <rect width="185" height="62" rx="12" fill="url(#card)" stroke="#26264a"/>
+      <text x="16" y="34" fill="#4a8cff" font-size="26" font-weight="800">2,729</text>
+      <text x="16" y="52" fill="#6c6e8c" font-size="11" font-family="Segoe UI">WORLDS RESIDENT</text>
     </g>
     <g transform="translate(645,180)">
-      <rect width="195" height="62" rx="12" fill="url(#card)" stroke="#1f2b3e"/>
-      <text x="16" y="34" fill="#33e0cf" font-size="26" font-weight="800">0</text>
-      <text x="16" y="52" fill="#5f7086" font-size="11" font-family="Segoe UI">LINES OF NF SOURCE</text>
+      <rect width="195" height="62" rx="12" fill="url(#card)" stroke="#26264a"/>
+      <text x="16" y="34" fill="#ff2d9b" font-size="26" font-weight="800">0</text>
+      <text x="16" y="52" fill="#6c6e8c" font-size="11" font-family="Segoe UI">LINES OF NF SOURCE</text>
     </g>
   </g>
 
@@ -62,98 +62,98 @@
 
   <!-- PHASE 01 -->
   <g transform="translate(0,290)">
-    <circle cx="80" cy="20" r="13" fill="#0c1119" stroke="#3fd18a" stroke-width="2.5"/>
-    <path d="M74 20l4 4 8-8" stroke="#3fd18a" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-    <rect x="120" y="-8" width="720" height="76" rx="14" fill="url(#card)" stroke="#1f2b3e"/>
-    <text x="140" y="18" fill="#5f7086" font-size="12" font-family="Consolas, monospace" font-weight="700" letter-spacing="2">PHASE 01</text>
-    <text x="140" y="42" fill="#e8eef7" font-size="21" font-weight="700">The Break</text>
-    <text x="140" y="61" fill="#9fb0c6" font-size="13.5">Split cleanly off the AGPL. New MIT repo, public from the first commit. Facts, never expression.</text>
-    <rect x="726" y="6" width="94" height="24" rx="12" fill="#3fd18a" fill-opacity="0.12" stroke="#3fd18a" stroke-opacity="0.3"/>
-    <text x="773" y="22" fill="#3fd18a" font-size="11" font-weight="700" text-anchor="middle" letter-spacing="1">DONE</text>
+    <circle cx="80" cy="20" r="13" fill="#0b0b16" stroke="#3f7dff" stroke-width="2.5"/>
+    <path d="M74 20l4 4 8-8" stroke="#3f7dff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="120" y="-8" width="720" height="76" rx="14" fill="url(#card)" stroke="#26264a"/>
+    <text x="140" y="18" fill="#7a7ca0" font-size="12" font-family="Consolas, monospace" font-weight="700" letter-spacing="2">PHASE 01</text>
+    <text x="140" y="42" fill="#eef0fb" font-size="21" font-weight="700">The Break</text>
+    <text x="140" y="61" fill="#a6a8c8" font-size="13.5">Split cleanly off the AGPL. New MIT repo, public from the first commit. Facts, never expression.</text>
+    <rect x="726" y="6" width="94" height="24" rx="12" fill="#3f7dff" fill-opacity="0.14" stroke="#3f7dff" stroke-opacity="0.35"/>
+    <text x="773" y="22" fill="#6a9bff" font-size="11" font-weight="700" text-anchor="middle" letter-spacing="1">DONE</text>
   </g>
 
   <!-- PHASE 02 -->
   <g transform="translate(0,380)">
-    <circle cx="80" cy="20" r="13" fill="#0c1119" stroke="#3fd18a" stroke-width="2.5"/>
-    <path d="M74 20l4 4 8-8" stroke="#3fd18a" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-    <rect x="120" y="-8" width="720" height="76" rx="14" fill="url(#card)" stroke="#1f2b3e"/>
-    <text x="140" y="18" fill="#5f7086" font-size="12" font-family="Consolas, monospace" font-weight="700" letter-spacing="2">PHASE 02</text>
-    <text x="140" y="42" fill="#e8eef7" font-size="21" font-weight="700">Foundation</text>
-    <text x="140" y="61" fill="#9fb0c6" font-size="13.5">SRP login proven, the bit-packed wire codec, every client table typed, real accounts, a Linux binary.</text>
-    <rect x="726" y="6" width="94" height="24" rx="12" fill="#3fd18a" fill-opacity="0.12" stroke="#3fd18a" stroke-opacity="0.3"/>
-    <text x="773" y="22" fill="#3fd18a" font-size="11" font-weight="700" text-anchor="middle" letter-spacing="1">DONE</text>
+    <circle cx="80" cy="20" r="13" fill="#0b0b16" stroke="#3f7dff" stroke-width="2.5"/>
+    <path d="M74 20l4 4 8-8" stroke="#3f7dff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="120" y="-8" width="720" height="76" rx="14" fill="url(#card)" stroke="#26264a"/>
+    <text x="140" y="18" fill="#7a7ca0" font-size="12" font-family="Consolas, monospace" font-weight="700" letter-spacing="2">PHASE 02</text>
+    <text x="140" y="42" fill="#eef0fb" font-size="21" font-weight="700">Foundation</text>
+    <text x="140" y="61" fill="#a6a8c8" font-size="13.5">SRP login proven, the bit-packed wire codec, every client table typed, real accounts, a Linux binary.</text>
+    <rect x="726" y="6" width="94" height="24" rx="12" fill="#3f7dff" fill-opacity="0.14" stroke="#3f7dff" stroke-opacity="0.35"/>
+    <text x="773" y="22" fill="#6a9bff" font-size="11" font-weight="700" text-anchor="middle" letter-spacing="1">DONE</text>
   </g>
 
   <!-- PHASE 03 -->
   <g transform="translate(0,470)">
-    <circle cx="80" cy="20" r="13" fill="#0c1119" stroke="#3fd18a" stroke-width="2.5"/>
-    <path d="M74 20l4 4 8-8" stroke="#3fd18a" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-    <rect x="120" y="-8" width="720" height="76" rx="14" fill="url(#card)" stroke="#1f2b3e"/>
-    <text x="140" y="18" fill="#5f7086" font-size="12" font-family="Consolas, monospace" font-weight="700" letter-spacing="2">PHASE 03</text>
-    <text x="140" y="42" fill="#e8eef7" font-size="21" font-weight="700">The Living World</text>
-    <text x="140" y="61" fill="#9fb0c6" font-size="13.5">263,756 entities, all 2,729 worlds resident at once (98 MB), vision + movement + aggro + combat. Arcterra runs.</text>
-    <rect x="726" y="6" width="94" height="24" rx="12" fill="#3fd18a" fill-opacity="0.12" stroke="#3fd18a" stroke-opacity="0.3"/>
-    <text x="773" y="22" fill="#3fd18a" font-size="11" font-weight="700" text-anchor="middle" letter-spacing="1">DONE</text>
+    <circle cx="80" cy="20" r="13" fill="#0b0b16" stroke="#3f7dff" stroke-width="2.5"/>
+    <path d="M74 20l4 4 8-8" stroke="#3f7dff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="120" y="-8" width="720" height="76" rx="14" fill="url(#card)" stroke="#26264a"/>
+    <text x="140" y="18" fill="#7a7ca0" font-size="12" font-family="Consolas, monospace" font-weight="700" letter-spacing="2">PHASE 03</text>
+    <text x="140" y="42" fill="#eef0fb" font-size="21" font-weight="700">The Living World</text>
+    <text x="140" y="61" fill="#a6a8c8" font-size="13.5">263,756 entities, all 2,729 worlds resident at once (98 MB), vision + movement + aggro + combat. Arcterra runs.</text>
+    <rect x="726" y="6" width="94" height="24" rx="12" fill="#3f7dff" fill-opacity="0.14" stroke="#3f7dff" stroke-opacity="0.35"/>
+    <text x="773" y="22" fill="#6a9bff" font-size="11" font-weight="700" text-anchor="middle" letter-spacing="1">DONE</text>
   </g>
 
   <!-- PHASE 04 -->
   <g transform="translate(0,560)">
-    <circle cx="80" cy="20" r="13" fill="#0c1119" stroke="#3fd18a" stroke-width="2.5"/>
-    <path d="M74 20l4 4 8-8" stroke="#3fd18a" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-    <rect x="120" y="-8" width="720" height="76" rx="14" fill="url(#card)" stroke="#1f2b3e"/>
-    <text x="140" y="18" fill="#5f7086" font-size="12" font-family="Consolas, monospace" font-weight="700" letter-spacing="2">PHASE 04</text>
-    <text x="140" y="42" fill="#e8eef7" font-size="21" font-weight="700">The Wire</text>
-    <text x="140" y="61" fill="#9fb0c6" font-size="13.5">157 opcodes captured from real play, the codec validated on real packets, entity position decoded.</text>
-    <rect x="726" y="6" width="94" height="24" rx="12" fill="#3fd18a" fill-opacity="0.12" stroke="#3fd18a" stroke-opacity="0.3"/>
-    <text x="773" y="22" fill="#3fd18a" font-size="11" font-weight="700" text-anchor="middle" letter-spacing="1">DONE</text>
+    <circle cx="80" cy="20" r="13" fill="#0b0b16" stroke="#3f7dff" stroke-width="2.5"/>
+    <path d="M74 20l4 4 8-8" stroke="#3f7dff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="120" y="-8" width="720" height="76" rx="14" fill="url(#card)" stroke="#26264a"/>
+    <text x="140" y="18" fill="#7a7ca0" font-size="12" font-family="Consolas, monospace" font-weight="700" letter-spacing="2">PHASE 04</text>
+    <text x="140" y="42" fill="#eef0fb" font-size="21" font-weight="700">The Wire</text>
+    <text x="140" y="61" fill="#a6a8c8" font-size="13.5">157 opcodes captured from real play, the codec validated on real packets, entity position decoded.</text>
+    <rect x="726" y="6" width="94" height="24" rx="12" fill="#3f7dff" fill-opacity="0.14" stroke="#3f7dff" stroke-opacity="0.35"/>
+    <text x="773" y="22" fill="#6a9bff" font-size="11" font-weight="700" text-anchor="middle" letter-spacing="1">DONE</text>
   </g>
 
   <!-- PHASE 05 -->
   <g transform="translate(0,650)">
-    <circle cx="80" cy="20" r="13" fill="#0c1119" stroke="#3fd18a" stroke-width="2.5"/>
-    <path d="M74 20l4 4 8-8" stroke="#3fd18a" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-    <rect x="120" y="-8" width="720" height="76" rx="14" fill="url(#card)" stroke="#1f2b3e"/>
-    <text x="140" y="18" fill="#5f7086" font-size="12" font-family="Consolas, monospace" font-weight="700" letter-spacing="2">PHASE 05</text>
-    <text x="140" y="42" fill="#e8eef7" font-size="21" font-weight="700">The Encryption Gate</text>
-    <text x="140" y="61" fill="#9fb0c6" font-size="13.5">The encrypted channel is open: SRP session key, the ARC4 login stream, the two-phase game cipher — cracked from the client.</text>
-    <rect x="726" y="6" width="94" height="24" rx="12" fill="#3fd18a" fill-opacity="0.12" stroke="#3fd18a" stroke-opacity="0.3"/>
-    <text x="773" y="22" fill="#3fd18a" font-size="11" font-weight="700" text-anchor="middle" letter-spacing="1">DONE</text>
+    <circle cx="80" cy="20" r="13" fill="#0b0b16" stroke="#3f7dff" stroke-width="2.5"/>
+    <path d="M74 20l4 4 8-8" stroke="#3f7dff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="120" y="-8" width="720" height="76" rx="14" fill="url(#card)" stroke="#26264a"/>
+    <text x="140" y="18" fill="#7a7ca0" font-size="12" font-family="Consolas, monospace" font-weight="700" letter-spacing="2">PHASE 05</text>
+    <text x="140" y="42" fill="#eef0fb" font-size="21" font-weight="700">The Encryption Gate</text>
+    <text x="140" y="61" fill="#a6a8c8" font-size="13.5">The encrypted channel is open: SRP session key, the ARC4 login stream, the two-phase game cipher — cracked from the client.</text>
+    <rect x="726" y="6" width="94" height="24" rx="12" fill="#3f7dff" fill-opacity="0.14" stroke="#3f7dff" stroke-opacity="0.35"/>
+    <text x="773" y="22" fill="#6a9bff" font-size="11" font-weight="700" text-anchor="middle" letter-spacing="1">DONE</text>
   </g>
 
   <!-- PHASE 06 DONE -->
   <g transform="translate(0,745)">
-    <circle cx="80" cy="20" r="13" fill="#0c1119" stroke="#3fd18a" stroke-width="2.5"/>
-    <path d="M74 20l4 4 8-8" stroke="#3fd18a" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-    <rect x="120" y="-8" width="720" height="86" rx="14" fill="url(#card)" stroke="#1f2b3e"/>
-    <text x="140" y="18" fill="#5f7086" font-size="12" font-family="Consolas, monospace" font-weight="700" letter-spacing="2">PHASE 06</text>
-    <text x="140" y="42" fill="#e8eef7" font-size="21" font-weight="700">The Handshake <tspan fill="#9fb0c6" font-size="13.5" font-weight="400">— login · realm connect · character creator</tspan></text>
-    <text x="140" y="61" fill="#9fb0c6" font-size="13.5">The real 16042 client logs in end to end, connects to the realm, is served its characters, and runs the</text>
-    <text x="140" y="78" fill="#9fb0c6" font-size="13.5">whole character creator — Experience → Race → Class → Path → Customize → Finalize. Screenshot-proven.</text>
-    <rect x="726" y="6" width="94" height="24" rx="12" fill="#3fd18a" fill-opacity="0.12" stroke="#3fd18a" stroke-opacity="0.3"/>
-    <text x="773" y="22" fill="#3fd18a" font-size="11" font-weight="700" text-anchor="middle" letter-spacing="1">DONE</text>
+    <circle cx="80" cy="20" r="13" fill="#0b0b16" stroke="#3f7dff" stroke-width="2.5"/>
+    <path d="M74 20l4 4 8-8" stroke="#3f7dff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="120" y="-8" width="720" height="86" rx="14" fill="url(#card)" stroke="#26264a"/>
+    <text x="140" y="18" fill="#7a7ca0" font-size="12" font-family="Consolas, monospace" font-weight="700" letter-spacing="2">PHASE 06</text>
+    <text x="140" y="42" fill="#eef0fb" font-size="21" font-weight="700">The Handshake <tspan fill="#a6a8c8" font-size="13.5" font-weight="400">— login · realm · character creation &amp; management</tspan></text>
+    <text x="140" y="61" fill="#a6a8c8" font-size="13.5">The real 16042 client logs in, connects to the realm, and creates a character that persists and renders —</text>
+    <text x="140" y="78" fill="#a6a8c8" font-size="13.5">race/class/faction/level and a full custom appearance decoded from the client's own tables. Live, screenshot-proven.</text>
+    <rect x="726" y="6" width="94" height="24" rx="12" fill="#3f7dff" fill-opacity="0.14" stroke="#3f7dff" stroke-opacity="0.35"/>
+    <text x="773" y="22" fill="#6a9bff" font-size="11" font-weight="700" text-anchor="middle" letter-spacing="1">DONE</text>
   </g>
 
   <!-- PHASE 07 ACTIVE -->
   <g transform="translate(0,872)">
-    <circle cx="80" cy="20" r="15" fill="#0c1119" stroke="#ff7a66" stroke-width="3"/>
-    <circle cx="80" cy="20" r="4" fill="#ff7a66"/>
-    <rect x="120" y="-8" width="720" height="104" rx="14" fill="url(#card)" stroke="#ff7a66" stroke-opacity="0.42"/>
-    <text x="140" y="18" fill="#5f7086" font-size="12" font-family="Consolas, monospace" font-weight="700" letter-spacing="2">PHASE 07 · YOU ARE HERE</text>
-    <text x="140" y="43" fill="#e8eef7" font-size="21" font-weight="700">World Entry <tspan fill="#9fb0c6" font-size="13.5" font-weight="400">— create the character · build the world server</tspan></text>
-    <text x="140" y="65" fill="#9fb0c6" font-size="13.5">Enter Game sends the create-character request (0x5CD5). Next: persist the character, then the world</text>
-    <text x="140" y="82" fill="#9fb0c6" font-size="13.5">server itself — map load, entity spawns, movement. The last stretch before standing in the world.</text>
-    <rect x="710" y="6" width="110" height="24" rx="12" fill="#ff7a66" fill-opacity="0.14" stroke="#ff7a66" stroke-opacity="0.4"/>
-    <text x="765" y="22" fill="#ff7a66" font-size="11" font-weight="700" text-anchor="middle" letter-spacing="1">IN PROGRESS</text>
+    <circle cx="80" cy="20" r="15" fill="#0b0b16" stroke="#ff2d9b" stroke-width="3"/>
+    <circle cx="80" cy="20" r="4" fill="#ff2d9b"/>
+    <rect x="120" y="-8" width="720" height="104" rx="14" fill="url(#card)" stroke="#ff2d9b" stroke-opacity="0.45"/>
+    <text x="140" y="18" fill="#7a7ca0" font-size="12" font-family="Consolas, monospace" font-weight="700" letter-spacing="2">PHASE 07 · YOU ARE HERE</text>
+    <text x="140" y="43" fill="#eef0fb" font-size="21" font-weight="700">World Entry <tspan fill="#a6a8c8" font-size="13.5" font-weight="400">— reach the world · build the world server</tspan></text>
+    <text x="140" y="65" fill="#a6a8c8" font-size="13.5">Create decoded (0x025C, after the realm-lane re-key), character persisted, and the client reaches the world</text>
+    <text x="140" y="82" fill="#a6a8c8" font-size="13.5">load. Next: the world server itself — map load, entity spawns, movement. The last stretch before the world.</text>
+    <rect x="710" y="6" width="110" height="24" rx="12" fill="#ff2d9b" fill-opacity="0.16" stroke="#ff2d9b" stroke-opacity="0.45"/>
+    <text x="765" y="22" fill="#ff6fc0" font-size="11" font-weight="700" text-anchor="middle" letter-spacing="1">IN PROGRESS</text>
   </g>
 
   <!-- NORTH STAR -->
   <g transform="translate(0,972)">
-    <path d="M80 8l4.5 10.6 11.5 1-8.8 7.6 2.7 11.2L80 44l-9.9 6 2.7-11.2-8.8-7.6 11.5-1z" fill="#f5b53f"/>
-    <rect x="120" y="0" width="720" height="96" rx="16" fill="#12141c" stroke="#f5b53f" stroke-opacity="0.38"/>
-    <text x="144" y="30" fill="#f5b53f" font-size="12" font-family="Consolas, monospace" font-weight="700" letter-spacing="2">THE NORTH STAR</text>
-    <text x="144" y="60" fill="url(#amber)" font-size="24" font-weight="800">You, standing in the world</text>
-    <text x="144" y="82" fill="#9fb0c6" font-size="13.5">A real client, logged into the NexusUnleashed engine, in the world. The only definition of done.</text>
+    <path d="M80 9 L84.5 21.9 L98.1 22.1 L87.2 30.3 L91.2 43.4 L80 35.6 L68.8 43.4 L72.8 30.3 L61.9 22.1 L75.5 21.9 Z" fill="#ff2d9b"/>
+    <rect x="120" y="0" width="720" height="96" rx="16" fill="#101018" stroke="#ff2d9b" stroke-opacity="0.4"/>
+    <text x="144" y="30" fill="#ff2d9b" font-size="12" font-family="Consolas, monospace" font-weight="700" letter-spacing="2">THE NORTH STAR</text>
+    <text x="144" y="60" fill="url(#mag)" font-size="24" font-weight="800">You, standing in the world</text>
+    <text x="144" y="82" fill="#a6a8c8" font-size="13.5">A real client, logged into the NexusUnleashed engine, in the world. The only definition of done.</text>
   </g>
 
-  <text x="60" y="1150" fill="#5f7086" font-size="12" font-family="Consolas, monospace">github.com/chaosfox26/NexusUnleashed · roadmap at the character-creator milestone — a real client logs in and builds a character</text>
+  <text x="60" y="1150" fill="#6c6e8c" font-size="12" font-family="Consolas, monospace">github.com/chaosfox26/NexusUnleashed · a real client creates a character that persists and renders — appearance decoded from the client's own tables</text>
 </svg>

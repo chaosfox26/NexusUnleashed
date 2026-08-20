@@ -20,13 +20,16 @@ own restoration data, and the observable behavior of a running reference realm,
   <img src="docs/roadmap.svg" alt="NexusUnleashed roadmap — the road to standing in the world" width="820">
 </p>
 
-> ### 🟢 Milestone — 2026-08-20: **the real client runs the character creator on this engine.**
-> A retail WildStar 16042 client logs into NexusUnleashed end to end, connects to the realm,
-> is served its characters, and walks the **entire character-creation flow** — Experience,
-> Race, Class, Path, Customize, Finalize — building a character start to finish. Every byte of
-> that handshake was derived from the client and our own running realm. **0 lines of
-> NexusForever. Not the protocol read back at a test — a real client, on our engine, at the
-> character screen.** Next stop: the world.
+> ### 🟢 Milestone — 2026-08-20: **a character created on this engine persists and renders — its whole look decoded from Carbine's own tables.**
+> A retail WildStar 16042 client creates a character on NexusUnleashed and it **saves to the
+> database, comes back correct, and renders** — race, class, faction, level, and a **full custom
+> appearance**: the player's face / hair / skin / ear choices are decoded straight out of the
+> create packet and resolved through the client's own customization tables, then drawn by the
+> client at character select. Character **management is complete too — create, delete, and realm
+> selection (list, name, type, status) — all working live.** The realm-lane packet cipher that
+> hid everything past login was cracked from the client itself. **0 lines of NexusForever. Not
+> the protocol read back at a test — a real client, on our engine, building and rendering a
+> character.** Next stop: the world.
 
 ## Why this exists: escaping the AGPL
 
@@ -62,8 +65,8 @@ in the open, in real time:
 | **03 · The Living World** | 263,756 entities, all 2,729 worlds resident at once, vision + movement + aggro + combat | ✅ Done |
 | **04 · The Wire** | 157 opcodes captured from real play, codec **validated on real packets**, entity position decoded | ✅ Done |
 | **05 · The Encryption Gate** | Encrypted channel open: SRP session key, the ARC4 login stream, the two-phase game cipher — cracked from the client | ✅ Done |
-| **06 · The Handshake** | The real 16042 client logs in through STS, connects to the realm, is served its character list, and **runs the entire character creator** — Experience → Race → Class → Path → Customize → Finalize, screenshot-proven | ✅ Done |
-| **07 · World Entry** | Character-create request (`0x5CD5`) → persist the character → the world server: map load, entity spawns, the client renders | 🔶 **In progress** |
+| **06 · The Handshake** | Real 16042 client: STS login → realm → served its character list → runs the whole creator (Experience → Race → Class → Path → Customize → Finalize) → **creates a character that persists and renders** — race/class/faction/level and a full custom appearance decoded from the client's own tables — with **delete and realm selection**, all live and screenshot-proven | ✅ Done |
+| **07 · World Entry** | Create request decoded (`0x025C`, after the realm-lane re-key) → character persisted → the client **reaches the world load**; next is the world server itself: map load, entity spawns, movement | 🔶 **In progress** |
 | **★ The North Star** | **You, standing in the world — on our engine, not theirs** | 🎯 Goal |
 
 > Not the engine reading the protocol. Not a green test. A real client rendering a
