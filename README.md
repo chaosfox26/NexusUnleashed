@@ -20,6 +20,13 @@ own restoration data, and the observable behavior of a running reference realm,
   <img src="docs/roadmap.svg" alt="NexusUnleashed roadmap — the road to standing in the world" width="820">
 </p>
 
+<p align="center">
+  <img src="docs/launcher.png" alt="Nexus Unleashed Server Launcher (nusl.exe)" width="520">
+  <br>
+  <em><b>nusl.exe</b> — the Nexus Unleashed Server Launcher: one-click start/stop, a hard memory
+  cap, CPU-core control, and live CPU/RAM monitoring. Native, no runtime, no dependencies.</em>
+</p>
+
 > ### 🟢 Milestone — 2026-08-20: **a character created on this engine persists and renders — its whole look decoded from Carbine's own tables.**
 > A retail WildStar 16042 client creates a character on NexusUnleashed and it **saves to the
 > database, comes back correct, and renders** — race, class, faction, level, and a **full custom
