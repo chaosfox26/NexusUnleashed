@@ -6,6 +6,7 @@
 #include "proto/account_realm.h"
 #include "sts/auth_flow.h"        // AuthSession
 #include <cstdio>
+#include <cstring>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -66,6 +67,7 @@ namespace nexus::realm {
 
 std::function<std::vector<uint8_t>(long)> WorldHandshake::CharacterListBodyProvider;
 std::function<uint64_t(long, const std::vector<uint8_t>&)> WorldHandshake::CreateCharacterProvider;
+std::function<bool(long, uint64_t)> WorldHandshake::DeleteCharacterProvider;
 std::vector<std::pair<uint16_t, std::vector<uint8_t>>> WorldHandshake::WorldEntrySequence;
 bool WorldHandshake::SendAccountData = false;  // these break the realm connection if sent at the
 bool WorldHandshake::SendRealmList = false;    // "Connecting to realm" stage; hold until the right step.
@@ -239,6 +241,26 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
             proto::CharacterCreateResult::Build(newId, proto::CharacterCreateResult::Ok));
         std::printf("realm-conn: -> 0x00DC create result OK, new char id %llu\n",
                     (unsigned long long)newId);
+        co_return;
+    });
+
+    // 0x0352 = ClientCharacterDelete (the char-select Delete button). Client sends message 850
+    // with body = u64 characterId (sub_140024C10). We soft-delete it, then send the 0xE6 result;
+    // the client's dispatcher (sub_140020EA0, opcode 230) removes the character from its list when
+    // result == 0, which frees the slot. Body is two byte-aligned u32s {result, 0}.
+    server.On(0x0352, [](net::GameSession& s, const std::vector<uint8_t>& body) -> awaitable<void> {
+        uint64_t charId = 0;
+        for (size_t i = 0; i < body.size() && i < 8; ++i) charId |= (uint64_t)body[i] << (8 * i);
+        long acc = sts::AuthSession::LastAccountId();
+        bool ok = DeleteCharacterProvider ? DeleteCharacterProvider(acc, charId) : false;
+        std::printf("realm-conn: <- 0x0352 CharacterDelete charId=%llu (account %ld) -> %s\n",
+                    (unsigned long long)charId, acc, ok ? "deleted" : "FAILED");
+
+        std::vector<uint8_t> result(8, 0);
+        uint32_t code = ok ? 0u : 1u;              // 0 = removed (client drops it); nonzero = fail
+        std::memcpy(result.data(), &code, 4);
+        co_await s.SendGameMessage(0x00E6, result);
+        std::printf("realm-conn: -> 0x00E6 delete result (code %u)\n", code);
         co_return;
     });
 

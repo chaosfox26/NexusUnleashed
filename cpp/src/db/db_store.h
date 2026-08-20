@@ -50,6 +50,10 @@ public:
     // Insert a new character for the account; returns its assigned id (0 on failure).
     // Id is generated as MAX(id)+1 because the character.id column is a manual PK.
     uint64_t CreateCharacter(long accountId, const NewCharacter& nc);
+    // Soft-delete a character (sets deleteTime) — scoped to the owning account so a client can
+    // only delete its own. Returns true if a row was affected. GetCharacters filters deleted rows,
+    // so the slot frees immediately.
+    bool DeleteCharacter(long accountId, uint64_t characterId);
 private:
     ConnInfo ci_;
 };

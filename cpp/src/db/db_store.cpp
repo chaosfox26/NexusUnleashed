@@ -228,4 +228,15 @@ uint64_t DbCharacterStore::CreateCharacter(long accountId, const NewCharacter& n
     return newId;
 }
 
+bool DbCharacterStore::DeleteCharacter(long accountId, uint64_t characterId) {
+    if (accountId <= 0 || characterId == 0) return false;
+    Conn c(ci_, ci_.database);
+    // Scoped to the account so a client can only delete a character it owns. Soft-delete keeps the
+    // row (and its appearance/customisation) recoverable; GetCharacters excludes deleteTime != NULL.
+    std::string q = "UPDATE `character` SET deleteTime=NOW() WHERE id=" + std::to_string(characterId) +
+                    " AND accountId=" + std::to_string(accountId) + " AND deleteTime IS NULL";
+    if (mysql_real_query(c.m, q.c_str(), (unsigned long)q.size()) != 0) return false;
+    return mysql_affected_rows(c.m) > 0;
+}
+
 } // namespace nexus::db

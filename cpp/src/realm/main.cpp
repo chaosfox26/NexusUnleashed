@@ -81,6 +81,12 @@ int main() {
                     acc, nc.Name.c_str(), nc.Race, nc.Class, nc.Customization.size(), (unsigned long long)id);
         return id;
     };
+    realm::WorldHandshake::DeleteCharacterProvider = [&charStore](long acc, uint64_t charId) -> bool {
+        bool ok = charStore.DeleteCharacter(acc, charId);
+        std::printf("realm: delete-character provider: account %ld char %llu -> %s\n",
+                    acc, (unsigned long long)charId, ok ? "deleted" : "not found");
+        return ok;
+    };
     net::GameServer realmServer(io, cfg.bind_address, cfg.auth_port, /*worldChannel=*/false);
     realm::WorldHandshake::Register(realmServer);
     realmServer.Start();

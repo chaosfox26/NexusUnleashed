@@ -21,6 +21,11 @@ struct WorldHandshake {
     // the 0xDC create-result. See spec/protocol/character-create-0xDC.md.
     static std::function<uint64_t(long accountId, const std::vector<uint8_t>& createBody)> CreateCharacterProvider;
 
+    // Wired by the host: (accountId, characterId) -> true if deleted. The realm-conn 0x0352
+    // handler (client delete request, body = u64 charId) calls this then sends the 0xE6 result
+    // (result 0 = removed). Client: sub_140024C10 sends msg 850; sub_140020EA0 handles 230.
+    static std::function<bool(long accountId, uint64_t characterId)> DeleteCharacterProvider;
+
     // Account-retrieval handshake (spec/protocol/realm-list-0x761-and-account-0x7A1.md):
     // on realm-enter we push 0x7A1 (account data) then 0x761 (realm list) to clear the
     // "Retrieving Account Information" overlay and advance to RealmSelect. Configurable so
