@@ -170,6 +170,11 @@ public static class AuthFlow
             {
                 Guid token = NewToken();
                 await accounts.StoreGameTokenAsync((string)login, token);
+                // Bridge the authenticated account to the realm channel that follows
+                // (same process). Account-keyed so any account — including the
+                // operator's own — is served its characters by the identical path.
+                long uid = await accounts.GetUserIdAsync((string)login);
+                AuthSession.Register(token.ToString("N"), uid);
                 await s.SendAsync(StsReply.Ok(r.Sequence,
                     XmlBody.Fields(("Token", token.ToString("N")))));
             }

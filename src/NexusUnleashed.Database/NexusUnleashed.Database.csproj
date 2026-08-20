@@ -8,5 +8,6 @@
     <!-- MySqlConnector: MIT-licensed async MySQL driver. -->
     <PackageReference Include="MySqlConnector" Version="2.3.7" />
     <ProjectReference Include="..\NexusUnleashed.Sts\NexusUnleashed.Sts.csproj" />
+    <ProjectReference Include="..\NexusUnleashed.Network\NexusUnleashed.Network.csproj" />
   </ItemGroup>
 </Project>

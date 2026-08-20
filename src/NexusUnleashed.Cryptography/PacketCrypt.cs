@@ -80,8 +80,35 @@ public sealed class PacketCrypt
         return outp;
     }
 
+    /// <summary>
+    /// Server-&gt;client send-encrypt: the exact inverse of <see cref="Decrypt"/>, so the
+    /// client's receive path (which mirrors Decrypt) recovers the plaintext. Reversed
+    /// register like Decrypt, but the feedback byte is the CIPHERTEXT (output) — the
+    /// only difference from Decrypt, and what makes the pair invertible. This is the
+    /// correct routine for the realm/world channel S-&gt;C direction; the forward-register
+    /// <see cref="Encrypt"/> is the opposite endpoint's operation.
+    /// Validated against the live 16042 client (it parses server messages sent this way).
+    /// </summary>
+    public byte[] EncryptForClient(byte[] data, int length)
+    {
+        var outp = new byte[length];
+        var fb = BitConverter.GetBytes(_register);
+        Array.Reverse(fb);
+        uint counter = LengthSeed * (uint)length;
+        uint block = 0;
+        for (int i = 0; i < length; i++)
+        {
+            int k = i % 8;
+            if (k == 0) block = (counter++ & 0xF) * 8;
+            outp[i] = (byte)(fb[7 - k] ^ data[i] ^ _key[block + k]);
+            fb[7 - k] = outp[i];   // feedback = ciphertext (inverse of Decrypt)
+        }
+        return outp;
+    }
+
     public byte[] Encrypt(byte[] data) => Encrypt(data, data.Length);
     public byte[] Decrypt(byte[] data) => Decrypt(data, data.Length);
+    public byte[] EncryptForClient(byte[] data) => EncryptForClient(data, data.Length);
 
     /// <summary>
     /// The AUTH-phase keyInteger: the static build key the channel opens with

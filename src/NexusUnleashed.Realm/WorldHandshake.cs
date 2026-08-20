@@ -51,6 +51,13 @@ public static class WorldHandshake
     /// <summary>A fixed dev world keyInteger (both ends use it) for the self-test.</summary>
     public const ulong DevWorldKey = 0x4888DCE5CA507060ul;
 
+    /// <summary>
+    /// Wired by the host: given the authenticated account id, produce the 0x0117
+    /// character-list inner body (from characterdb). Kept as a hook so the network
+    /// layer stays free of a database dependency.
+    /// </summary>
+    public static Func<long, Task<byte[]?>>? CharacterListBodyProvider { get; set; }
+
     public static void Register(GameServer world)
     {
         world.OnConnected = async session =>
@@ -71,19 +78,34 @@ public static class WorldHandshake
             }
         };
 
-        // The client's realm-enter (token-bearing). Live 16042 uses inner op
-        // 0x0592 (our earlier capture read 0x058F; the live client is authority).
+        // The client's realm-enter (token-bearing). Live 16042 uses inner op 0x0592.
+        // On realm-enter we serve the character list (0x0117), whose wire format was
+        // read out of the client's own deserializer (spec/protocol/char-list-0x117.md).
         world.On(0x0592, async (s, body) =>
         {
             Log.Info($"realm: <- 0x0592 realm-enter ({body.Length}B)");
-            // The realm reply chain (all client-derived, generated from our DB):
-            //   account-info message(s) that clear "Retrieving Account Information"
-            //   -> 0x0117 character list -> character select.
-            // 0x0117 is the character list (cracked from the client dispatch:
-            // 0x117 -> case 0x140021167 -> handler 0x140021540, char stride 0x330).
-            // Generator lands next: read the account's characters from characterdb
-            // and serialize the client-derived 0x0117 layout. No NF captures.
-            await Task.CompletedTask;
+            long acc = NexusUnleashed.Sts.AuthSession.LastAccountId;
+            var provider = CharacterListBodyProvider;
+            if (provider == null)
+            {
+                Log.Info("realm: no character-list provider wired");
+                return;
+            }
+            try
+            {
+                byte[]? charListBody = await provider(acc);
+                if (charListBody == null)
+                {
+                    Log.Info($"realm: character-list provider returned null for account {acc}");
+                    return;
+                }
+                await s.SendClearGameMessageAsync(NexusUnleashed.Network.CharacterListMessage.Opcode, charListBody);
+                Log.Info($"realm: -> 0x0117 character list (clear frame) for account {acc} ({charListBody.Length}B)");
+            }
+            catch (Exception ex)
+            {
+                Log.Info($"realm: character-list send failed: {ex.Message}");
+            }
         });
 
         // Log every inner opcode not yet handled — pins the realm vocabulary from

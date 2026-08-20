@@ -1,0 +1,11 @@
+{
+  "name": "nexusunleashed-engine",
+  "version": "0.1.0",
+  "description": "NexusUnleashed clean-room WildStar realm engine (C++ port).",
+  "dependencies": [
+    "openssl",
+    "asio",
+    "libmariadb",
+    "nlohmann-json"
+  ]
+}

@@ -16,3 +16,12 @@ provenance/.private-terms
 charlist-replay.bin
 Claude/Context/local-notes.md
 *local-notes*
+
+# C++ port build artifacts + vcpkg installed tree (deps are pinned via cpp/vcpkg.json)
+cpp/build/
+cpp/out/
+**/vcpkg_installed/
+*.obj
+*.exe
+*.pdb
+*.ilk

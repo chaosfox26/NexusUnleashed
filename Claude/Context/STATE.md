@@ -1,5 +1,45 @@
 # NexusUnleashed Engine — State of the Build
 
+> **▶ RESUME (2026-08-20) — THE CLIENT REACHES THE CHARACTER CREATOR. PHASE 06 DONE.**
+> The real 16042 client now logs in end to end and runs the **entire character creator**
+> (Experience → Race → Class → Path → Customize → Finalize) — screenshot-proven, zero NF.
+> Both walls fell: (1) *"Retrieving Account Information"* — the packet cipher was a **qword-CFB**
+> (not byte-wise), byte-exact after fixing the register FOLD; connection handshake completes via
+> `0x0591` (6→9) then `0x03db` (9→10) in the `0x76` envelope. (2) *"Connecting to realm"* — the
+> client dials the realm at the **address in the `0x03db` body** (first u32+u16, `htonl`/`htons`);
+> we were sending zeros so it dialed `0.0.0.0:0` (proven by hooking `connect()`). Fixed: `Build3db`
+> carries `127.0.0.1` + port; the server stands up a **realm-connection listener** and answers with
+> an **encrypted `0x0003`** on that lane → client `sub_140038120` creates the account object
+> (state 10→11) → `0x0117` char list → character screen + creator. Full story:
+> `SESSION-2026-08-20-character-creator.md`.
+>
+> **NEXT (Phase 07 — World Entry):** Enter Game from Finalize sends **`0x5CD5`** (298 B, create
+> character). The server does not answer it yet. Pin the create-result response (char-select mgr
+> `qword_140C66DA8`, pending flag +368; senders `sub_140023E90`/select `sub_140024DD0`=msg 1926),
+> persist a full character, then build the **world server** (map load, entity spawn, movement) —
+> the real North Star; even a perfect create-response lands at the world-load wall until it exists.
+> Do NOT brute-force opcodes. The banners below are prior state.
+
+> **🟢 THE ENGINE IS NOW C++ — AT PARITY, PROVEN LIVE (2026-08-19).** Real 16042 client
+> authenticates end-to-end against the C++ engine (SRP verified in C++), enters the realm
+> channel, and is served its char list from the DB — all proven against the live
+> client. **C# is an afterthought** (reference only; do not add features to it). Full C++
+> stack in `cpp/`: STS+AuthFlow+SRP(OpenSSL)+ARC4+Asio GameServer/Session+WorldHandshake+
+> Db stores(libmariadb)+config(json); vcpkg manifest; VS18/MSVC/C++20. Build:
+> `cmake -S cpp -B cpp/build -DCMAKE_TOOLCHAIN_FILE=<home>/vcpkg/scripts/buildsystems/vcpkg.cmake`
+> then `cmake --build cpp/build --config Release`; run `cpp/build/Release/nexus_realm.exe`
+> (realm.json beside it, gitignored). Unit tests all green.
+>
+> **📌 READ `../../build-notes.md` FIRST** (the go-to record), then `CPP-PORT-PLAN.md`.
+> **BLOCKER = the account-retrieval barrier:** after realm-enter (0x0592) the client sits
+> on the **Login** screen firing Lua `NetworkStatus` "Retrieving Account Information" and
+> waits for the server to PUSH account data (BEFORE RealmSelect/Character; char-select
+> object G `*[0x140C66DA8]` null is EXPECTED). Full RE + tools + next steps:
+> **`spec/protocol/account-retrieval-barrier.md`**. Key enabler: **`WS+0xEA3E0` = the Lua
+> event-fire fn** (hook it -> every client event); message table = probe-all.json (1121
+> opcodes); engine has a safe `inject.txt` message injector. NEVER brute-force opcodes
+> (malformed msgs have crashed the live client). Language-neutral; specs below still hold.
+
 > **📎 FULL CONTINUATION HANDOFF: read `CONTINUE.md` first** — it is the self-contained
 > pickup point (mission, ALL rules, hardware requirements, technical state, run
 > commands, the safe next-step plan). Sensitive specifics are in the gitignored

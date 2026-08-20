@@ -20,6 +20,14 @@ own restoration data, and the observable behavior of a running reference realm,
   <img src="docs/roadmap.svg" alt="NexusUnleashed roadmap — the road to standing in the world" width="820">
 </p>
 
+> ### 🟢 Milestone — 2026-08-20: **the real client runs the character creator on this engine.**
+> A retail WildStar 16042 client logs into NexusUnleashed end to end, connects to the realm,
+> is served its characters, and walks the **entire character-creation flow** — Experience,
+> Race, Class, Path, Customize, Finalize — building a character start to finish. Every byte of
+> that handshake was derived from the client and our own running realm. **0 lines of
+> NexusForever. Not the protocol read back at a test — a real client, on our engine, at the
+> character screen.** Next stop: the world.
+
 ## Why this exists: escaping the AGPL
 
 **This entire project has one reason to exist — to get out from under the AGPL-3.0.**
@@ -54,8 +62,8 @@ in the open, in real time:
 | **03 · The Living World** | 263,756 entities, all 2,729 worlds resident at once, vision + movement + aggro + combat | ✅ Done |
 | **04 · The Wire** | 157 opcodes captured from real play, codec **validated on real packets**, entity position decoded | ✅ Done |
 | **05 · The Encryption Gate** | Encrypted channel open: SRP session key, the ARC4 login stream, the two-phase game cipher — cracked from the client | ✅ Done |
-| **06 · The Handshake** | The real 16042 client logs in through STS end to end and reaches our realm channel (token issued, realm-enter decoded). **Auth: done.** Character list · select &amp; enter next | 🔶 **In progress** |
-| **07 · World Entry** | World-state blobs · entity spawns · the client renders | ⬜ Next |
+| **06 · The Handshake** | The real 16042 client logs in through STS, connects to the realm, is served its character list, and **runs the entire character creator** — Experience → Race → Class → Path → Customize → Finalize, screenshot-proven | ✅ Done |
+| **07 · World Entry** | Character-create request (`0x5CD5`) → persist the character → the world server: map load, entity spawns, the client renders | 🔶 **In progress** |
 | **★ The North Star** | **You, standing in the world — on our engine, not theirs** | 🎯 Goal |
 
 > Not the engine reading the protocol. Not a green test. A real client rendering a

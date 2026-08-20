@@ -120,27 +120,30 @@
     <text x="773" y="22" fill="#3fd18a" font-size="11" font-weight="700" text-anchor="middle" letter-spacing="1">DONE</text>
   </g>
 
-  <!-- PHASE 06 ACTIVE -->
+  <!-- PHASE 06 DONE -->
   <g transform="translate(0,745)">
+    <circle cx="80" cy="20" r="13" fill="#0c1119" stroke="#3fd18a" stroke-width="2.5"/>
+    <path d="M74 20l4 4 8-8" stroke="#3fd18a" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="120" y="-8" width="720" height="86" rx="14" fill="url(#card)" stroke="#1f2b3e"/>
+    <text x="140" y="18" fill="#5f7086" font-size="12" font-family="Consolas, monospace" font-weight="700" letter-spacing="2">PHASE 06</text>
+    <text x="140" y="42" fill="#e8eef7" font-size="21" font-weight="700">The Handshake <tspan fill="#9fb0c6" font-size="13.5" font-weight="400">— login · realm connect · character creator</tspan></text>
+    <text x="140" y="61" fill="#9fb0c6" font-size="13.5">The real 16042 client logs in end to end, connects to the realm, is served its characters, and runs the</text>
+    <text x="140" y="78" fill="#9fb0c6" font-size="13.5">whole character creator — Experience → Race → Class → Path → Customize → Finalize. Screenshot-proven.</text>
+    <rect x="726" y="6" width="94" height="24" rx="12" fill="#3fd18a" fill-opacity="0.12" stroke="#3fd18a" stroke-opacity="0.3"/>
+    <text x="773" y="22" fill="#3fd18a" font-size="11" font-weight="700" text-anchor="middle" letter-spacing="1">DONE</text>
+  </g>
+
+  <!-- PHASE 07 ACTIVE -->
+  <g transform="translate(0,872)">
     <circle cx="80" cy="20" r="15" fill="#0c1119" stroke="#ff7a66" stroke-width="3"/>
     <circle cx="80" cy="20" r="4" fill="#ff7a66"/>
     <rect x="120" y="-8" width="720" height="104" rx="14" fill="url(#card)" stroke="#ff7a66" stroke-opacity="0.42"/>
-    <text x="140" y="18" fill="#5f7086" font-size="12" font-family="Consolas, monospace" font-weight="700" letter-spacing="2">PHASE 06 · YOU ARE HERE</text>
-    <text x="140" y="43" fill="#e8eef7" font-size="21" font-weight="700">The Handshake <tspan fill="#9fb0c6" font-size="13.5" font-weight="400">— auth · character list · select &amp; enter</tspan></text>
-    <text x="140" y="65" fill="#9fb0c6" font-size="13.5">The real 16042 client logs in through STS end to end and reaches our realm channel — token issued, the</text>
-    <text x="140" y="82" fill="#9fb0c6" font-size="13.5">realm-enter decoded. <tspan fill="#cdd9e8">Auth: done.</tspan> Character list · select &amp; enter: in progress.</text>
+    <text x="140" y="18" fill="#5f7086" font-size="12" font-family="Consolas, monospace" font-weight="700" letter-spacing="2">PHASE 07 · YOU ARE HERE</text>
+    <text x="140" y="43" fill="#e8eef7" font-size="21" font-weight="700">World Entry <tspan fill="#9fb0c6" font-size="13.5" font-weight="400">— create the character · build the world server</tspan></text>
+    <text x="140" y="65" fill="#9fb0c6" font-size="13.5">Enter Game sends the create-character request (0x5CD5). Next: persist the character, then the world</text>
+    <text x="140" y="82" fill="#9fb0c6" font-size="13.5">server itself — map load, entity spawns, movement. The last stretch before standing in the world.</text>
     <rect x="710" y="6" width="110" height="24" rx="12" fill="#ff7a66" fill-opacity="0.14" stroke="#ff7a66" stroke-opacity="0.4"/>
     <text x="765" y="22" fill="#ff7a66" font-size="11" font-weight="700" text-anchor="middle" letter-spacing="1">IN PROGRESS</text>
-  </g>
-
-  <!-- PHASE 07 -->
-  <g transform="translate(0,872)">
-    <circle cx="80" cy="20" r="13" fill="#0c1119" stroke="#5f7086" stroke-width="2.5"/>
-    <rect x="120" y="-8" width="720" height="70" rx="14" fill="url(#card)" stroke="#1f2b3e"/>
-    <text x="140" y="20" fill="#5f7086" font-size="12" font-family="Consolas, monospace" font-weight="700" letter-spacing="2">PHASE 07</text>
-    <text x="140" y="44" fill="#e8eef7" font-size="20" font-weight="700">World Entry <tspan fill="#9fb0c6" font-size="13.5" font-weight="400">— world-state blobs · entity spawns · the client renders</tspan></text>
-    <rect x="738" y="4" width="82" height="24" rx="12" fill="#9fb0c6" fill-opacity="0.08" stroke="#1f2b3e"/>
-    <text x="779" y="20" fill="#9fb0c6" font-size="11" font-weight="700" text-anchor="middle" letter-spacing="1">NEXT</text>
   </g>
 
   <!-- NORTH STAR -->
@@ -152,5 +155,5 @@
     <text x="144" y="82" fill="#9fb0c6" font-size="13.5">A real client, logged into the NexusUnleashed engine, in the world. The only definition of done.</text>
   </g>
 
-  <text x="60" y="1150" fill="#5f7086" font-size="12" font-family="Consolas, monospace">github.com/chaosfox26/NexusUnleashed · roadmap at the login milestone — the client authenticates and reaches the realm</text>
+  <text x="60" y="1150" fill="#5f7086" font-size="12" font-family="Consolas, monospace">github.com/chaosfox26/NexusUnleashed · roadmap at the character-creator milestone — a real client logs in and builds a character</text>
 </svg>

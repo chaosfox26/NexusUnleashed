@@ -92,7 +92,10 @@ public static class WorldPacket
         inner[1] = (byte)(innerOpcode >> 8);
         Array.Copy(innerBody, 0, inner, 2, innerBody.Length);
 
-        byte[] cipher = crypt.Encrypt(inner, inner.Length);
+        // Server->client (and the symmetric client->server) encrypt is the exact
+        // inverse of Decrypt, so the peer's Decrypt-mirroring receive path recovers
+        // the plaintext. The forward-register Encrypt is the wrong pairing here.
+        byte[] cipher = crypt.EncryptForClient(inner, inner.Length);
 
         uint innerLen = (uint)(4 + cipher.Length);
         var payload = new byte[4 + cipher.Length];

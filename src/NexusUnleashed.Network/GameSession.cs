@@ -162,6 +162,18 @@ public sealed class GameSession : IDisposable
         await _socket.SendAsync(frame, SocketFlags.None);
     }
 
+    /// <summary>
+    /// Send a message as a CLEAR direct frame ([size][opcode][body]) regardless of
+    /// cipher state — the realm channel's server-&gt;client framing (proven by the
+    /// clear 0x0003 hello the client accepts; the 0x03DC encrypted container is a
+    /// WORLD-channel construct the realm channel does not use for S-&gt;C).
+    /// </summary>
+    public async Task SendClearGameMessageAsync(ushort opcode, byte[] body)
+    {
+        byte[] frame = GamePacketFrame.Encode(opcode, body);
+        await _socket.SendAsync(frame, SocketFlags.None);
+    }
+
     public void Dispose()
     {
         _cts.Cancel();

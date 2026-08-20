@@ -198,3 +198,123 @@ deserializer once found and either observe a genuinely-valid parse or NativeFunc
 call it in-process with a controlled buffer (sandbox — no network, no client-state
 risk). Then build the GENERIC, account-keyed 0x117 generator from characterdb
 (multi-account by design; reproducible; MIT — for the community).
+
+---
+
+## §10 — THE C++ PIVOT (2026-08-19, late) — full vision revealed
+
+**Operator decision: port the entire clean engine to C++, 1:1, now.** The C# tree
+becomes the byte-verified reference oracle (kept building until C++ overtakes it).
+
+**What drove it — the full vision (bigger than a server):** merge the friend's C++
+work; port to Linux; **heavy game-ENGINE work**; **new rendering features that never
+existed — FSR 3/4, DLSS 3/4, and a DX12 renderer**; optimize for stability + community
+content (quests/modding). The engine/renderer/DLSS/FSR/DX12 half is **unavoidably C++**
+(SDKs, D3D hooking, the compiled proprietary engine, and the friend all live there), so
+C++ becomes the center of gravity and the server unifies onto it. Operator is
+optimization-first and wants one coherent native project.
+
+**Language debate (recorded):** for a *pure server*, Rust ≈ C# > C++ on
+fast+stable+strain (memory safety + no GC tail-latency; Rust = the optimization-nut
+pick). The FULL scope flips it to C++. Rendering difficulty ladder: FSR1 easy
+(post-process inject); FSR2/3/4 + DLSS3/4 need motion vectors the engine doesn't expose
+(deep renderer RE); DX12 = renderer replacement. Multi-year summit — sequence it.
+
+**Plan written:** `Claude/Context/CPP-PORT-PLAN.md` (decision, vision, component map,
+dependency choices, Phase 0–4). Banners added to CONTINUE.md + STATE.md. Memory saved
+([[the-cpp-pivot]]). Toolchain: CMake + vcpkg, C++20 (Asio coroutines), OpenSSL,
+MySQL Connector/C++, nlohmann/json, spdlog, Catch2. **The specs + Frida RE tooling are
+language-neutral and carry over unchanged.** The open protocol blocker (realm-enter →
+char-select handshake / char-select C++ object G null) is unchanged and gets solved in
+C++ in Phase 4.
+
+**State of play at pivot:** engine (C#) still deployed and validated (char list parses
+on the real client). Realm left as-is. Next action after context files: **Phase 0 — C++
+project skeleton.** Repo layout still to confirm with operator (leaning `cpp/` subdir of
+the current MIT repo).
+
+---
+
+## §11 — C++ PORT: Phases 0-2 (crypto + message model) DONE & byte-verified
+
+Toolchain: VS 18 (2026), MSVC 19.51, C++20, CMake+Ninja bundled. **vcpkg manifest
+mode** (`cpp/vcpkg.json`; vcpkg at `<home>\vcpkg`; toolchain file wired) —
+OpenSSL 3.6.3 + asio installed & linked. Operator chose vcpkg-manifest for reproducible
+deps. Build: `cmake -S cpp -B cpp/build -DCMAKE_TOOLCHAIN_FILE=<vcpkg>/scripts/
+buildsystems/vcpkg.cmake` then `cmake --build cpp/build --config Release`; run
+`cpp/build/Release/nexus_tests.exe`.
+
+**Ported 1:1 + tested (ALL GREEN):**
+- `net/bitstream.h` (PacketReader/Writer, LSB-first) — round-trip verified.
+- `crypto/packet_crypt` — the cipher; **FINDING: Encrypt == EncryptForClient byte-for-byte**
+  (register reversal cancels index reversal), so the S->C "direction" is a no-op; the real
+  realm fix was CLEAR framing. Spec corrected.
+- `net/frame.h` (GamePacketFrame), `net/world_packet` (container codec) — container
+  round-trip proven.
+- `proto/character_list` (0x0117 serializer) — 121 bytes for a single-character list, matches
+  the validated bit-length exactly.
+- `crypto/sts_srp` — WildStar game-SRP on OpenSSL bignum + SHA-256 (LE, ReverseUInt32,
+  interleaved K); valid 128-byte B.
+- `crypto/arc4.h` — clean-room RC4 (NOT copied), passes canonical KAT.
+- `sts/sts_message` (StsRequest/StsReply/StsParser) — request parse, partial framing,
+  reply "STS/1.0 200  OK" two-space form, back-to-back requests all verified.
+
+**C# UNTOUCHED — still the deployed fallback/oracle.** Byte-verification discipline held.
+
+**NEXT (Phase 2 finish -> Phase 3): the Asio async servers + AuthFlow + DB.**
+- `StsServer`/`StsSession` (Asio TCP + ARC4 stream) + `AuthFlow` (the Connect/LoginStart/
+  KeyData/LoginFinish/ListMyAccounts/RequestGameToken transaction using StsSrp) +
+  `AuthSession`. Needs the DB store -> add **mysql** (libmariadb or mysql-connector-cpp)
+  to vcpkg.json for `DbAccountStore`/`DbCharacterStore`.
+- Then `GameServer`/`GameSession` (Asio) + `WorldHandshake` (Phase 3) + the char-list send.
+- **Phase 2 milestone = real client authenticates against the C++ server end-to-end**
+  (same Frida/driver verification as the C# side).
+
+## §12 — C++ PORT AT PARITY WITH C# — verified against the LIVE client (2026-08-19)
+
+**The real 16042 client authenticated end-to-end against the C++ engine and reached the
+same state as the C# reference.** C++ server log:
+```
+[STS-SRP] proof VERIFIED (game-SRP little-endian)   <- SRP verified in C++
+realm: <- 0x0592 realm-enter (396B)
+realm: character-list provider: account 2 has 1 character(s)   <- DB read (libmariadb)
+realm: -> 0x0117 character list (clear frame) for account 2 (121B)   <- validated serializer
+realm: <- inner op=0x0000 (1B)
+```
+Client now sits at "Retrieving Account Information" — the SAME open blocker as C#
+(char-select state object G null; char list dropped). Language-neutral; Phase 4.
+
+**Full C++ stack now built + running + proven:** STS server + AuthFlow + SRP(OpenSSL) +
+ARC4 + GameServer/GameSession(Asio coroutines) + WorldHandshake + DbAccountStore/
+DbCharacterStore(libmariadb) + RealmConfig(nlohmann-json). Runs on the io_context across
+hardware threads. `nexus_realm.exe` in cpp/build/Release (realm.json beside it, gitignored).
+
+**Bug caught by the live client (byte-verify win #2):** the hello body was hand-typed with
+the `0b14332f01` message-definitions stamp shifted 2 bytes early (byte 24 vs 26) ->
+client error "Message Definitions Mismatch - Connection closed by remote host". Fixed to
+match the C# HelloBodyHex byte-for-byte. (Win #1: Encrypt==EncryptForClient equivalence.)
+
+**Phases 2+3 DONE in C++ (parity). Phase 4 = the realm-enter->char-select transition RE
+(create G / register the 0x117 handler), now solved natively in C++.** C# fallback is
+stopped only because C++ reused its ports; restart anytime.
+
+## §13 — Account-retrieval barrier: deep RE + toolset (2026-08-19, autonomous)
+
+C++ engine confirmed AT PARITY vs the live client. Pushed hard on the ONE remaining
+blocker ("Retrieving Account Information"). Findings + full tool inventory:
+`spec/protocol/account-retrieval-barrier.md`. Key results:
+- Window-only screenshot (ws-shot.ps1) proved the client is on the **Login** screen with
+  a `NetworkStatus` "Retrieving Account Information" overlay — waiting for account-data
+  PUSH after 0x0592, BEFORE RealmSelect/Character. G-null is expected (pre-char-select).
+- **Discovered `WS+0xEA3E0` = the Lua event-fire function** (event name in rdx) →
+  `event-trace.py` logs every client event. The client fires only `NetworkStatus` then
+  waits (no RealmListChanged/CharacterList).
+- Captured the FULL message table (1121 opcodes, probe-all.json) + hello/char-list pump
+  call-trees (pump-stalk.py). Descriptor fn18/fn20 are serialization only; semantic
+  handlers dispatch via the active pre-game state.
+- The router `WS+0x14f10` special-cases connection opcodes 0x3/0x76/0x3dc; 0x76 handler
+  = WS+0x140015248 (candidate realm/account message, unresolved).
+- NEXT: find the active Login/account pre-game state's message dispatcher (like char-select
+  WS+0x20EA0) and enumerate its expected opcodes; OR event-trace + the engine's inject.txt
+  to probe candidates SAFELY (never brute-force — malformed msgs have crashed the client).
+State left clean: C++ server + client running; C# is history.

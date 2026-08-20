@@ -1,5 +1,22 @@
 # CONTINUE HERE — NexusUnleashed clean engine: full continuation handoff
 
+> **🟢 2026-08-20 — THE CLIENT REACHES THE CHARACTER CREATOR.** Both login walls fell
+> (packet cipher = qword-CFB; realm dial address in the `0x03db` body). The real client now
+> logs in, connects to the realm, is served its characters, and runs the **entire character
+> creator**. **READ `SESSION-2026-08-20-character-creator.md` FIRST**, then the resume banner
+> in `STATE.md`. NEXT = Phase 07: create-character (`0x5CD5`) → persist → the world server.
+> The banner below is prior state.
+
+> **🟢 THE ENGINE IS NOW C++ (2026-08-19).** The C++ port reached **parity with the C#**
+> and is the project's primary engine: a real 16042 client authenticates end-to-end
+> against it, enters the realm channel, and is served its char list from the DB — proven
+> live. **C# is now an afterthought** (historical reference/oracle only; do not add
+> features to it). **📌 READ `../../build-notes.md` FIRST — it is the go-to record of
+> what has been built.** Then `CPP-PORT-PLAN.md` for scope/vision. The protocol RE below
+> still stands (language-neutral specs; Frida/Python tooling is language-independent).
+> Everything in §2 THE RULES still applies (esp. NO NF). The one remaining step to the
+> world is the realm-enter → char-select transition (build-notes.md §5).
+
 _Self-contained. Read this first, then `STATE.md` (resume banner) and
 `SESSION-2026-08-19-login-and-tools.md` (evidence). Sensitive specifics a fresh
 session needs (test-account handling, character names, exact dev machine, login

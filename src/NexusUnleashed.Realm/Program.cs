@@ -53,6 +53,19 @@ internal static class Program
         // then speaks the auth-key encrypted container protocol (0x0244 in). The
         // same WorldHandshake serves it — its OnConnected keys off Crypt==null to
         // bootstrap clear then switch to container mode.
+        // Character-list provider: serve the authenticated account's own characters
+        // from characterdb, serialized to the client-derived 0x0117 layout.
+        if (!string.IsNullOrWhiteSpace(cfg.AuthDatabase))
+        {
+            var charStore = new NexusUnleashed.Database.DbCharacterStore(cfg.AuthDatabase);
+            WorldHandshake.CharacterListBodyProvider = async acc =>
+            {
+                var chars = await charStore.GetCharactersAsync(acc);
+                Log.Info($"realm: character-list provider: account {acc} has {chars.Count} character(s)");
+                return NexusUnleashed.Network.CharacterListMessage.Build(chars);
+            };
+        }
+
         var auth = new GameServer(cfg.BindAddress, cfg.AuthPort, worldChannel: false);
         WorldHandshake.Register(auth);
         Log.Info($"realm/auth server listening on {cfg.AuthPort} (clear 0x0003 hello, then container).");
