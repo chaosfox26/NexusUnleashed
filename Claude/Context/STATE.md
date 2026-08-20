@@ -1,17 +1,19 @@
 # NexusUnleashed Engine — State of the Build
 
-> **▶ RESUME (2026-08-20) — THE CLIENT REACHES THE CHARACTER CREATOR. PHASE 06 DONE.**
-> The real 16042 client now logs in end to end and runs the **entire character creator**
-> (Experience → Race → Class → Path → Customize → Finalize) — screenshot-proven, zero NF.
-> Both walls fell: (1) *"Retrieving Account Information"* — the packet cipher was a **qword-CFB**
-> (not byte-wise), byte-exact after fixing the register FOLD; connection handshake completes via
-> `0x0591` (6→9) then `0x03db` (9→10) in the `0x76` envelope. (2) *"Connecting to realm"* — the
-> client dials the realm at the **address in the `0x03db` body** (first u32+u16, `htonl`/`htons`);
-> we were sending zeros so it dialed `0.0.0.0:0` (proven by hooking `connect()`). Fixed: `Build3db`
-> carries `127.0.0.1` + port; the server stands up a **realm-connection listener** and answers with
-> an **encrypted `0x0003`** on that lane → client `sub_140038120` creates the account object
-> (state 10→11) → `0x0117` char list → character screen + creator. Full story:
-> `SESSION-2026-08-20-character-creator.md`.
+> **▶ RESUME (2026-08-20, part 3) — CHARACTERS RENDER · REALM SELECT · THE LAUNCHER · OPTIMIZATION.**
+> Read `SESSION-2026-08-20-launcher-realm-optimization.md` first — it is the current authority.
+> A real 16042 client now **creates a character that persists and renders** (cat ears / gold hair /
+> pale skin decoded from the client's own tables — screenshot-proven), with **delete** and **realm
+> selection** all working live. Key protocol wins: **the container fix** (post-re-key char-select
+> S→C rides `0x03DC`, not `0x0076` — why the create result used to only land "on reconnect");
+> delete `0x0352→0xE6`; level/world/faction record fields pinned; realm-list `0x07A4→0x0761`,
+> re-entry `0x07DF→0x0117`, realm status Up, PvpType=2 (RP-PvE). The **create opcode is `0x025C`**
+> (the old `0x5CD5` was a wrong-key ghost). Built **nusl.exe** (the Nexus Unleashed Server Launcher —
+> native GDI+, resource governor: Job Object memory cap + CPU affinity/threads + live meters) and
+> wrote **OPTIMIZATION.md** (the public performance manifesto). All pushed public through `e5e0c00`.
+> OPEN: the **outfit** (equipped gear render) and the **RP-PvE client-archive** repack.
+>
+> <details><summary>Prior resume (Phase 06 — reaching the character creator)</summary>
 >
 > **NEXT (Phase 07 — World Entry):** Enter Game from Finalize sends **`0x5CD5`** (298 B, create
 > character). The server does not answer it yet. Pin the create-result response (char-select mgr
@@ -19,6 +21,7 @@
 > persist a full character, then build the **world server** (map load, entity spawn, movement) —
 > the real North Star; even a perfect create-response lands at the world-load wall until it exists.
 > Do NOT brute-force opcodes. The banners below are prior state.
+> </details>
 
 > **🟢 THE ENGINE IS NOW C++ — AT PARITY, PROVEN LIVE (2026-08-19).** Real 16042 client
 > authenticates end-to-end against the C++ engine (SRP verified in C++), enters the realm
