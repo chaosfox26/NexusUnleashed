@@ -150,7 +150,7 @@ void WorldHandshake::Register(net::GameServer& server) {
             if (IncludeRealm) {
                 proto::RealmEntry r;
                 r.Id = 1; r.Name = RealmName;
-                r.PvpType = 2; r.Status = 0; r.Population = 0;   // 2 = RP-PvE (see the 0x07A4 handler)
+                r.PvpType = 2; r.Status = 4; r.Population = 0;   // 2 = RP-PvE, Status 4 = Up (online; 0 showed "?"). See 0x07A4 handler.
                 r.Host = RealmHost; r.AddrField10 = RealmPort;   // reconnect target (NEEDS LIVE VERIFY)
                 realms.push_back(r);
             }
@@ -215,7 +215,7 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
         std::vector<proto::RealmEntry> realms;
         proto::RealmEntry r;
         r.Id = 1; r.Name = RealmName;
-        r.PvpType = 2; r.Status = 0; r.Population = 0;   // 2 = RP-PvE (restoration-ready; the stock
+        r.PvpType = 2; r.Status = 4; r.Population = 0;   // Status 4 = Up (online; 0=Unknown showed "?")   // 2 = RP-PvE (restoration-ready; the stock
                                                          // client shows "PvE" until its UI archive
                                                          // gains the RP branch — see
                                                          // Claude/Context/RP-PVE-CLIENT-UI-BLOCKER.md)
