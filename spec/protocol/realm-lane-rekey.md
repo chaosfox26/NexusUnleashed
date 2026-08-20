@@ -1,7 +1,7 @@
 # Spec: the realm-lane re-key (the C->S key changes after 0x058F)
 
 **Status: SOLVED and LIVE (2026-08-20). The create packet now decrypts byte-exact
-("Staatha Skyclear" read in plaintext) and characters persist.**
+(the entered character name reads in plaintext) and characters persist.**
 
 ## The bug this fixes
 The realm connection (the socket the client opens to `world_port` after `0x03db`)
@@ -43,7 +43,7 @@ RealmLaneKey.
   `0x0000`, `0x0352`) instead of garbage.
 - The create bundle decodes at `0x025C` with a readable name.
 - The character persists to characterdb and appears in the client's character list
-  on the next connect (operator saw "Staatha Skyclear" at char-select).
+  on the next connect (operator saw the created character at char-select).
 
 ## Known-good direction facts
 - S->C and C->S on the realm lane both use RealmLaneKey after `0x058F` (the client
