@@ -30,6 +30,10 @@ That is the target that shapes everything: not one zone, not one shard — **~2,
 same time**, simulating in parallel, without the machine breaking a sweat. An engine that can do that
 can do anything smaller trivially. So we build for the hardest case and let the easy cases fall out.
 
+But that ceiling is a proof of *headroom*, not the everyday behavior. Day to day, the engine is
+disciplined and lean: worlds load **on demand**, stay **compressed**, and only the ones actually in
+use cost anything — with a warm cache so startup and transitions feel instant (see §7).
+
 ## 3. Non-negotiable principles
 
 1. **Measure, never guess.** Every performance claim is backed by a number from *our own* profiler.
@@ -82,14 +86,35 @@ is treated with the same seriousness as speed: compressed in-memory representati
 shared/immutable data loaded once, and a hard ceiling we can enforce and observe. The goal is a
 per-world footprint small enough that the sum of all worlds fits comfortably under a sane cap.
 
-## 7. The client side of the vision
+## 7. Maps: compressed, cached, and demand-loaded
+
+Holding every world at once is the *ceiling*. The everyday default is to be **lean**, and maps are
+where that shows most. A world nobody is standing in should cost almost nothing.
+
+- **Compressed on disk and in memory.** Map and world data is stored compressed and kept compressed
+  in RAM, decompressed only the moment it's actually needed. Idle maps sit small; they do not pay
+  full price for existing.
+- **Demand-driven loading.** The engine loads the world in active use — **not the whole game.** If a
+  player is in Everstar Grove, Algoroc is not loaded; there is no reason to pay for a world nobody is
+  in. Worlds spin up when someone needs them and spin down when they empty out.
+- **A warm cache for near-instant startup.** A small, smart cache of the maps most likely to be
+  needed next — the starting zones, the world a player is entering, the zones adjacent to where they
+  already are — is kept pre-loaded and ready. Startup is near-instant, and crossing a zone boundary
+  costs the player *nothing*, because the next map was already warm in the cache.
+- **The two live together, deliberately.** "All worlds resident at once" is the stress ceiling that
+  proves the engine's headroom. "Load only what's in use — compressed, cached, on demand" is the
+  disciplined default that keeps memory proportional to real demand and startup instant. The engine
+  is built for both: it *can* hold everything, and it is disciplined enough not to when it doesn't
+  have to.
+
+## 8. The client side of the vision
 
 Performance doesn't stop at the server. The broader vision includes modern client-side rendering
 paths — upscaling (FSR 3/4, DLSS 3/4) and a modern graphics API (DX12) — so the whole experience,
 server to screen, is as fast and modern as the engine underneath it. (Tracked separately; noted here
 so the ambition is recorded in full.)
 
-## 8. What we will NOT do
+## 9. What we will NOT do
 
 - **We will not read NexusForever's source to "learn how it's slow."** The engine's entire value is
   that it owes NF nothing — clean-room, from the client and our own work. Reading their AGPL code,
