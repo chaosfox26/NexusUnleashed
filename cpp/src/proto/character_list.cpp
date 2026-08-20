@@ -37,8 +37,9 @@ static void WriteCharacter(PacketWriter& w, const CharacterRecord& c) {
     w.WriteBits(c.Sex, 2);                  // +0x10
     w.WriteBits(c.Race, 5);                 // +0x14
     w.WriteBits(c.Class, 5);                // +0x18
-    w.WriteUInt32(c.Level);                 // +0x1c  (INFERRED)
-    w.WriteUInt32(c.FactionId);             // +0x20  (INFERRED)
+    w.WriteUInt32(c.WorldId);               // +0x1c idWorld  (PINNED live)
+    w.WriteUInt32(c.Level);                 // +0x20 nLevel   (PINNED: a char showed its faction
+                                            //   id as its level when FactionId sat here)
     // +0x24 countA: the character's visuals. Reader WS+0x7F720 loops countA items, each read by
     // WS+0xAB890 as {7b, 15b, 14b, 32b}; WS+0x201F0 stores item[1] into the model's slot array at
     // index item[0]. So item = {slot, displayId, 0, 0}. This is what makes the model render.
@@ -61,7 +62,8 @@ static void WriteCharacter(PacketWriter& w, const CharacterRecord& c) {
     w.WriteBits(0, 3);                      // +0x60
     w.WriteBit(false);                      // +0x64
     w.WriteBit(false);                      // +0x68
-    w.WriteUInt32(c.WorldId);               // +0x6c (INFERRED)
+    w.WriteUInt32(c.FactionId);             // +0x6c idFaction (read last in the tChar builder;
+                                            //   stored last of the three in WS+0x201F0)
     w.WriteBits(0, 4);                      // +0x70 countC — empty
     w.WriteUInt32(0);                       // +0x88 countD — empty
     w.WriteSingle(0.f);                     // +0x98 float (WS+0x6C1C0)
