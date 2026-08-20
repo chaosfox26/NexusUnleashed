@@ -5,6 +5,7 @@
 #pragma once
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace nexus::proto {
@@ -22,6 +23,12 @@ struct CharacterRecord {
     float LocationY = 0.f;
     float LocationZ = 0.f;
     uint32_t WorldId = 0;
+    // Equipped/customization visuals (character_appearance rows: slot -> displayId). These are
+    // the FIRST appearance list in the record; each item is {slot:7b, displayId:15b, 0:14b, 0:32b}
+    // and the client's record reader (WS+0x7F720) drops them into the model's visual array. Empty
+    // => black silhouette (no skin/hair/eye/gear textures). Derived from the client's own
+    // CharacterCustomization table; see GameData::ResolveAppearance.
+    std::vector<std::pair<uint32_t, uint32_t>> Appearance;   // (itemSlot, itemDisplayId)
 };
 
 class CharacterListMessage {

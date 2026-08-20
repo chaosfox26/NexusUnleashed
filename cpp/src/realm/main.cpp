@@ -23,11 +23,16 @@ int main() {
     std::printf("=== %s realm host (C++) starting ===\n", cfg.realm_name.c_str());
     std::printf("bind %s | sts %u | auth %u | world %u\n",
                 cfg.bind_address.c_str(), cfg.sts_port, cfg.auth_port, cfg.world_port);
+    // realm.json is the single source of truth for the client-facing realm name.
+    realm::WorldHandshake::RealmName = cfg.realm_name;
+    std::printf("realm name: \"%s\"\n", cfg.realm_name.c_str());
     if (cfg.auth_database.empty()) { std::printf("FATAL: AuthDatabase not set in realm.json\n"); return 1; }
 
     // Client data tables (facts from the 16042 client, zero NF) drive the engine.
     size_t ccRows = proto::GameData::LoadCharacterCreation("data/character-creation.tsv");
     std::printf("game-data: CharacterCreation table loaded (%zu rows)\n", ccRows);
+    size_t cuRows = proto::GameData::LoadCharacterCustomization("data/character-customization.tsv");
+    std::printf("game-data: CharacterCustomization table loaded (%zu rows)\n", cuRows);
 
     asio::io_context io;
 
@@ -70,9 +75,10 @@ int main() {
         }
         nc.ActivePath = 0;   // TODO: path is a separate field still to pin
         nc.WorldId = 0; nc.WorldZoneId = 0;   // TODO: from startEnum -> starting zone
+        nc.Customization = req.Customization;   // decoded sliders -> stored + resolved to visuals
         uint64_t id = charStore.CreateCharacter(acc, nc);
-        std::printf("realm: create-character provider: account %ld name='%s' race=%u class=%u -> new char id %llu\n",
-                    acc, nc.Name.c_str(), nc.Race, nc.Class, (unsigned long long)id);
+        std::printf("realm: create-character provider: account %ld name='%s' race=%u class=%u sliders=%zu -> new char id %llu\n",
+                    acc, nc.Name.c_str(), nc.Race, nc.Class, nc.Customization.size(), (unsigned long long)id);
         return id;
     };
     net::GameServer realmServer(io, cfg.bind_address, cfg.auth_port, /*worldChannel=*/false);

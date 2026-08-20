@@ -17,7 +17,7 @@ loading into the world** — every fact read from Carbine's own client, zero Nex
 2. **Character creation** (real client → engine → DB): parse `0x025C` (name + creation id),
    resolve identity from the client's own `CharacterCreation.tbl`, reply `0xDC`. Character
    persists and lists. Spec: `spec/protocol/character-create-0xDC.md`.
-3. **THE KEY METHOD (operator law, the operator):** the create packet carries a **CharacterCreation
+3. **THE KEY METHOD (operator law):** the create packet carries a **CharacterCreation
    ID** (u32 @ body offset 6), not raw race/class. It resolves through the client's OWN table
    into race/class/sex/faction/startEnum/starting-items. Client tables are uncopyrightable
    FACTS → NF-proof AND authoritative. **No shortcuts, no DB hand-patching, no 2-sample diffs
@@ -62,6 +62,6 @@ client tables:
 ## Stack state at checkpoint
 Clean-engine server `nexus_realm` UP (Release, port 24000 realm-lane, 23115 auth, 6600 STS;
 MariaDB 3307). Char-creation tsv + world-replay loaded at boot. Client's characterdb: account 2
-has Nyx (id 22) + Forala Redgrass (id 30, Aurin Spellslinger — note: id 30 was hand-fixed in DB
+has char id 22 + char id 30 (Aurin Spellslinger — note: id 30 was hand-fixed in DB
 this session, which the operator flagged as artificial; the CODE path is what must be verified next).
 Frida tooling in `<scratch>/` (cipher-dump, seed-derive, full-probe-wait, ws-shot.ps1).

@@ -8,8 +8,8 @@
 namespace nexus::realm {
 
 struct RealmConfig {
-    std::string realm_name = "NexusUnleashed";
-    std::string motd;
+    std::string realm_name = "Evindra";
+    std::string motd = "Evindra - the original RP-PvE realm for WildStar (2014).";
     std::string bind_address = "0.0.0.0";
     uint16_t sts_port = 6600;
     uint16_t auth_port = 23115;

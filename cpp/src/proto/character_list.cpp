@@ -39,8 +39,17 @@ static void WriteCharacter(PacketWriter& w, const CharacterRecord& c) {
     w.WriteBits(c.Class, 5);                // +0x18
     w.WriteUInt32(c.Level);                 // +0x1c  (INFERRED)
     w.WriteUInt32(c.FactionId);             // +0x20  (INFERRED)
-    w.WriteUInt32(0);                       // +0x24 countA (appearance) — empty
-    w.WriteUInt32(0);                       // +0x30 countB (appearance) — empty
+    // +0x24 countA: the character's visuals. Reader WS+0x7F720 loops countA items, each read by
+    // WS+0xAB890 as {7b, 15b, 14b, 32b}; WS+0x201F0 stores item[1] into the model's slot array at
+    // index item[0]. So item = {slot, displayId, 0, 0}. This is what makes the model render.
+    w.WriteUInt32(static_cast<uint32_t>(c.Appearance.size()));
+    for (const auto& v : c.Appearance) {
+        w.WriteBits(v.first, 7);            //   slot      (index into the visual array, < 72)
+        w.WriteBits(v.second, 15);          //   displayId (item display id, <= 32767)
+        w.WriteBits(0, 14);                 //   dye lookup key (0 = no dye)
+        w.WriteUInt32(0);                   //   packed dye color (0 = none)
+    }
+    w.WriteUInt32(0);                       // +0x30 countB (appearance list 2) — empty
     w.WriteBits(0, 15);                     // +0x40
     w.WriteBits(0, 15);                     // +0x44
     w.WriteBits(0, 14);                     // +0x48

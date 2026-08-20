@@ -1,5 +1,6 @@
 // NexusUnleashed - clean-room authored. See db_store.h. 1:1 with the C# DB stores.
 #include "db/db_store.h"
+#include "proto/game_data.h"
 #include <mysql/mysql.h>
 #include <stdexcept>
 #include <cstring>
@@ -144,6 +145,21 @@ std::vector<proto::CharacterRecord> DbCharacterStore::GetCharacters(long account
         list.push_back(std::move(r));
     }
     mysql_free_result(res);
+
+    // Attach each character's stored visuals (character_appearance: slot -> displayId). This is
+    // what dresses the char-select model; without it the client renders a black silhouette.
+    for (auto& r : list) {
+        std::string aq = "SELECT slot, displayId FROM character_appearance WHERE id="
+                         + std::to_string(r.Id) + " ORDER BY slot";
+        if (mysql_real_query(c.m, aq.c_str(), (unsigned long)aq.size()) != 0) continue;
+        MYSQL_RES* ares = mysql_store_result(c.m);
+        if (!ares) continue;
+        while (MYSQL_ROW arow = mysql_fetch_row(ares)) {
+            if (arow[0] && arow[1])
+                r.Appearance.emplace_back((uint32_t)std::stoul(arow[0]), (uint32_t)std::stoul(arow[1]));
+        }
+        mysql_free_result(ares);
+    }
     return list;
 }
 
@@ -181,6 +197,34 @@ uint64_t DbCharacterStore::CreateCharacter(long accountId, const NewCharacter& n
         + f(nc.LocationX) + ", " + f(nc.LocationY) + ", " + f(nc.LocationZ) + ")";
 
     if (mysql_real_query(c.m, q.c_str(), (unsigned long)q.size()) != 0) return 0;
+
+    // Persist the chosen sliders + their resolved visuals so the character renders on reconnect.
+    if (!nc.Customization.empty()) {
+        // 1) raw sliders -> character_customisation (id, label, value)
+        std::string cq = "INSERT INTO character_customisation (id, label, value) VALUES ";
+        std::vector<proto::CustomizationChoice> choices;
+        bool first = true;
+        for (const auto& p : nc.Customization) {
+            if (!first) cq += ",";
+            cq += "(" + std::to_string(newId) + "," + std::to_string(p.first) + "," + std::to_string(p.second) + ")";
+            first = false;
+            choices.push_back({p.first, p.second});
+        }
+        mysql_real_query(c.m, cq.c_str(), (unsigned long)cq.size());
+
+        // 2) resolve via the client's own CharacterCustomization table -> character_appearance
+        auto visuals = proto::GameData::ResolveAppearance(nc.Race, nc.Sex, choices);
+        if (!visuals.empty()) {
+            std::string aq = "INSERT INTO character_appearance (id, slot, displayId) VALUES ";
+            first = true;
+            for (const auto& v : visuals) {
+                if (!first) aq += ",";
+                aq += "(" + std::to_string(newId) + "," + std::to_string(v.Slot) + "," + std::to_string(v.DisplayId) + ")";
+                first = false;
+            }
+            mysql_real_query(c.m, aq.c_str(), (unsigned long)aq.size());
+        }
+    }
     return newId;
 }
 

@@ -70,7 +70,7 @@ std::vector<std::pair<uint16_t, std::vector<uint8_t>>> WorldHandshake::WorldEntr
 bool WorldHandshake::SendAccountData = false;  // these break the realm connection if sent at the
 bool WorldHandshake::SendRealmList = false;    // "Connecting to realm" stage; hold until the right step.
 bool WorldHandshake::IncludeRealm = true;
-std::string WorldHandshake::RealmName = "NexusUnleashed";
+std::string WorldHandshake::RealmName = "Evindra";  // overridden from realm.json at boot (main.cpp)
 std::string WorldHandshake::RealmHost = "127.0.0.1";
 uint32_t WorldHandshake::RealmPort = 24000;
 

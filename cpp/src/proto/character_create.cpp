@@ -27,7 +27,25 @@ bool CharacterCreateRequest::Parse(const std::vector<uint8_t>& body, CharacterCr
         }
         (void)subOp;
         out.Name = name;
-        return !name.empty();
+        if (name.empty()) return false;
+
+        // Appearance block, byte-aligned u32s right after the name:
+        //   [count][labelId x count][value x count], each stored as (real << 3) | tag(0..7).
+        // We shift right 3 to recover the real value. Guarded so a short/odd body can't throw.
+        try {
+            uint32_t count = r.ReadUInt32() >> 3;
+            if (count > 0 && count <= 64) {                 // sanity: at most a few dozen sliders
+                std::vector<uint32_t> labels(count), values(count);
+                for (uint32_t i = 0; i < count; ++i) labels[i] = r.ReadUInt32() >> 3;
+                for (uint32_t i = 0; i < count; ++i) values[i] = r.ReadUInt32() >> 3;
+                out.Customization.reserve(count);
+                for (uint32_t i = 0; i < count; ++i)
+                    out.Customization.emplace_back(labels[i], values[i]);
+            }
+        } catch (const std::exception&) {
+            out.Customization.clear();   // name + identity still valid without the sliders
+        }
+        return true;
     } catch (const std::exception&) {
         return false;
     }

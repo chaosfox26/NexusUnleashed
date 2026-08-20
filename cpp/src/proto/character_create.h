@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <utility>
 
 namespace nexus::proto {
 
@@ -21,6 +22,11 @@ struct CharacterCreateRequest {
     std::string Name;       // UTF-8 (from the wire's UTF-16LE)
     uint32_t CreationId = 0; // CharacterCreation.tbl ID (u32 @ body offset 6) — expands to
                              // race/class/sex/faction/start/items via the client's own table.
+    // The chosen customization sliders. After the name the body carries an appearance block:
+    //   [count][labelId x count][value x count]  — each a u32 whose real value is (u32 >> 3)
+    //   (the low 3 bits are a type tag). Validated: for creationId 511 the labels are exactly
+    //   the Aurin-female label set and every value falls in its CharacterCustomization range.
+    std::vector<std::pair<uint32_t, uint32_t>> Customization;  // (labelId, value)
     // Parse what we can from a decrypted 0x025C body. Returns false if it doesn't look valid.
     static bool Parse(const std::vector<uint8_t>& body, CharacterCreateRequest& out);
 };

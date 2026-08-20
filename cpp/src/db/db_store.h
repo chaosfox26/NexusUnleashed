@@ -37,6 +37,10 @@ struct NewCharacter {
     uint32_t Sex = 0, Race = 0, Class = 0, FactionId = 0, ActivePath = 0;
     uint32_t WorldId = 0, WorldZoneId = 0;
     float LocationX = 0.f, LocationY = 0.f, LocationZ = 0.f;
+    // Chosen customization sliders (labelId, value) decoded from the create packet. On insert we
+    // persist these to character_customisation AND resolve them (CharacterCustomization.tbl) into
+    // character_appearance so the char-select model renders instead of a black silhouette.
+    std::vector<std::pair<uint32_t, uint32_t>> Customization;
 };
 
 class DbCharacterStore {
