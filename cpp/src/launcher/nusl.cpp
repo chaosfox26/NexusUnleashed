@@ -1,93 +1,83 @@
 // NexusUnleashed - clean-room authored. nusl.exe — the Nexus Unleashed Server Launcher.
-// A tiny native Win32 control panel + resource governor for the realm server (nexus_realm.exe):
+// A polished NATIVE control panel + resource governor for the realm server (nexus_realm.exe).
+// Rendered with GDI+ (gradients, glows, rounded panels, custom sliders) — no .NET, no WebView2,
+// no runtime deps, a tiny self-contained exe that ships next to nexus_realm.exe + realm.json.
 //   - start / stop, live status, log tail
-//   - MEMORY CAP slider (1..N GB) enforced with a Windows Job Object — the server physically
-//     cannot exceed the dialed limit
-//   - CPU CORES slider — a process affinity mask spreads (or restricts) the load across cores,
-//     and the chosen thread count is handed to the server (NUSL_THREADS) for its worker pool
+//   - MEMORY CAP slider (1..N GB) enforced with a Windows Job Object
+//   - CPU CORES slider — process affinity mask + worker-pool size (NUSL_THREADS)
 //   - live RAM (working set) + CPU% readouts
-// No .NET, no runtime deps. Ships next to nexus_realm.exe + realm.json.
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-#include <commctrl.h>
+#include <objidl.h>   // IStream etc. — GDI+ headers need these (trimmed by LEAN_AND_MEAN)
 #include <psapi.h>
+#include <gdiplus.h>
 #include <string>
 #include <vector>
 #include <cstdio>
-#pragma comment(lib, "comctl32.lib")
+#pragma comment(lib, "gdiplus.lib")
 #pragma comment(lib, "psapi.lib")
+using namespace Gdiplus;
 
-// ---- palette (matches the roadmap: black canvas, magenta + blue accents, white text) ----
-static const COLORREF kBg      = RGB(0x0b, 0x0b, 0x16);
-static const COLORREF kPanel   = RGB(0x14, 0x14, 0x1f);
-static const COLORREF kMagenta = RGB(0xff, 0x2d, 0x9b);
-static const COLORREF kBlue    = RGB(0x4a, 0x8c, 0xff);
-static const COLORREF kWhite   = RGB(0xee, 0xf0, 0xfb);
-static const COLORREF kMuted   = RGB(0xa6, 0xa8, 0xc8);
-static const COLORREF kDim     = RGB(0x6c, 0x6e, 0x8c);
+// ---- palette (roadmap: black canvas, magenta + blue accents, white text) ----
+static const Color cBg(255, 11, 11, 22), cPanel(255, 20, 20, 33), cPanelBrd(255, 40, 40, 74);
+static const Color cMag(255, 255, 45, 155), cMagLo(255, 200, 40, 130);
+static const Color cBlue(255, 74, 140, 255), cBlueLo(255, 42, 108, 226);
+static const Color cWhite(255, 238, 240, 251), cMuted(255, 166, 168, 200), cDim(255, 108, 110, 140);
+static const COLORREF kEditBg = RGB(0x12, 0x12, 0x1e), kEditFg = RGB(0xa6, 0xa8, 0xc8);
 
-enum { IDC_START = 1001, IDC_STOP, IDC_STATUS, IDC_TITLE, IDC_SUB, IDC_REALM, IDC_PORTS,
-       IDC_MEMSLIDER, IDC_MEMLBL, IDC_CPUSLIDER, IDC_CPULBL, IDC_USAGE, IDC_LOG, IDT_POLL = 1 };
+enum { IDC_LOG = 1, IDT_POLL = 1 };
+enum Hot { H_NONE, H_START, H_STOP, H_MEM, H_CPU };
 
-// ---- state ----
-static HANDLE g_proc = nullptr, g_job = nullptr;
-static DWORD  g_pid  = 0;
+// ---- server-control state ----
+static HANDLE g_proc = nullptr, g_job = nullptr; static DWORD g_pid = 0;
 static std::wstring g_serverDir, g_serverExe, g_logPath, g_realmJson;
 static std::wstring g_realmName = L"NexusUnleashed";
-static std::wstring g_ports = L"sts 6600 · realm 23115 · world 24000";
-static HWND g_start, g_stop, g_status, g_realmLbl, g_portsLbl, g_memSlider, g_memLbl, g_cpuSlider, g_cpuLbl, g_usage, g_log;
-static HFONT g_fTitle, g_fSub, g_fBody, g_fBtn, g_fMono, g_fStatus, g_fSmall;
-static HBRUSH g_bgBrush, g_panelBrush;
-static long long g_logPos = 0;
-static int g_maxCores = 8, g_maxMemGB = 16;
-static int g_memGB = 4, g_cpuCores = 8;          // current slider selections
-// CPU% tracking
+static std::wstring g_ports = L"sts 6600  ·  realm 23115  ·  world 24000";
+static int g_maxCores = 8, g_maxMemGB = 16, g_memGB = 4, g_cpuCores = 8;
 static ULONGLONG g_lastProcTime = 0, g_lastWall = 0;
+static double g_ramMB = 0, g_cpuPct = 0;
+
+// ---- UI state ----
+static HWND g_hwnd, g_log; static HFONT g_editFont;
+static Hot g_hover = H_NONE, g_press = H_NONE, g_drag = H_NONE;
+static RectF rStart, rStop, rMemTrack, rCpuTrack;
+static ULONG_PTR g_gdip = 0;
 
 static std::wstring DirOfSelf() {
-    wchar_t buf[MAX_PATH]; GetModuleFileNameW(nullptr, buf, MAX_PATH);
-    std::wstring p = buf; size_t s = p.find_last_of(L"\\/");
+    wchar_t b[MAX_PATH]; GetModuleFileNameW(nullptr, b, MAX_PATH);
+    std::wstring p = b; size_t s = p.find_last_of(L"\\/");
     return s == std::wstring::npos ? L"." : p.substr(0, s);
 }
-
-static std::wstring JsonStr(const std::string& j, const char* key) {
-    std::string k = std::string("\"") + key + "\"";
-    size_t p = j.find(k); if (p == std::string::npos) return L"";
-    p = j.find(':', p + k.size()); if (p == std::string::npos) return L"";
-    size_t q = j.find('"', p);
+static std::wstring JsonVal(const std::string& j, const char* key) {
+    std::string k = std::string("\"") + key + "\""; size_t p = j.find(k);
+    if (p == std::string::npos) return L""; p = j.find(':', p + k.size());
+    if (p == std::string::npos) return L""; size_t q = j.find('"', p);
     if (q != std::string::npos && q < j.find_first_of(",}", p)) {
         size_t e = j.find('"', q + 1); if (e == std::string::npos) return L"";
         std::string v = j.substr(q + 1, e - q - 1); return std::wstring(v.begin(), v.end());
     }
-    size_t b = j.find_first_of("0123456789", p);
-    if (b == std::string::npos) return L"";
-    size_t e = j.find_first_not_of("0123456789", b);
-    std::string v = j.substr(b, e - b); return std::wstring(v.begin(), v.end());
+    size_t bb = j.find_first_of("0123456789", p); if (bb == std::string::npos) return L"";
+    size_t e = j.find_first_not_of("0123456789", bb); std::string v = j.substr(bb, e - bb);
+    return std::wstring(v.begin(), v.end());
 }
-
 static void LoadRealmInfo() {
-    std::string j;
-    FILE* f = _wfopen(g_realmJson.c_str(), L"rb");
-    if (f) { char buf[4096]; size_t n; while ((n = fread(buf, 1, sizeof buf, f)) > 0) j.append(buf, n); fclose(f); }
-    std::wstring name = JsonStr(j, "RealmName");
-    std::wstring sts = JsonStr(j, "StsPort"), auth = JsonStr(j, "AuthPort"), world = JsonStr(j, "WorldPort");
-    if (!name.empty()) g_realmName = name;
-    if (!sts.empty()) g_ports = L"sts " + sts + L" · realm " + auth + L" · world " + world;
+    std::string j; FILE* f = _wfopen(g_realmJson.c_str(), L"rb");
+    if (f) { char b[4096]; size_t n; while ((n = fread(b, 1, sizeof b, f)) > 0) j.append(b, n); fclose(f); }
+    std::wstring nm = JsonVal(j, "RealmName");
+    std::wstring s = JsonVal(j, "StsPort"), a = JsonVal(j, "AuthPort"), w = JsonVal(j, "WorldPort");
+    if (!nm.empty()) g_realmName = nm;
+    if (!s.empty()) g_ports = L"sts " + s + L"   ·   realm " + a + L"   ·   world " + w;
 }
-
 static bool IsRunning() {
     if (!g_proc) return false;
     if (WaitForSingleObject(g_proc, 0) == WAIT_TIMEOUT) return true;
     CloseHandle(g_proc); g_proc = nullptr; g_pid = 0; return false;
 }
-
 static void AppendLog(const std::wstring& line) {
-    int len = GetWindowTextLengthW(g_log);
-    SendMessageW(g_log, EM_SETSEL, len, len);
-    std::wstring l = line + L"\r\n";
-    SendMessageW(g_log, EM_REPLACESEL, FALSE, (LPARAM)l.c_str());
+    int n = GetWindowTextLengthW(g_log); SendMessageW(g_log, EM_SETSEL, n, n);
+    std::wstring l = line + L"\r\n"; SendMessageW(g_log, EM_REPLACESEL, FALSE, (LPARAM)l.c_str());
 }
-
+static long long g_logPos = 0;
 static void TailLog() {
     HANDLE h = CreateFileW(g_logPath.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
                            nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
@@ -96,32 +86,23 @@ static void TailLog() {
     if (sz.QuadPart < g_logPos) g_logPos = 0;
     if (sz.QuadPart > g_logPos) {
         LARGE_INTEGER pos; pos.QuadPart = g_logPos; SetFilePointerEx(h, pos, nullptr, FILE_BEGIN);
-        long long avail = sz.QuadPart - g_logPos;
-        DWORD toRead = (DWORD)(avail < (1 << 16) ? avail : (1 << 16));
+        long long avail = sz.QuadPart - g_logPos; DWORD toRead = (DWORD)(avail < (1 << 16) ? avail : (1 << 16));
         std::string buf(toRead, 0); DWORD got = 0;
         if (ReadFile(h, &buf[0], toRead, &got, nullptr) && got) {
-            buf.resize(got); g_logPos += got;
-            std::wstring w(buf.begin(), buf.end()), line;
+            buf.resize(got); g_logPos += got; std::wstring w(buf.begin(), buf.end()), line;
             for (wchar_t c : w) { if (c == L'\n') { AppendLog(line); line.clear(); } else if (c != L'\r') line += c; }
             if (!line.empty()) AppendLog(line);
         }
     }
     CloseHandle(h);
 }
-
 static void StartServer() {
     if (IsRunning()) return;
-    g_memGB = (int)SendMessageW(g_memSlider, TBM_GETPOS, 0, 0);
-    g_cpuCores = (int)SendMessageW(g_cpuSlider, TBM_GETPOS, 0, 0);
-
-    // Fresh log.
     HANDLE hLog = CreateFileW(g_logPath.c_str(), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
                               nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
     HANDLE hInherit = nullptr;
     DuplicateHandle(GetCurrentProcess(), hLog, GetCurrentProcess(), &hInherit, 0, TRUE, DUPLICATE_SAME_ACCESS);
     if (hLog != INVALID_HANDLE_VALUE) CloseHandle(hLog);
-
-    // Job object with a hard memory cap. KILL_ON_JOB_CLOSE ties the server's life to the launcher.
     if (g_job) { CloseHandle(g_job); g_job = nullptr; }
     g_job = CreateJobObjectW(nullptr, nullptr);
     if (g_job) {
@@ -130,219 +111,245 @@ static void StartServer() {
         jeli.JobMemoryLimit = (SIZE_T)g_memGB * 1024ull * 1024ull * 1024ull;
         SetInformationJobObject(g_job, JobObjectExtendedLimitInformation, &jeli, sizeof jeli);
     }
-
-    // Hand the server its worker-thread count (it reads NUSL_THREADS at boot).
-    wchar_t th[16]; _itow(g_cpuCores, th, 10);
-    SetEnvironmentVariableW(L"NUSL_THREADS", th);
-
-    STARTUPINFOW si{}; si.cb = sizeof si;
-    si.dwFlags = STARTF_USESTDHANDLES; si.hStdOutput = hInherit; si.hStdError = hInherit;
-    PROCESS_INFORMATION pi{};
-    std::wstring cmd = L"\"" + g_serverExe + L"\"";
-    std::vector<wchar_t> cmdBuf(cmd.begin(), cmd.end()); cmdBuf.push_back(0);
-    BOOL ok = CreateProcessW(g_serverExe.c_str(), cmdBuf.data(), nullptr, nullptr, TRUE,
+    wchar_t th[16]; _itow(g_cpuCores, th, 10); SetEnvironmentVariableW(L"NUSL_THREADS", th);
+    STARTUPINFOW si{}; si.cb = sizeof si; si.dwFlags = STARTF_USESTDHANDLES; si.hStdOutput = hInherit; si.hStdError = hInherit;
+    PROCESS_INFORMATION pi{}; std::wstring cmd = L"\"" + g_serverExe + L"\"";
+    std::vector<wchar_t> cb(cmd.begin(), cmd.end()); cb.push_back(0);
+    BOOL ok = CreateProcessW(g_serverExe.c_str(), cb.data(), nullptr, nullptr, TRUE,
                              CREATE_NO_WINDOW | CREATE_SUSPENDED, nullptr, g_serverDir.c_str(), &si, &pi);
     if (hInherit) CloseHandle(hInherit);
     if (!ok) { AppendLog(L"[launcher] FAILED to start server (is nexus_realm.exe next to nusl.exe?)"); return; }
-
     if (g_job) AssignProcessToJobObject(g_job, pi.hProcess);
-    // Affinity: allow the first g_cpuCores logical processors.
     DWORD_PTR mask = 0; for (int i = 0; i < g_cpuCores && i < 64; ++i) mask |= (DWORD_PTR)1 << i;
     if (mask) SetProcessAffinityMask(pi.hProcess, mask);
-    ResumeThread(pi.hThread);
-    CloseHandle(pi.hThread);
-    g_proc = pi.hProcess; g_pid = pi.dwProcessId; g_logPos = 0;
-    g_lastProcTime = 0; g_lastWall = 0;
-    wchar_t msg[160];
-    swprintf(msg, 160, L"[launcher] starting — memory cap %d GB, %d core%s.", g_memGB, g_cpuCores, g_cpuCores == 1 ? L"" : L"s");
-    AppendLog(msg);
+    ResumeThread(pi.hThread); CloseHandle(pi.hThread);
+    g_proc = pi.hProcess; g_pid = pi.dwProcessId; g_logPos = 0; g_lastProcTime = g_lastWall = 0;
+    wchar_t m[160]; swprintf(m, 160, L"[launcher] starting — memory cap %d GB, %d core%s.", g_memGB, g_cpuCores, g_cpuCores == 1 ? L"" : L"s");
+    AppendLog(m);
 }
-
 static void StopServer() {
     if (!IsRunning()) return;
-    AppendLog(L"[launcher] stopping server…");
-    TerminateProcess(g_proc, 0);
-    WaitForSingleObject(g_proc, 3000);
-    CloseHandle(g_proc); g_proc = nullptr; g_pid = 0;
-    if (g_job) { CloseHandle(g_job); g_job = nullptr; }
-    AppendLog(L"[launcher] server stopped.");
+    AppendLog(L"[launcher] stopping server…"); TerminateProcess(g_proc, 0);
+    WaitForSingleObject(g_proc, 3000); CloseHandle(g_proc); g_proc = nullptr; g_pid = 0;
+    if (g_job) { CloseHandle(g_job); g_job = nullptr; } AppendLog(L"[launcher] server stopped.");
 }
-
 static void UpdateUsage() {
-    if (!IsRunning()) { SetWindowTextW(g_usage, L"RAM  —     CPU  —"); return; }
+    if (!IsRunning()) { g_ramMB = 0; g_cpuPct = 0; return; }
     PROCESS_MEMORY_COUNTERS pmc{};
-    double memMB = 0;
-    if (GetProcessMemoryInfo(g_proc, &pmc, sizeof pmc)) memMB = pmc.WorkingSetSize / (1024.0 * 1024.0);
-    // CPU%
-    FILETIME c, e, k, u; ULONGLONG procT = 0; double cpu = 0;
-    if (GetProcessTimes(g_proc, &c, &e, &k, &u)) {
-        procT = (((ULONGLONG)k.dwHighDateTime << 32) | k.dwLowDateTime) +
-                (((ULONGLONG)u.dwHighDateTime << 32) | u.dwLowDateTime);
-    }
-    FILETIME nowFt; GetSystemTimeAsFileTime(&nowFt);
-    ULONGLONG wall = ((ULONGLONG)nowFt.dwHighDateTime << 32) | nowFt.dwLowDateTime;
+    if (GetProcessMemoryInfo(g_proc, &pmc, sizeof pmc)) g_ramMB = pmc.WorkingSetSize / (1024.0 * 1024.0);
+    FILETIME c, e, k, u; ULONGLONG procT = 0;
+    if (GetProcessTimes(g_proc, &c, &e, &k, &u))
+        procT = (((ULONGLONG)k.dwHighDateTime << 32) | k.dwLowDateTime) + (((ULONGLONG)u.dwHighDateTime << 32) | u.dwLowDateTime);
+    FILETIME nf; GetSystemTimeAsFileTime(&nf); ULONGLONG wall = ((ULONGLONG)nf.dwHighDateTime << 32) | nf.dwLowDateTime;
     if (g_lastWall && wall > g_lastWall) {
-        double dProc = (double)(procT - g_lastProcTime);
-        double dWall = (double)(wall - g_lastWall);
-        cpu = 100.0 * dProc / (dWall * (g_cpuCores > 0 ? g_cpuCores : 1));
-        if (cpu < 0) cpu = 0; if (cpu > 100) cpu = 100;
+        double dP = (double)(procT - g_lastProcTime), dW = (double)(wall - g_lastWall);
+        g_cpuPct = 100.0 * dP / (dW * (g_cpuCores > 0 ? g_cpuCores : 1));
+        if (g_cpuPct < 0) g_cpuPct = 0; if (g_cpuPct > 100) g_cpuPct = 100;
     }
     g_lastProcTime = procT; g_lastWall = wall;
-    wchar_t s[160];
-    swprintf(s, 160, L"RAM  %.0f MB / %d GB      CPU  %.0f%%  across %d core%s",
-             memMB, g_memGB, cpu, g_cpuCores, g_cpuCores == 1 ? L"" : L"s");
-    SetWindowTextW(g_usage, s);
 }
 
-static void RefreshUI() {
-    bool run = IsRunning();
-    SetWindowTextW(g_status, run ? L"●  RUNNING" : L"●  STOPPED");
-    EnableWindow(g_start, !run); EnableWindow(g_stop, run);
-    EnableWindow(g_memSlider, !run); EnableWindow(g_cpuSlider, !run);   // settings apply at launch
-    InvalidateRect(g_status, nullptr, TRUE);
-    if (run) { TailLog(); }
-    UpdateUsage();
+// ---------- GDI+ drawing ----------
+static GraphicsPath* RoundRect(float x, float y, float w, float h, float r) {
+    GraphicsPath* p = new GraphicsPath();
+    p->AddArc(x, y, r, r, 180, 90); p->AddArc(x + w - r, y, r, r, 270, 90);
+    p->AddArc(x + w - r, y + h - r, r, r, 0, 90); p->AddArc(x, y + h - r, r, r, 90, 90);
+    p->CloseFigure(); return p;
+}
+static void Glow(Graphics& g, float cx, float cy, float r, Color c, int alpha) {
+    GraphicsPath e; e.AddEllipse(cx - r, cy - r, 2 * r, 2 * r);
+    PathGradientBrush pg(&e); pg.SetCenterColor(Color(alpha, c.GetR(), c.GetG(), c.GetB()));
+    Color surround(0, c.GetR(), c.GetG(), c.GetB()); int cnt = 1; pg.SetSurroundColors(&surround, &cnt);
+    g.FillEllipse(&pg, cx - r, cy - r, 2 * r, 2 * r);
+}
+static void FillRound(Graphics& g, float x, float y, float w, float h, float r, Color c) {
+    GraphicsPath* p = RoundRect(x, y, w, h, r); SolidBrush b(c); g.FillPath(&b, p); delete p;
+}
+static void GradRoundV(Graphics& g, float x, float y, float w, float h, float r, Color top, Color bot) {
+    GraphicsPath* p = RoundRect(x, y, w, h, r);
+    LinearGradientBrush b(RectF(x, y - 1, w, h + 2), top, bot, LinearGradientModeVertical);
+    g.FillPath(&b, p); delete p;
+}
+static void StrokeRound(Graphics& g, float x, float y, float w, float h, float r, Color c, float thick) {
+    GraphicsPath* p = RoundRect(x, y, w, h, r); Pen pen(c, thick); g.DrawPath(&pen, p); delete p;
+}
+// y is the TOP of the text line.
+static void Text(Graphics& g, const wchar_t* t, const Font& f, Color c, float x, float y, float w = 0, StringAlignment al = StringAlignmentNear) {
+    SolidBrush b(c); StringFormat sf; sf.SetAlignment(al); sf.SetLineAlignment(StringAlignmentNear);
+    RectF r(x, y, w > 0 ? w : 3000, 40); g.DrawString(t, -1, &f, r, &sf, &b);
 }
 
-static void UpdateResourceLabels() {
-    int mem = (int)SendMessageW(g_memSlider, TBM_GETPOS, 0, 0);
-    int cpu = (int)SendMessageW(g_cpuSlider, TBM_GETPOS, 0, 0);
-    wchar_t m[64]; swprintf(m, 64, L"Memory cap:  %d GB", mem); SetWindowTextW(g_memLbl, m);
-    wchar_t c[64]; swprintf(c, 64, L"CPU cores:  %d / %d", cpu, g_maxCores); SetWindowTextW(g_cpuLbl, c);
+static void DrawSlider(Graphics& g, RectF track, int val, int lo, int hi, Color accent) {
+    float t = (float)(val - lo) / (float)(hi - lo <= 0 ? 1 : hi - lo);
+    float cx = track.X + t * track.Width, cy = track.Y + track.Height / 2;
+    // track base
+    FillRound(g, track.X, cy - 3, track.Width, 6, 3, Color(255, 40, 40, 64));
+    // filled
+    LinearGradientBrush fb(RectF(track.X, cy - 3, track.Width, 6),
+        Color(255, cBlue.GetR(), cBlue.GetG(), cBlue.GetB()), Color(255, accent.GetR(), accent.GetG(), accent.GetB()), LinearGradientModeHorizontal);
+    GraphicsPath* fp = RoundRect(track.X, cy - 3, (cx - track.X < 6 ? 6 : cx - track.X), 6, 3); g.FillPath(&fb, fp); delete fp;
+    // thumb glow + knob
+    Glow(g, cx, cy, 16, accent, 120);
+    SolidBrush kb(cWhite); g.FillEllipse(&kb, cx - 8.f, cy - 8.f, 16.f, 16.f);
+    Pen kp(accent, 2.5f); g.DrawEllipse(&kp, cx - 8.f, cy - 8.f, 16.f, 16.f);
 }
 
-static void DrawButton(LPDRAWITEMSTRUCT d, COLORREF accent, const wchar_t* text) {
-    bool disabled = (d->itemState & ODS_DISABLED) != 0;
-    bool pressed  = (d->itemState & ODS_SELECTED) != 0;
-    COLORREF fill = disabled ? RGB(0x22, 0x22, 0x33) : (pressed ? accent :
-        RGB(GetRValue(accent) * 9 / 10, GetGValue(accent) * 9 / 10, GetBValue(accent) * 9 / 10));
-    HBRUSH b = CreateSolidBrush(fill); FillRect(d->hDC, &d->rcItem, b); DeleteObject(b);
-    HPEN pen = CreatePen(PS_SOLID, 1, accent); HGDIOBJ op = SelectObject(d->hDC, pen);
-    HGDIOBJ ob = SelectObject(d->hDC, GetStockObject(NULL_BRUSH));
-    RoundRect(d->hDC, d->rcItem.left, d->rcItem.top, d->rcItem.right - 1, d->rcItem.bottom - 1, 8, 8);
-    SelectObject(d->hDC, op); SelectObject(d->hDC, ob); DeleteObject(pen);
-    SetBkMode(d->hDC, TRANSPARENT); SetTextColor(d->hDC, disabled ? kDim : kWhite);
-    SelectObject(d->hDC, g_fBtn);
-    DrawTextW(d->hDC, text, -1, &d->rcItem, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+static void DrawButton(Graphics& g, RectF r, Color accent, const wchar_t* label, const Font& f, bool enabled, bool hover, bool press) {
+    if (!enabled) { FillRound(g, r.X, r.Y, r.Width, r.Height, 10, Color(255, 34, 34, 51)); StrokeRound(g, r.X, r.Y, r.Width, r.Height, 10, Color(255, 48, 48, 72), 1);
+        Text(g, label, f, cDim, r.X, r.Y, r.Width, StringAlignmentCenter); return; }
+    Color top = accent, bot(255, accent.GetR() * 8 / 10, accent.GetG() * 8 / 10, accent.GetB() * 8 / 10);
+    if (press) { Color tmp = top; top = bot; bot = tmp; }
+    if (hover) Glow(g, r.X + r.Width / 2, r.Y + r.Height / 2, r.Width / 1.6f, accent, 70);
+    GradRoundV(g, r.X, r.Y, r.Width, r.Height, 10, top, bot);
+    StrokeRound(g, r.X, r.Y, r.Width, r.Height, 10, Color(255, min(255, accent.GetR() + 40), min(255, accent.GetG() + 40), min(255, accent.GetB() + 40)), 1);
+    Text(g, label, f, cWhite, r.X, r.Y - 1, r.Width, StringAlignmentCenter);
 }
 
-static HFONT MakeFont(int h, int weight, const wchar_t* face) {
-    return CreateFontW(h, 0, 0, 0, weight, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-                       OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, face);
+static void Paint(HWND h) {
+    RECT rc; GetClientRect(h, &rc); int W = rc.right, H = rc.bottom;
+    HDC dc = GetDC(h);
+    HDC mem = CreateCompatibleDC(dc); HBITMAP bmp = CreateCompatibleBitmap(dc, W, H); HGDIOBJ ob = SelectObject(mem, bmp);
+    { Graphics g(mem); g.SetSmoothingMode(SmoothingModeAntiAlias); g.SetTextRenderingHint(TextRenderingHintClearTypeGridFit);
+      SolidBrush bg(cBg); g.FillRectangle(&bg, 0, 0, W, H);
+      Glow(g, W - 40.f, 20.f, 320, cMag, 46); Glow(g, 20.f, H - 20.f, 300, cBlue, 40);
+
+      FontFamily seg(L"Segoe UI"); FontFamily mono(L"Consolas");
+      Font fTitle(&seg, 27, FontStyleBold, UnitPixel), fSub(&seg, 12, FontStyleBold, UnitPixel);
+      Font fBody(&seg, 15, FontStyleRegular, UnitPixel), fLbl(&seg, 13, FontStyleBold, UnitPixel);
+      Font fBtn(&seg, 17, FontStyleBold, UnitPixel), fPill(&seg, 14, FontStyleBold, UnitPixel);
+      Font fMono(&mono, 14, FontStyleRegular, UnitPixel), fBig(&seg, 15, FontStyleBold, UnitPixel);
+
+      // wordmark (gradient) + subtitle
+      { LinearGradientBrush tb(RectF(28, 20, 420, 40), Color(255,255,120,200), cMag, LinearGradientModeHorizontal);
+        StringFormat sf; sf.SetLineAlignment(StringAlignmentCenter);
+        g.DrawString(L"NEXUS UNLEASHED", -1, &fTitle, RectF(28, 22, 460, 44), &sf, &tb); }
+      Text(g, L"SERVER LAUNCHER", fSub, cDim, 30, 62);
+
+      // status pill (top-right)
+      bool run = IsRunning();
+      { float pw = 150, px = W - pw - 26, py = 26, ph = 34;
+        FillRound(g, px, py, pw, ph, 17, Color(255, 24, 24, 40));
+        StrokeRound(g, px, py, pw, ph, 17, run ? cBlue : Color(255,60,60,84), 1);
+        Color dot = run ? cBlue : cDim; if (run) Glow(g, px + 22, py + ph/2, 12, cBlue, 150);
+        SolidBrush db(dot); g.FillEllipse(&db, px + 15.f, py + ph/2 - 5.f, 10.f, 10.f);
+        Text(g, run ? L"RUNNING" : L"STOPPED", fPill, run ? cWhite : cMuted, px + 34, py + 8, pw - 34, StringAlignmentNear); }
+
+      // realm + ports
+      Text(g, (L"Realm   " + g_realmName).c_str(), fBody, cWhite, 30, 92);
+      Text(g, g_ports.c_str(), fBody, cMuted, 30, 118);
+
+      // resource panel
+      float panelX = 26, panelY = 150, panelW = W - 52, panelH = 132;
+      FillRound(g, panelX, panelY, panelW, panelH, 14, cPanel);
+      StrokeRound(g, panelX, panelY, panelW, panelH, 14, cPanelBrd, 1);
+      wchar_t mtxt[48]; swprintf(mtxt, 48, L"%d GB", g_memGB);
+      Text(g, L"MEMORY CAP", fLbl, cMuted, panelX + 22, panelY + 20);
+      Text(g, mtxt, fBig, cWhite, panelX + panelW - 92, panelY + 20, 70, StringAlignmentFar);
+      rMemTrack = RectF(panelX + 22, panelY + 44, panelW - 44, 6);
+      DrawSlider(g, rMemTrack, g_memGB, 1, g_maxMemGB, cBlue);
+      wchar_t ctxt[48]; swprintf(ctxt, 48, L"%d / %d", g_cpuCores, g_maxCores);
+      Text(g, L"CPU CORES", fLbl, cMuted, panelX + 22, panelY + 76);
+      Text(g, ctxt, fBig, cWhite, panelX + panelW - 92, panelY + 76, 70, StringAlignmentFar);
+      rCpuTrack = RectF(panelX + 22, panelY + 100, panelW - 44, 6);
+      DrawSlider(g, rCpuTrack, g_cpuCores, 1, g_maxCores, cMag);
+
+      // buttons
+      float by = 300, bw = (W - 52 - 16) / 2, bh = 50;
+      rStart = RectF(26, by, bw, bh); rStop = RectF(26 + bw + 16, by, bw, bh);
+      DrawButton(g, rStart, cBlue, L"START", fBtn, !run, g_hover == H_START, g_press == H_START);
+      DrawButton(g, rStop, cMag, L"STOP", fBtn, run, g_hover == H_STOP, g_press == H_STOP);
+
+      // usage line
+      wchar_t us[160];
+      if (run) swprintf(us, 160, L"RAM  %.0f MB / %d GB        CPU  %.0f%%  across %d core%s",
+                        g_ramMB, g_memGB, g_cpuPct, g_cpuCores, g_cpuCores == 1 ? L"" : L"s");
+      else wcscpy(us, L"RAM  —        CPU  —");
+      Text(g, us, fMono, run ? cBlue : cDim, 30, 364);
+    }
+    BitBlt(dc, 0, 0, W, H, mem, 0, 0, SRCCOPY);
+    SelectObject(mem, ob); DeleteObject(bmp); DeleteDC(mem); ReleaseDC(h, dc);
+}
+
+static Hot HitButton(int x, int y) {
+    if (x >= rStart.X && x <= rStart.X + rStart.Width && y >= rStart.Y && y <= rStart.Y + rStart.Height) return H_START;
+    if (x >= rStop.X && x <= rStop.X + rStop.Width && y >= rStop.Y && y <= rStop.Y + rStop.Height) return H_STOP;
+    return H_NONE;
+}
+static Hot HitSlider(int x, int y) {
+    auto inTrack = [&](RectF t) { return x >= t.X - 12 && x <= t.X + t.Width + 12 && y >= t.Y - 14 && y <= t.Y + 20; };
+    if (inTrack(rMemTrack)) return H_MEM; if (inTrack(rCpuTrack)) return H_CPU; return H_NONE;
+}
+static void SliderSet(Hot which, int x) {
+    RectF t = which == H_MEM ? rMemTrack : rCpuTrack;
+    float f = (x - t.X) / t.Width; if (f < 0) f = 0; if (f > 1) f = 1;
+    if (which == H_MEM) g_memGB = 1 + (int)(f * (g_maxMemGB - 1) + 0.5f);
+    else g_cpuCores = 1 + (int)(f * (g_maxCores - 1) + 0.5f);
 }
 
 static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
     switch (m) {
     case WM_CREATE: {
-        g_serverDir = DirOfSelf();
-        g_serverExe = g_serverDir + L"\\nexus_realm.exe";
-        g_logPath   = g_serverDir + L"\\nexus_realm.log";
-        g_realmJson = g_serverDir + L"\\realm.json";
+        g_serverDir = DirOfSelf(); g_serverExe = g_serverDir + L"\\nexus_realm.exe";
+        g_logPath = g_serverDir + L"\\nexus_realm.log"; g_realmJson = g_serverDir + L"\\realm.json";
         LoadRealmInfo();
-        SYSTEM_INFO sinfo; GetSystemInfo(&sinfo);
-        g_maxCores = (int)sinfo.dwNumberOfProcessors; if (g_maxCores < 1) g_maxCores = 1;
+        SYSTEM_INFO si; GetSystemInfo(&si); g_maxCores = (int)si.dwNumberOfProcessors; if (g_maxCores < 1) g_maxCores = 1;
         MEMORYSTATUSEX ms{ sizeof ms }; GlobalMemoryStatusEx(&ms);
-        int ramGB = (int)(ms.ullTotalPhys / (1024ull * 1024ull * 1024ull));
-        g_maxMemGB = ramGB > 16 ? 16 : (ramGB < 2 ? 2 : ramGB);
+        int ram = (int)(ms.ullTotalPhys / (1024ull * 1024ull * 1024ull));
+        g_maxMemGB = ram > 16 ? 16 : (ram < 2 ? 2 : ram);
         g_cpuCores = g_maxCores; g_memGB = g_maxMemGB >= 4 ? 4 : g_maxMemGB;
-
-        g_bgBrush = CreateSolidBrush(kBg); g_panelBrush = CreateSolidBrush(kPanel);
-        g_fTitle = MakeFont(30, FW_HEAVY, L"Segoe UI"); g_fSub = MakeFont(15, FW_SEMIBOLD, L"Segoe UI");
-        g_fBody = MakeFont(16, FW_NORMAL, L"Segoe UI"); g_fStatus = MakeFont(20, FW_BOLD, L"Segoe UI");
-        g_fBtn = MakeFont(18, FW_SEMIBOLD, L"Segoe UI"); g_fMono = MakeFont(14, FW_NORMAL, L"Consolas");
-        g_fSmall = MakeFont(14, FW_SEMIBOLD, L"Segoe UI");
-
-        auto lbl = [&](int id, int x, int y, int cx, int cy, HFONT f, const wchar_t* t) {
-            HWND w2 = CreateWindowW(L"STATIC", t, WS_CHILD | WS_VISIBLE, x, y, cx, cy, h, (HMENU)(INT_PTR)id, nullptr, nullptr);
-            SendMessageW(w2, WM_SETFONT, (WPARAM)f, TRUE); return w2;
-        };
-        lbl(IDC_TITLE, 28, 20, 500, 40, g_fTitle, L"NEXUS UNLEASHED");
-        lbl(IDC_SUB,   30, 58, 500, 22, g_fSub, L"SERVER LAUNCHER");
-        g_status   = lbl(IDC_STATUS, 320, 28, 220, 32, g_fStatus, L"●  STOPPED");
-        g_realmLbl = lbl(IDC_REALM, 30, 92, 520, 24, g_fBody, (L"Realm:  " + g_realmName).c_str());
-        g_portsLbl = lbl(IDC_PORTS, 30, 118, 520, 22, g_fBody, g_ports.c_str());
-
-        // resource governor
-        g_memLbl = lbl(IDC_MEMLBL, 30, 156, 300, 20, g_fSmall, L"Memory cap:");
-        g_memSlider = CreateWindowExW(0, TRACKBAR_CLASSW, L"", WS_CHILD | WS_VISIBLE | TBS_HORZ | TBS_NOTICKS,
-                                      28, 178, 500, 30, h, (HMENU)IDC_MEMSLIDER, nullptr, nullptr);
-        SendMessageW(g_memSlider, TBM_SETRANGE, TRUE, MAKELONG(1, g_maxMemGB));
-        SendMessageW(g_memSlider, TBM_SETPOS, TRUE, g_memGB);
-        g_cpuLbl = lbl(IDC_CPULBL, 30, 214, 300, 20, g_fSmall, L"CPU cores:");
-        g_cpuSlider = CreateWindowExW(0, TRACKBAR_CLASSW, L"", WS_CHILD | WS_VISIBLE | TBS_HORZ | TBS_NOTICKS,
-                                      28, 236, 500, 30, h, (HMENU)IDC_CPUSLIDER, nullptr, nullptr);
-        SendMessageW(g_cpuSlider, TBM_SETRANGE, TRUE, MAKELONG(1, g_maxCores));
-        SendMessageW(g_cpuSlider, TBM_SETPOS, TRUE, g_cpuCores);
-        UpdateResourceLabels();
-
-        g_start = CreateWindowW(L"BUTTON", L"START", WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 30, 278, 240, 50, h, (HMENU)IDC_START, nullptr, nullptr);
-        g_stop  = CreateWindowW(L"BUTTON", L"STOP",  WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 290, 278, 240, 50, h, (HMENU)IDC_STOP, nullptr, nullptr);
-
-        g_usage = lbl(IDC_USAGE, 30, 342, 500, 22, g_fMono, L"RAM  —     CPU  —");
-
-        g_log = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"",
-                                WS_CHILD | WS_VISIBLE | WS_VSCROLL | ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL,
-                                30, 372, 500, 210, h, (HMENU)IDC_LOG, nullptr, nullptr);
-        SendMessageW(g_log, WM_SETFONT, (WPARAM)g_fMono, TRUE);
+        g_editFont = CreateFontW(15, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Consolas");
+        g_log = CreateWindowExW(0, L"EDIT", L"", WS_CHILD | WS_VISIBLE | WS_VSCROLL | ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL,
+                                26, 396, 100, 180, h, (HMENU)IDC_LOG, nullptr, nullptr);
+        SendMessageW(g_log, WM_SETFONT, (WPARAM)g_editFont, TRUE);
         AppendLog(L"[launcher] Nexus Unleashed Server Launcher ready.");
-        wchar_t hw[128]; swprintf(hw, 128, L"[launcher] this machine: %d logical cores, %d GB cap available.", g_maxCores, g_maxMemGB);
-        AppendLog(hw);
-
-        RefreshUI();
-        SetTimer(h, IDT_POLL, 500, nullptr);
-        return 0;
+        wchar_t hw[128]; swprintf(hw, 128, L"[launcher] this machine: %d logical cores, %d GB cap available.", g_maxCores, g_maxMemGB); AppendLog(hw);
+        SetTimer(h, IDT_POLL, 500, nullptr); return 0;
     }
-    case WM_HSCROLL:
-        UpdateResourceLabels();
-        return 0;
-    case WM_COMMAND:
-        if (LOWORD(w) == IDC_START) StartServer();
-        else if (LOWORD(w) == IDC_STOP) StopServer();
-        RefreshUI();
-        return 0;
-    case WM_TIMER: RefreshUI(); return 0;
-    case WM_DRAWITEM: {
-        LPDRAWITEMSTRUCT d = (LPDRAWITEMSTRUCT)l;
-        if (d->CtlID == IDC_START) DrawButton(d, kBlue, L"START");
-        else if (d->CtlID == IDC_STOP) DrawButton(d, kMagenta, L"STOP");
-        return TRUE;
+    case WM_SIZE: { int W = LOWORD(l), H = HIWORD(l); MoveWindow(g_log, 26, 396, W - 52, H - 396 - 22, TRUE); return 0; }
+    case WM_ERASEBKGND: return 1;
+    case WM_PAINT: { PAINTSTRUCT ps; BeginPaint(h, &ps); Paint(h); EndPaint(h, &ps); return 0; }
+    case WM_TIMER: UpdateUsage(); if (IsRunning()) TailLog(); InvalidateRect(h, nullptr, FALSE); return 0;
+    case WM_MOUSEMOVE: {
+        int x = LOWORD(l), y = HIWORD(l);
+        if (g_drag != H_NONE) { SliderSet(g_drag, x); InvalidateRect(h, nullptr, FALSE); return 0; }
+        Hot nh = HitButton(x, y); if (nh != g_hover) { g_hover = nh; InvalidateRect(h, nullptr, FALSE); }
+        TRACKMOUSEEVENT tme{ sizeof tme, TME_LEAVE, h, 0 }; TrackMouseEvent(&tme); return 0;
     }
-    case WM_CTLCOLORSTATIC: {
-        HDC dc = (HDC)w; HWND ctl = (HWND)l; SetBkMode(dc, TRANSPARENT);
-        int id = GetDlgCtrlID(ctl);
-        if (id == IDC_TITLE) SetTextColor(dc, kMagenta);
-        else if (id == IDC_SUB) SetTextColor(dc, kDim);
-        else if (id == IDC_STATUS) SetTextColor(dc, IsRunning() ? kBlue : kDim);
-        else if (id == IDC_USAGE) SetTextColor(dc, kBlue);
-        else SetTextColor(dc, kMuted);
-        return (LRESULT)g_bgBrush;
+    case WM_MOUSELEAVE: g_hover = H_NONE; InvalidateRect(h, nullptr, FALSE); return 0;
+    case WM_LBUTTONDOWN: {
+        int x = LOWORD(l), y = HIWORD(l); SetCapture(h);
+        Hot b = HitButton(x, y);
+        bool run = IsRunning();
+        if (b == H_START && !run) { g_press = H_START; }
+        else if (b == H_STOP && run) { g_press = H_STOP; }
+        else if (!run) { Hot s = HitSlider(x, y); if (s != H_NONE) { g_drag = s; SliderSet(s, x); } }
+        InvalidateRect(h, nullptr, FALSE); return 0;
     }
-    case WM_CTLCOLOREDIT: { HDC dc = (HDC)w; SetTextColor(dc, kMuted); SetBkColor(dc, kPanel); return (LRESULT)g_panelBrush; }
-    case WM_CTLCOLORBTN: return (LRESULT)g_bgBrush;
-    case WM_ERASEBKGND: { RECT rc; GetClientRect(h, &rc); FillRect((HDC)w, &rc, g_bgBrush); return 1; }
+    case WM_LBUTTONUP: {
+        int x = LOWORD(l), y = HIWORD(l); ReleaseCapture();
+        if (g_press == H_START && HitButton(x, y) == H_START) StartServer();
+        else if (g_press == H_STOP && HitButton(x, y) == H_STOP) StopServer();
+        g_press = H_NONE; g_drag = H_NONE; InvalidateRect(h, nullptr, FALSE); return 0;
+    }
+    case WM_CTLCOLORSTATIC:   // a read-only EDIT reports as static
+    case WM_CTLCOLOREDIT: { HDC d = (HDC)w; SetTextColor(d, kEditFg); SetBkColor(d, kEditBg);
+        static HBRUSH eb = CreateSolidBrush(kEditBg); return (LRESULT)eb; }
     case WM_CLOSE:
-        if (IsRunning()) {
-            if (MessageBoxW(h, L"The server is still running. Stop it and exit?", L"Nexus Unleashed Server Launcher",
-                            MB_YESNO | MB_ICONQUESTION) != IDYES) return 0;
-            StopServer();
-        }
-        DestroyWindow(h); return 0;
+        if (IsRunning() && MessageBoxW(h, L"The server is still running. Stop it and exit?",
+            L"Nexus Unleashed Server Launcher", MB_YESNO | MB_ICONQUESTION) != IDYES) return 0;
+        StopServer(); DestroyWindow(h); return 0;
     case WM_DESTROY: KillTimer(h, IDT_POLL); PostQuitMessage(0); return 0;
     }
     return DefWindowProcW(h, m, w, l);
 }
 
 int WINAPI wWinMain(HINSTANCE hi, HINSTANCE, PWSTR, int show) {
-    INITCOMMONCONTROLSEX icc{ sizeof icc, ICC_BAR_CLASSES }; InitCommonControlsEx(&icc);
-    WNDCLASSW wc{}; wc.lpfnWndProc = WndProc; wc.hInstance = hi;
-    wc.lpszClassName = L"NuslWindow"; wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    wc.hbrBackground = CreateSolidBrush(kBg);
-    RegisterClassW(&wc);
-    HWND h = CreateWindowW(wc.lpszClassName, L"Nexus Unleashed Server Launcher",
-                           (WS_OVERLAPPEDWINDOW & ~WS_THICKFRAME & ~WS_MAXIMIZEBOX),
-                           CW_USEDEFAULT, CW_USEDEFAULT, 576, 640, nullptr, nullptr, hi, nullptr);
-    ShowWindow(h, show); UpdateWindow(h);
-    MSG msg;
-    while (GetMessageW(&msg, nullptr, 0, 0)) { TranslateMessage(&msg); DispatchMessageW(&msg); }
-    return 0;
+    GdiplusStartupInput in; GdiplusStartup(&g_gdip, &in, nullptr);
+    WNDCLASSW wc{}; wc.lpfnWndProc = WndProc; wc.hInstance = hi; wc.lpszClassName = L"NuslWindow";
+    wc.hCursor = LoadCursor(nullptr, IDC_ARROW); wc.hbrBackground = nullptr; RegisterClassW(&wc);
+    g_hwnd = CreateWindowW(wc.lpszClassName, L"Nexus Unleashed Server Launcher",
+                           (WS_OVERLAPPEDWINDOW & ~WS_MAXIMIZEBOX), CW_USEDEFAULT, CW_USEDEFAULT, 600, 660, nullptr, nullptr, hi, nullptr);
+    ShowWindow(g_hwnd, show); UpdateWindow(g_hwnd);
+    MSG msg; while (GetMessageW(&msg, nullptr, 0, 0)) { TranslateMessage(&msg); DispatchMessageW(&msg); }
+    GdiplusShutdown(g_gdip); return 0;
 }
