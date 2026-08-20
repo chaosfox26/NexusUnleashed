@@ -96,6 +96,8 @@ access to a WildStar server — and with this repo, nobody does.
 
 - `ARCHITECTURE.md` — the constitution: mission, the Provenance Discipline, the
   build order.
+- `OPTIMIZATION.md` — the performance manifesto: the standard this engine is
+  built to — lean, fast, and scalable to the entire game running at once.
 - `provenance/` — the ledger proving every component's clean origin.
 - `spec/` — behavior specifications (the only thing that crosses from analysis
   to implementation).
