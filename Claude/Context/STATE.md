@@ -1,5 +1,22 @@
 # NexusUnleashed Engine — State of the Build
 
+> **🌟 ▶ RESUME (2026-08-21) — THE NORTH STAR IS REACHED: THE CHARACTER STANDS IN THE 3D WORLD.**
+> Read **`SESSION-2026-08-21-world-entry.md`** (its "FINAL STATE" section) — the current authority.
+> The real 16042 client goes login → realm → char-select → Enter Game → **stands in the arkship
+> Medbay as a full Aurin-female body**, fully SERVER-NATIVE (zero Frida in the path), zero NF/captures.
+> RECIPE (world_handshake.cpp, realm conn, all 0x03DC): 0x00AD world-enter; on movement 0x00AD(2nd
+> ChangeWorld) + **0x00F1 (16 ZERO bytes → session+25632=1)** + 0x0262 player entity (race/sex + item
+> visuals so the BODY renders) → 0x019B set-player → 0x0061 PlayerEnteredWorld + 0x0845 timer keepalive.
+> MECHANISM: the client's world-load mask at **session+31560 must reach 0x7F** (per-frame update
+> sub_1403E85D0 drops the loading screen only then; bit 0x10 needs 0xF1, 0x20|0x40 need 0x61).
+> **The "outfit/underwear" gap flagged in the 2026-08-20 banner below is now SOLVED for world entry** —
+> the a3+176 item-visual array (`[7b slot][15b displayId][14b][32b]`, from characterdb.character_appearance)
+> renders the clothed body. NEXT = Phase 08 polish: standing pose (she renders LYING DOWN — a
+> stand-state/unit-alive flag), exact floor Y, per-character appearance from the DB, then the living world.
+> ALSO this session: GitHub history PURGED of the Windows username/local paths (filter-repo + force-push,
+> 172→0); privacy-guard.py HARDENED to catch `X:\Users\<name>` paths; ROADMAP.md/README.md/roadmap.svg all
+> updated (World Entry DONE, North Star REACHED). Pushed public through `0490995`. Older banners below.
+
 > **▶ RESUME (2026-08-20, part 4) — THE SCRUB (pure code, PUSHED) · LIVE VERIFICATION · SETTINGS-PANEL PLAN.**
 > Read **`SESSION-2026-08-20-scrub-and-settings.md`** first — it is the current authority.
 > **The source is now pure code:** every build note / RE derivation / wire annotation was moved out of the

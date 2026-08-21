@@ -710,3 +710,55 @@ REMAINING POLISH (not blockers):
 - PathTracker.lua addon error popup is a harmless STOCK-UI bug, unrelated to entry.
 - Frida hardware watchpoints (Thread.setHardwareWatchpoint) WORK on this setup - hwwatch.py is the tool
   that cracked the mask-bit setters. maskwatch.py / worldtap.py / sesswatch.py are the entry diagnostics.
+
+# ============================================================================
+# FINAL STATE (2026-08-21) — IN THE WORLD, SERVER-NATIVE, BODY RENDERING
+# ============================================================================
+
+## THE COMPLETE SOLVED PICTURE
+The real 16042 client now goes login -> realm -> char-select -> Enter Game -> STANDS IN THE 3D WORLD
+(arkship Medbay, world 1537), rendered as a full Aurin-female body. Fully server-native (zero Frida in
+the path; Frida was diagnosis only). Zero NF, zero captures - all derived from the client + our DB.
+
+## THE WORLD-ENTRY RECIPE (world_handshake.cpp RegisterRealmConnection; all via 0x03DC container)
+- 0x07DD EnterWorld -> send 0x00AD world-enter (TWID=1537, pos).
+- first 0x038C movement:
+    1. 0x00AD (2nd) -> ChangeWorld (fresh game session qword_140C65898 = sub_1403E1400)
+    2. 0x00F1 (BODY = 16 ZERO BYTES) -> sub_1403B67E0 sets session+25632=1 (unblocks load-mask bit 0x10).
+       *** the 0xF1 body MUST be all-zero or the client over-reads a leading count and DROPS the packet ***
+    3. 0x0262 player entity (see appearance below)
+- move #4: 0x019B set-player (binds player, PlayerChanged, installs unit +272)
+- move #6: 0x0061 -> sub_1403C74D0 "PlayerEnteredWorld" (empty body, sets mask 0x20|0x40)
+           + StartKeepalive: 0x0845 loading-progress every 2s (movement-independent timer)
+
+## THE LOAD-MASK MECHANISM (the crux, fully RE'd)
+- World-load readiness = a 7-bit mask at session+31560; the session per-frame update sub_1403E85D0 runs
+  its "world ready / drop the load screen" block ONLY when the mask == 0x7F (127).
+- bits 0-3 (0x0F): local map subsystems (automatic), set by sub_1403E8000.
+- bit 4 (0x10): gated on session+25632 != 0, set ONLY by 0x00F1's handler sub_1403B67E0.
+- bits 5-6 (0x20|0x40): set by 0x0061 "PlayerEnteredWorld".
+- Diagnostic tools (%TEMP-scrubbed to <scratch>): maskwatch.py, worldtap.py, sesswatch.py, hwwatch.py
+  (hardware watchpoint - WORKS on this setup), f1call.py (proved the mechanism by calling the handler).
+
+## BODY RENDERING (0x0262 appearance, BuildPlayerEntity in world_entry.cpp)
+- Player block: race(5b)=4 Aurin, class(5b)=7, sex(2b)=1 female [from DB character table].
+- Entity a3+176 = ITEM-VISUAL array: count(7b) then N x [7b slot][15b displayId][14b][32b]
+  (element reader sub_1400AB890; SAME wire format as the char-list appearance in character_list.cpp).
+  Populated from characterdb.character_appearance (7 slots: 24->4928,25->5734,26->6279,27->5953,
+  28->5691,39->6626,70->7277). Result: full body renders (was a floating head).
+- HARDCODED for Peryanna (char id 32) right now -> TODO: parameterize per-character from the DB.
+
+## OPEN POLISH (Phase 08 - all "content on a proven foundation", none are "can we do it")
+- STANDING POSE: she renders LYING DOWN. Char data is correct (portrait is fine) -> it's a stance/
+  unit-alive/stand-state flag on the spawn entity that isn't set. NEXT: find the stand-state field.
+- FLOOR Y: DB saves her at (1437.82, 85.53, -106.82) but that clips into the medbay floor; current
+  TWY bumped to 86.10 (still low). The client IGNORES memory writes to player+4580, so calibration
+  needs a server rebuild+relog, not a Frida pin. Real floor is a bit higher (~87-88 by eye).
+- Per-character appearance from DB; full face customisation (character_customisation label->value
+  into the Player-block arrays a3+48/+76/+88); movement/entities/combat/quests (the living world).
+
+## HOUSEKEEPING DONE THIS SESSION
+- GitHub history PURGED of the Windows username/local paths (git filter-repo, 172 occurrences -> 0,
+  force-pushed). privacy-guard.py HARDENED to catch X:\Users\<name> local paths going forward.
+- ROADMAP.md / README.md / docs/roadmap.svg all updated: Phase 07 World Entry = DONE, North Star = REACHED.
+- Everything committed + pushed to github.com/chaosfox26/NexusUnleashed (tip 0490995 at write time).

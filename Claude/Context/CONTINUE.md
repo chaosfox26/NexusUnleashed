@@ -1,11 +1,19 @@
 # CONTINUE HERE — NexusUnleashed clean engine: full continuation handoff
 
-> **🟢 2026-08-20 — THE CLIENT REACHES THE CHARACTER CREATOR.** Both login walls fell
-> (packet cipher = qword-CFB; realm dial address in the `0x03db` body). The real client now
-> logs in, connects to the realm, is served its characters, and runs the **entire character
-> creator**. **READ `SESSION-2026-08-20-character-creator.md` FIRST**, then the resume banner
-> in `STATE.md`. NEXT = Phase 07: create-character (`0x5CD5`) → persist → the world server.
-> The banner below is prior state.
+> **🌟 2026-08-21 — THE NORTH STAR IS REACHED: THE CHARACTER STANDS IN THE 3D WORLD.**
+> The real 16042 client now goes login → realm → char-select → Enter Game → **stands in the
+> arkship Medbay as a full Aurin-female body**, fully SERVER-NATIVE (zero Frida in the path),
+> zero NF, zero captures. **READ `SESSION-2026-08-21-world-entry.md` — the "FINAL STATE" section
+> at the bottom is the authority** (the complete recipe + the load-mask mechanism).
+> THE RECIPE (world_handshake.cpp, realm connection): 0x00AD world-enter, then on movement:
+> 0x00AD(2nd ChangeWorld) + **0x00F1 (16 ZERO bytes → session+25632=1)** + 0x0262 player entity
+> (with race/sex + item-visuals so the BODY renders) → 0x019B set-player → 0x0061 PlayerEnteredWorld
+> + 0x0845 timer keepalive. THE MECHANISM: the client's world-load mask at `session+31560` must
+> reach **0x7F** (bits: 0-3 map=auto, 0x10 needs 0xF1, 0x20|0x40 need 0x61); its per-frame update
+> drops the loading screen only at 0x7F. NEXT = Phase 08 polish: standing pose (she renders LYING
+> DOWN — a stand-state/unit-alive flag), exact floor Y, per-character appearance from the DB, then
+> the living world (movement/entities/combat/quests). §6 below is rewritten for this. Older banners
+> are prior state; §4's char-list/login detail still holds and is upstream of all of the above.
 
 > **🟢 THE ENGINE IS NOW C++ (2026-08-19).** The C++ port reached **parity with the C#**
 > and is the project's primary engine: a real 16042 client authenticates end-to-end
@@ -26,14 +34,15 @@ driver paths) are in the gitignored `Claude/Context/local-notes.md` — never pu
 
 ## 0. One-paragraph state
 
-A real WildStar **16042** client authenticates **end to end** against this
-clean-room engine and reaches the realm channel — the crypto/login gate that stops
-every emulator is fully cracked (SRP, encrypted channels, token handoff, realm
-handshake). The client sits at "Retrieving Account Information", one step before
-character-select. The remaining work to "standing in the world" is **message-body
-reverse-engineering**: read each message's wire layout from the client's own
-deserializer and regenerate it from our database. The immediate blocker is the
-character-list (`0x0117`) wire format.
+**The north star is reached.** A real WildStar **16042** client authenticates end to end,
+creates a character, and **stands in the 3D world** (arkship Medbay) against this clean-room
+engine — rendered as a full Aurin-female body, entirely server-native (zero Frida), zero NF,
+zero captures. Every gate that stops emulators is cracked: SRP login, the encryption channel,
+the realm handshake, character list + creation, AND world entry (the load-completeness mask at
+`session+31560` fully RE'd → driven to 0x7F by our own messages). What remains is **content on a
+proven foundation** (Phase 08): the standing pose (she renders lying down), exact floor Y,
+per-character appearance from the DB, then movement/entities/combat/quests. Nothing left is
+"can we do it" — the hard, uncertain parts are all behind us.
 
 ---
 
@@ -221,29 +230,32 @@ python provenance/nf-guard.py         # no NF leakage
 
 ---
 
-## 6. THE NEXT PROBLEM & THE SAFE PLAN
+## 6. THE NEXT PROBLEM — PHASE 08 POLISH (content on a proven foundation)
 
-**Blocker:** the client waits at "Retrieving Account Information" (an account-info
-message, family `0x036`/`0x0AD`/`0x33D`, is expected before character-select), and
-then needs a valid **`0x0117` character list**. Both bodies must be generated from
-the client-derived wire layout + our characterdb.
+World entry is SOLVED (see the banner + the session log's "FINAL STATE"). The remaining
+items are well-scoped and none are "can we do it":
 
-**The hard part is the `0x0117` wire format.** The parse is done by a generic/
-schema-driven deserializer that is elusive statically (the `{0x38,0x50,0x5c}`
-struct-write signature matches 133 functions; a naive u32-opcode registry search
-found nothing). SAFE approaches for next session:
-1. **Static:** find the pump via the `G` vtable (`OnMessage` ptr at `.data
-   0x140C66D58`) → read the per-opcode read path / locate the message factory and the
-   `0x117` Read. Or find Carbine's bit-reader (hot, called by every deserialize) and
-   read the `0x117` field/width sequence.
-2. **Sandboxed dynamic (safe):** once the deserializer is located, Frida-`NativeFunction`
-   it in-process with a controlled buffer to watch the parse — NO network, NO
-   live-client-state risk. Or hook it and observe a *genuinely valid* parse only.
+1. **STANDING POSE (top priority).** She renders LYING DOWN. Her character data is correct
+   (the portrait renders fine), so this is a **stand-state / unit-alive flag** on the spawn
+   entity (`0x0262`) that isn't set — likely a StandState field or the unit's health/alive
+   state defaulting to a collapsed/dead pose. NEXT: RE the client's StandState / the unit
+   component's alive+stance fields; find which entity field drives the standing idle.
+2. **EXACT FLOOR Y.** DB saves her at (1437.82, 85.53, -106.82); that clips into the medbay
+   floor. `TWY` in `world_handshake.cpp` is bumped to 86.10 (still low; real floor ~87-88).
+   **The client IGNORES memory writes to player+4580**, so calibrate by server rebuild+relog,
+   not a Frida pin. (Or read the medbay floor from the client's collision at that XZ.)
+3. **PER-CHARACTER APPEARANCE FROM THE DB.** `BuildPlayerEntity` currently HARDCODES Peryanna's
+   (char id 32) race/sex + 7 item-visual slots. Wire it from characterdb: `character` (race/sex/
+   class) + `character_appearance` (slot→displayId, the `a3+176` array), keyed by the character
+   being entered. Full face customisation = `character_customisation` (label→value) into the
+   Player-block arrays (`a3+48` u32s / `a3+76` u64s / `a3+88` u32s).
+4. **THE LIVING WORLD (Phase 3 proper):** movement steady-state, entity streaming, spells/combat,
+   quests, loot, vendors, chat/groups — each client-derived, filled from our world data.
 
-Then build the **generic, account-keyed** `0x0117` generator (reads whichever account
-authenticated → serializes its characters). Then: character-select (client→server) →
-world entry (`0x0988` world payload, `0x0981` init, self block, `0x0262` entity
-stream — each client-derived, filled from our world data).
+**Key mechanism refs** (all in `SESSION-2026-08-21-world-entry.md`): the load-mask
+(`session+31560` → 0x7F); the session per-frame update `sub_1403E85D0`; the mask-bit setter
+`sub_1403E8000`; PlayerEnteredWorld `sub_1403C74D0` (0x61); world-entry init `sub_1403B67E0`
+(0x00F1, all-zero body); item-visual reader `sub_1400AB890` (`[7b slot][15b displayId][14b][32b]`).
 
 ---
 
