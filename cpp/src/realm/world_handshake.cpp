@@ -15,9 +15,11 @@
 namespace {
 // Toggle for the premature 0x36A world-change-done experiment. OFF: stay in the client's
 // loading state (keeps sending 0x038C, connection stable) so we can find the true completion.
-static bool WorldChangeDoneEnabled = false; // 0x36A CONFIRMED HARMFUL: forces game screen early ->
-                                            // client disconnects 'Reason 0'. Stable state = keepalive
-                                            // loading. Completion must come from the load finishing.
+static bool WorldChangeDoneEnabled = false; // 0x36A RE-CONFIRMED HARMFUL even late (Phase 08): sent at
+                                            // move>=10, fully in-world (alive/physics/keepalive), it
+                                            // STILL disconnects to login. The game-screen transition
+                                            // (sub_1403B6D10) fails its no-error check (a1+25592!=0) and
+                                            // drops. Fix that condition first; do not force 0x36A.
 static bool LoadProgressEnabled = true;   // 0x845 progress/keepalive each tick after set-player
 // TARGET WORLD — EXPERIMENT: 990 (Map\Eastern / Everstar Grove, a normal open zone) at a REAL valid
 // spawn (realm world-DB entity), to test whether a plain entry completes in a non-tutorial world
@@ -355,6 +357,17 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
             auto ka = proto::WorldEntryMessages::BuildLoadProgress(20, 0, 20);
             s.StartKeepalive(0x03DC, proto::WorldEntryMessages::OpLoadProgress, ka, 2000);
             std::printf("realm-conn: -> started movement-independent 0x845 keepalive (2s)\n");
+        } else if (WorldChangeDoneEnabled && !s.worldchange_sent && s.loadscreen_sent && s.world_move_count >= 10) {
+            // RE-TEST (Phase 08): 0x036A world-change-complete -> sub_1403B6D10 shows the GAME screen
+            // (not just the load-art). Gameplay keybinds (C/W) are SUPPRESSED until the game-screen UI
+            // state is active - Escape (system) works but gameplay input is gated. 0x36A was "harmful"
+            // EARLIER only because it fired before the world was really loaded; now she's fully in-world
+            // (alive, physics, keepalive running), so this may finally enable gameplay control without
+            // the watchdog disconnect. Sent LATE (move>=10), well after 0x0061 + keepalive.
+            s.worldchange_sent = true;
+            auto bwc = proto::WorldEntryMessages::BuildWorldChangeDone(0);
+            co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpWorldChangeDone, bwc);
+            std::printf("realm-conn: -> 0x036A WORLD-CHANGE-DONE (show game screen / enable gameplay input)\n");
         }
 
         // KEEPALIVE / PROGRESS EXPERIMENT: once the player is set, send 0x845 loading progress on
