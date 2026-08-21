@@ -72,7 +72,8 @@ std::vector<uint8_t> WorldEntryMessages::BuildPlayerEntityMinimal(uint32_t guid,
     return w.ToArray();
 }
 
-std::vector<uint8_t> WorldEntryMessages::BuildPlayerEntity(uint32_t guid, float x, float y, float z) {
+std::vector<uint8_t> WorldEntryMessages::BuildPlayerEntity(uint32_t guid, float x, float y, float z,
+                                                          const PlayerAppearance& appearance) {
     // Entity kind 20 = "Player" (client type-name table): kind-20 reader sub_1400962D0 reads the
     // full character data block (218 bits, all strings/arrays empty here). This is what builds the
     // controllable-player component (+272) that set-player (0x019B) requires. Plus a position
@@ -93,10 +94,10 @@ std::vector<uint8_t> WorldEntryMessages::BuildPlayerEntity(uint32_t guid, float 
     // Both zero was why the entity never landed in the lookup map (Read ok, construct FAIL).
     w.WriteUInt64(guid);          //   +0   u64  player id (non-zero)
     w.WriteBits(1, 14);           //   +8   14b  realm id = 1 (non-zero)
-    wstr(u"Peryanna Meadowclover"); //  +16  player name
-    w.WriteBits(4, 5);            //   +24  5b  race = 4 (Aurin)   [DB character.race]
-    w.WriteBits(7, 5);            //   +28  5b  class = 7          [DB character.class]
-    w.WriteBits(1, 2);            //   +32  2b  sex = 1 (female)   [DB character.sex]
+    wstr(appearance.Name);        //   +16  player name           [DB character.name]
+    w.WriteBits(appearance.Race & 0x1F, 5);   //   +24  5b  race  [DB character.race]
+    w.WriteBits(appearance.Class & 0x1F, 5);  //   +28  5b  class [DB character.class]
+    w.WriteBits(appearance.Sex & 0x3, 2);     //   +32  2b  sex   [DB character.sex]
     w.WriteUInt64(0);             //   +40  u64
     w.WriteBits(0, 8);            //   +48  count_a=0 (4-byte elems)
     wstr(u"");                    //   +64  string (empty)
@@ -107,7 +108,17 @@ std::vector<uint8_t> WorldEntryMessages::BuildPlayerEntity(uint32_t guid, float 
     w.WriteBits(0, 8);            //   +108 8b
     w.WriteBits(0, 14);           //   +112 14b
     w.WriteBits(0, 8);            // a3+128  8b
-    w.WriteBits(0, 5);            // a3+129  5b count1=0
+    // a3+129 = the UNIT-PROPERTY array (count 5b, element sub_140096230 = [5b id][2b type][value];
+    // the client applies each by id in sub_140458140). With count 0 the unit has NO health, so the
+    // client treats the player as DEAD -> DeathPose (lying down) and movement-locked. Property id 12
+    // = HEALTH (type 2 = {current u32, max u32}), setting base+current (+440/+444) and max
+    // (+460/+464). Sending it = a living, controllable player. (Value placeholder until real stats
+    // are wired from character_stats.)
+    w.WriteBits(1, 5);            // a3+129  5b property count = 1
+    w.WriteBits(12, 5);           //   [5b] id = 12 (Health)
+    w.WriteBits(2, 2);            //   [2b] type = 2 ({current,max})
+    w.WriteUInt32(250);           //   [32b] current health
+    w.WriteUInt32(250);           //   [32b] max health
     w.WriteUInt32(0);             // a3+144  32b
     // a3+148 = the MOVEMENT array (count 5b, elements sub_1400AF930). Construction applies THIS
     // array (not the 64-byte command array) via sub_1404586E0 -> the spline interpolator, seeding
@@ -123,17 +134,14 @@ std::vector<uint8_t> WorldEntryMessages::BuildPlayerEntity(uint32_t guid, float 
     w.WriteBits(0, 8);            // a3+160  8b count3=0
     // a3+176 = ITEM-VISUAL array (count 7b, element sub_1400AB890 = [7b slot][15b displayId][14b][32b],
     // the same wire format as the char-list appearance that renders her on the select screen). Populated
-    // from character_appearance (slot -> displayId) so her body/clothing renders instead of a floating
-    // head. Peryanna's 7 slots (id 32); TODO: make this a per-character parameter from the DB.
-    static const struct { uint16_t slot; uint16_t display; } kVis[] = {
-        {24, 4928}, {25, 5734}, {26, 6279}, {27, 5953}, {28, 5691}, {39, 6626}, {70, 7277}
-    };
-    w.WriteBits((uint32_t)(sizeof(kVis) / sizeof(kVis[0])), 7);   // a3+176 count = 7 visuals
-    for (const auto& v : kVis) {
-        w.WriteBits(v.slot, 7);       // [7b]  item slot
-        w.WriteBits(v.display, 15);   // [15b] item displayId
-        w.WriteBits(0, 14);           // [14b]
-        w.WriteUInt32(0);             // [32b]
+    // per-character from character_appearance (slot -> displayId) so each character's body/clothing
+    // renders as itself instead of a floating head or someone else's outfit.
+    w.WriteBits((uint32_t)(appearance.Visuals.size() & 0x7F), 7);  // a3+176 count (7b)
+    for (const auto& v : appearance.Visuals) {
+        w.WriteBits(v.first & 0x7F, 7);       // [7b]  item slot
+        w.WriteBits(v.second & 0x7FFF, 15);   // [15b] item displayId
+        w.WriteBits(0, 14);                   // [14b]
+        w.WriteUInt32(0);                     // [32b]
     }
     w.WriteBits(0, 9);            // a3+192  9b command count = 0 (position not carried here)
     // -- resume top-level --
@@ -142,8 +150,8 @@ std::vector<uint8_t> WorldEntryMessages::BuildPlayerEntity(uint32_t guid, float 
     // common tail calls sub_14045AC60(entity, faction2@+216) which INSTALLS the entity+272 unit
     // component via sub_140716FA0 -- but ONLY when the value is a valid faction key. Zero was why
     // +272 stayed null and set-player failed (#411). 166 = Exiles Player faction (parent 165).
-    w.WriteBits(166, 14);         // a3+212  14b Faction1 = Exiles Player
-    w.WriteBits(166, 14);         // a3+216  14b Faction2 = Exiles Player -> installs entity+272
+    w.WriteBits(appearance.Faction & 0x3FFF, 14); // a3+212  14b Faction1 (166 Exiles Player)
+    w.WriteBits(appearance.Faction & 0x3FFF, 14); // a3+216  14b Faction2 -> installs entity+272
     w.WriteUInt32(0);             // a3+220  32b
     w.WriteUInt64(0);             // a3+224  64b
     w.WriteBits(0, 2);            // a3+232  2b sel1=0

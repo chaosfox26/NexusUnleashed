@@ -77,6 +77,25 @@ int main() {
                     acc, (unsigned long long)charId, ok ? "deleted" : "not found");
         return ok;
     };
+    realm::WorldHandshake::WorldEntryAppearanceProvider = [&charStore](long acc, uint64_t charId) -> proto::PlayerAppearance {
+        proto::PlayerAppearance ap;   // defaults (Peryanna) if the character can't be found
+        for (const auto& r : charStore.GetCharacters(acc)) {
+            if (r.Id != charId) continue;
+            ap.Race = r.Race; ap.Class = r.Class; ap.Sex = r.Sex;
+            // ap.Faction stays the entity-construction faction (166), NOT r.FactionId — the DB
+            // factionId (167 for Exiles) is a display value; construction needs the +272-installing key.
+            ap.Name.assign(r.Name.begin(), r.Name.end());   // names are ASCII -> widen byte-by-byte
+            ap.Visuals.clear();
+            for (const auto& v : r.Appearance)              // {slot, displayId} from character_appearance
+                ap.Visuals.emplace_back((uint16_t)v.first, (uint16_t)v.second);
+            std::printf("realm: world-entry appearance: char %llu race=%u class=%u sex=%u visuals=%zu\n",
+                        (unsigned long long)charId, ap.Race, ap.Class, ap.Sex, ap.Visuals.size());
+            return ap;
+        }
+        std::printf("realm: world-entry appearance: char %llu NOT FOUND for account %ld, using defaults\n",
+                    (unsigned long long)charId, acc);
+        return ap;
+    };
     net::GameServer realmServer(io, cfg.bind_address, cfg.auth_port, false);
     realm::WorldHandshake::Register(realmServer);
     realmServer.Start();

@@ -4,6 +4,8 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <string>
+#include <utility>
 #include <vector>
 #include <deque>
 #include <asio.hpp>
@@ -37,6 +39,14 @@ public:
     int  world_move_count = 0;         // count of 43-byte movement packets seen (for staging)
     bool player_set_sent = false;      // world entry: 0x019B set-player sent (after entity exists)
     bool loadscreen_sent = false;      // world entry: 0x03D0 loading-screen dismiss sent
+
+    // world entry: the entering character's body, loaded from characterdb on 0x07DD and
+    // used to build the per-character 0x0262 player entity on the first 0x038C movement.
+    bool     we_loaded = false;
+    uint32_t we_race = 4, we_class = 7, we_sex = 1, we_faction = 166;
+    std::u16string we_name = u"Peryanna Meadowclover";
+    std::vector<std::pair<uint16_t, uint16_t>> we_visuals; // {slot, displayId} from character_appearance
+
     std::string remote() const;
 
 private:

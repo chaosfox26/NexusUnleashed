@@ -1,5 +1,7 @@
 #pragma once
 #include <cstdint>
+#include <string>
+#include <utility>
 #include <vector>
 
 // World-entry message serializers. Wire layouts are CLIENT-DERIVED (deser.py on the
@@ -12,6 +14,21 @@ struct WorldEntryTarget {
     uint32_t WorldId = 0;   // target world (client already knows this from the char list)
     float X = 0.f, Y = 0.f, Z = 0.f;
     uint32_t Race = 0, Class = 0, Sex = 0, FactionId = 0;
+};
+
+// The per-character body the 0x0262 player entity renders. Loaded from characterdb
+// (race/class/sex from `character`; Visuals = slot->displayId rows from
+// character_appearance, the same rows the char-select screen renders). Faction is the
+// ENTITY-CONSTRUCTION faction (must install the +272 unit component); it is NOT the DB
+// factionId (167 for Exiles) — 166 (Exiles Player) is the value the client construction
+// accepts. Body rendering is faction-agnostic, so 166 is used for every race for now.
+struct PlayerAppearance {
+    uint32_t Race = 4;      // DB character.race   (4 = Aurin)
+    uint32_t Class = 7;     // DB character.class
+    uint32_t Sex = 1;       // DB character.sex    (1 = female)
+    uint32_t Faction = 166; // entity-construction faction (installs +272); NOT DB factionId
+    std::u16string Name = u"Peryanna Meadowclover";
+    std::vector<std::pair<uint16_t, uint16_t>> Visuals; // {slot, displayId}
 };
 
 class WorldEntryMessages {
@@ -46,7 +63,9 @@ public:
     static constexpr uint16_t OpEntityCreate = 0x0262;
     static std::vector<uint8_t> BuildPlayerEntityMinimal(uint32_t guid, uint32_t type);
     // Full entity WITH a position command (so it's placed in the world grid + lookup map).
-    static std::vector<uint8_t> BuildPlayerEntity(uint32_t guid, float x, float y, float z);
+    // Appearance (race/sex/class/name/item-visuals) comes per-character from the DB.
+    static std::vector<uint8_t> BuildPlayerEntity(uint32_t guid, float x, float y, float z,
+                                                  const PlayerAppearance& appearance);
 
     // 0x019B — SET PLAYER UNIT (char-select mgr variant, sub_1403B5AD0). Requires the entity to
     // already exist AND carry a +272 component; rejected as "foreign Message Id #411" on the world

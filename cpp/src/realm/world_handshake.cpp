@@ -22,9 +22,11 @@ static bool LoadProgressEnabled = true;   // 0x845 progress/keepalive each tick 
 // TARGET WORLD — EXPERIMENT: 990 (Map\Eastern / Everstar Grove, a normal open zone) at a REAL valid
 // spawn (realm world-DB entity), to test whether a plain entry completes in a non-tutorial world
 // (1537 = ExileArkShipTutorial is scripted). Revert to 1537 / (1437.82,85.53,-106.82) after.
+// World 1537 = Map\ExileArkShipTutorial (her stored home). The lying-down/movement-lock was
+// CONFIRMED NOT tutorial-specific (she lay down identically in world 990 Everstar Grove) — root
+// cause was the entity carrying no Health property, so the client rendered her dead (DeathPose).
+// Fixed in BuildPlayerEntity (Health property id 12). Medbay floor spawn.
 static uint32_t TWID = 1537;
-// Spawn: medbay floor. Old Y 85.53 clipped her into the floor; the client's collision floor beneath
-// that XZ reads ~86.03, so stand her just on top of it (feet-origin entity).
 static float TWX = 1437.82f, TWY = 86.10f, TWZ = -106.82f;
 // (Tested world 990 Everstar Grove at a real spawn: NORMAL zone loading screen, connected, but ALSO
 //  stalls at loading -> the completion blocker is GENERAL, not tutorial-specific. Reverted to 1537.)
@@ -79,6 +81,7 @@ namespace nexus::realm {
 std::function<std::vector<uint8_t>(long)> WorldHandshake::CharacterListBodyProvider;
 std::function<uint64_t(long, const std::vector<uint8_t>&)> WorldHandshake::CreateCharacterProvider;
 std::function<bool(long, uint64_t)> WorldHandshake::DeleteCharacterProvider;
+std::function<proto::PlayerAppearance(long, uint64_t)> WorldHandshake::WorldEntryAppearanceProvider;
 bool WorldHandshake::SendAccountData = false;
 bool WorldHandshake::SendRealmList = false;
 bool WorldHandshake::IncludeRealm = true;
@@ -250,6 +253,18 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
         for (size_t i = 0; i < body.size() && i < 8; ++i) charId |= (uint64_t)body[i] << (8 * i);
         std::printf("realm-conn: <- 0x07DD EnterWorld charId=%llu\n", (unsigned long long)charId);
 
+        // Load the entering character's body from characterdb so the 0x0262 player entity (built
+        // later on the first 0x038C movement, once we know the client's live guid) renders THIS
+        // character — race/sex/class + item visuals — instead of a hardcoded one.
+        if (WorldEntryAppearanceProvider) {
+            long acc = sts::AuthSession::LastAccountId();
+            proto::PlayerAppearance ap = WorldEntryAppearanceProvider(acc, charId);
+            s.we_race = ap.Race; s.we_class = ap.Class; s.we_sex = ap.Sex; s.we_faction = ap.Faction;
+            s.we_name = ap.Name; s.we_visuals = ap.Visuals; s.we_loaded = true;
+            std::printf("realm-conn: world-entry body loaded charId=%llu race=%u class=%u sex=%u visuals=%zu\n",
+                        (unsigned long long)charId, ap.Race, ap.Class, ap.Sex, ap.Visuals.size());
+        }
+
         // World entry, built by hand from the client's own deserializers + our DB (NF-free;
         // spec/protocol/world-entry.md). FIRST CANDIDATE: the leading messages with
         // client-derived shapes (empty lists) to observe whether the client leaves
@@ -300,11 +315,17 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
                 co_await s.SendGameMessageVia(0x03DC, 0x00F1, f1);
                 std::printf("realm-conn: -> 0x00F1 world-entry init (sets +25632=1 -> unblocks load-mask 0x10)\n");
             }
-            // 2) 0x0262 entity-create. Must construct + land in the client's lookup map (this is the
-            //    step currently failing: Read succeeds but construct/add does not).
-            auto ent = proto::WorldEntryMessages::BuildPlayerEntity(guid, TWX, TWY, TWZ);
+            // 2) 0x0262 entity-create. Must construct + land in the client's lookup map. The body
+            //    (race/sex/class/name/item-visuals) is this character's, loaded from the DB on 0x07DD.
+            proto::PlayerAppearance ap;
+            if (s.we_loaded) {
+                ap.Race = s.we_race; ap.Class = s.we_class; ap.Sex = s.we_sex;
+                ap.Faction = s.we_faction; ap.Name = s.we_name; ap.Visuals = s.we_visuals;
+            }
+            auto ent = proto::WorldEntryMessages::BuildPlayerEntity(guid, TWX, TWY, TWZ, ap);
             co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpEntityCreate, ent);
-            std::printf("realm-conn: -> 0x0262 player entity guid=0x%X (%zuB) via 0x03DC\n", guid, ent.size());
+            std::printf("realm-conn: -> 0x0262 player entity guid=0x%X race=%u sex=%u visuals=%zu (%zuB) via 0x03DC\n",
+                        guid, ap.Race, ap.Sex, ap.Visuals.size(), ent.size());
         } else if (!s.player_set_sent && s.world_move_count >= 4) {
             // 3) 0x019B set-player (primary; sub_1403B5AD0): looks up the entity, sets BOTH the
             //    current player (+120) AND the container (+25744) from it, then fires PlayerChanged.
