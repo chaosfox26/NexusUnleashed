@@ -640,3 +640,41 @@ FIRED" and whether the arkship 3D renders. If 0x36A alone doesn't render, try **
 - world_handshake.cpp: keepalive ON (LoadProgressEnabled), 0x36A OFF (WorldChangeDoneEnabled=false),
   0x636 sent after set-player. Client login->char-select->Enter Game reaches a STABLE, connected
   loading screen for the arkship. The disconnect that used to kill it in ~30s is gone.
+
+# ============================================================================
+# CONTINUED: robust keepalive infra + the frozen-session finding
+# ============================================================================
+
+## NEW INFRA (committed, keepers):
+- SERIALIZED WRITE QUEUE (GameSession::WriteFrame): all sends enqueue + drain via one logical writer,
+  so concurrent writers (dispatch + keepalive timer) never interleave partial frames on the socket.
+- MOVEMENT-INDEPENDENT TIMER KEEPALIVE (GameSession::StartKeepalive): co_spawns a loop that re-sends
+  0x845 every 2s regardless of client movement. Started after the entry handshake. PROVEN: holds the
+  client in the loading screen indefinitely, connected, no error (timerhold.png) - no longer depends on
+  the client continuing to send movement. This supersedes the movement-tick keepalive as the robust hold.
+
+## 0x36A: DEAD END, CONFIRMED A 3RD TIME.
+- Even with the persistent timer keepalive running, sending world-dispatch 0x36A -> game screen ->
+  DISCONNECT. Root cause understood: 0x36A transitions the client to the "in-world" game screen, whose
+  OWN watchdog disconnects because the world isn't actually loaded. Not a keepalive problem. Gated off.
+- NOTE for next session: the REALM dispatcher (sub_140020EA0) ALSO has an opcode-874 (0x36A) path that
+  shows the game screen AND sets char-select state +368=6 (in-world) - but it is GUARDED by state != 5,
+  and after 0x00AD the state IS 5 (loading), so it is unreachable. The char-select state machine has NO
+  5->6 transition at all (every +368=6 writer guards against state 5) - i.e. the char-select mgr is
+  abandoned at state 5 once loading starts; the WORLD/game-session system owns the in-world transition.
+
+## THE KEY DIAGNOSTIC (sesswatch.py): THE GAME SESSION IS FROZEN DURING LOADING.
+- The object stuck "loading" is the game/world session qword_140C65898 (created fresh per ChangeWorld
+  by sub_1403E1400, a 1218-line ctor; it IS load-request+96). Watched ~27 curated state DWORDs at 1Hz.
+- After initial setup (+8 1->2 refcount, +96 0->0x01000037, +108 -1->0) the session is BYTE-FROZEN:
+  snapshots at 30s and 45s are IDENTICAL. So the client is genuinely STUCK/BLOCKED, not slowly loading -
+  the map/world load is not advancing any session state at all.
+- **+96 = 0x01000037** is the strongest lead: it looks like a CONNECTION/world-server HANDLE, set right
+  as the session initializes. HYPOTHESIS for next session: the client's world load is BLOCKED waiting for
+  world-server-style DATA on a connection association it set up at world-enter - i.e. we are missing a
+  world-server handshake / initial-world-data burst that unblocks sub_1403E70D0's async map streaming.
+  Next probes: hook sub_1403E70D0's async completion + whatever consumes the +96 connection; check
+  whether the client opens/expects a second (world-server) channel after 0x00AD.
+
+## BOTTOM LINE: disconnect SOLVED + robust; the client holds stably in loading; the world-render
+## completion is a larger clean-room RE task (missing world-data/handshake) with a concrete next lead (+96).

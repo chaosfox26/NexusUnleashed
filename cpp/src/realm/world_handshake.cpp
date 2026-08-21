@@ -313,15 +313,15 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
             std::printf("realm-conn: -> 0x019B SET-PLAYER guid=0x%X (move #%d) via 0x03DC\n",
                         guid, s.world_move_count);
         } else if (!s.loadscreen_sent && s.player_set_sent && s.world_move_count >= 6) {
-            // 4) 0x636 SET-PLAYER-UNIT (world-channel, sub_14057A630): the proper WORLD player bind
-            //    (vs 0x019B, the char-select-mgr variant). Needs the container (+25744) which 0x019B
-            //    now installs. This is the legitimate world-entry finalizer; testing whether it
-            //    advances the stuck world-loader (state 2) to complete the load. [32b unit][1b][32b guid]
+            // 0x36A is a CONFIRMED DEAD END (3x): the world-dispatch 0x36A -> sub_1403B6D10 shows the
+            // GAME screen, but that transitions the client to the "in-world" state whose OWN watchdog
+            // disconnects because the world isn't actually loaded. Not a keepalive problem.
+            // Instead: start the movement-independent 0x845 keepalive so the loading state is held
+            // robustly regardless of whether the client keeps sending movement.
             s.loadscreen_sent = true;
-            auto bUnit = proto::WorldEntryMessages::BuildSetPlayerUnit(guid, true);
-            co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpSetPlayerUnit, bUnit);
-            std::printf("realm-conn: -> 0x636 SET-PLAYER-UNIT guid=0x%X (move #%d) via 0x03DC\n",
-                        guid, s.world_move_count);
+            auto ka = proto::WorldEntryMessages::BuildLoadProgress(20, 0, 20);
+            s.StartKeepalive(0x03DC, proto::WorldEntryMessages::OpLoadProgress, ka, 2000);
+            std::printf("realm-conn: -> started movement-independent 0x845 keepalive (2s); loading held\n");
         }
 
         // KEEPALIVE / PROGRESS EXPERIMENT: once the player is set, send 0x845 loading progress on

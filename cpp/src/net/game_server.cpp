@@ -2,6 +2,7 @@
 #include "net/frame.h"
 #include "net/world_packet.h"
 #include <cstdio>
+#include <chrono>
 
 using asio::ip::tcp;
 using asio::awaitable;
@@ -19,23 +20,53 @@ std::string GameSession::remote() const {
     return ec ? "?" : (ep.address().to_string() + ":" + std::to_string(ep.port()));
 }
 
+awaitable<void> GameSession::WriteFrame(std::vector<uint8_t> frame) {
+    // Enqueue and, if no drain is running, drain the queue in order. A single logical writer
+    // is ever active, so overlapping SendGameMessage* calls (dispatch + keepalive timer) can
+    // never interleave partial frames on the socket.
+    write_q_.push_back(std::move(frame));
+    if (writing_) co_return;
+    writing_ = true;
+    while (!write_q_.empty()) {
+        auto f = std::move(write_q_.front());
+        co_await asio::async_write(sock_, asio::buffer(f), use_awaitable);
+        if (!write_q_.empty()) write_q_.pop_front();
+    }
+    writing_ = false;
+}
+
 awaitable<void> GameSession::SendClearGameMessage(uint16_t opcode, std::vector<uint8_t> body) {
-    auto frame = GamePacketFrame::Encode(opcode, body);
-    co_await asio::async_write(sock_, asio::buffer(frame), use_awaitable);
+    co_await WriteFrame(GamePacketFrame::Encode(opcode, body));
 }
 
 awaitable<void> GameSession::SendGameMessage(uint16_t opcode, std::vector<uint8_t> body) {
-    std::vector<uint8_t> frame = crypt
+    co_await WriteFrame(crypt
         ? WorldPacket::EncodeServer(opcode, body, *crypt)
-        : GamePacketFrame::Encode(opcode, body);
-    co_await asio::async_write(sock_, asio::buffer(frame), use_awaitable);
+        : GamePacketFrame::Encode(opcode, body));
 }
 
 awaitable<void> GameSession::SendGameMessageVia(uint16_t containerOpcode, uint16_t opcode, std::vector<uint8_t> body) {
-    std::vector<uint8_t> frame = crypt
+    co_await WriteFrame(crypt
         ? WorldPacket::EncodeServerVia(containerOpcode, opcode, body, *crypt)
-        : GamePacketFrame::Encode(opcode, body);
-    co_await asio::async_write(sock_, asio::buffer(frame), use_awaitable);
+        : GamePacketFrame::Encode(opcode, body));
+}
+
+void GameSession::StartKeepalive(uint16_t containerOpcode, uint16_t opcode, std::vector<uint8_t> body, int intervalMs) {
+    if (ka_started_) return;
+    ka_started_ = true;
+    auto self = shared_from_this();
+    co_spawn(sock_.get_executor(),
+        [self, containerOpcode, opcode, body, intervalMs]() -> awaitable<void> {
+            asio::steady_timer t(self->sock_.get_executor());
+            for (;;) {
+                t.expires_after(std::chrono::milliseconds(intervalMs));
+                asio::error_code ec;
+                co_await t.async_wait(asio::redirect_error(use_awaitable, ec));
+                if (ec) break;
+                try { co_await self->SendGameMessageVia(containerOpcode, opcode, body); }
+                catch (const std::exception&) { break; }
+            }
+        }, detached);
 }
 
 awaitable<void> GameSession::Dispatch(uint16_t opcode, std::vector<uint8_t> payload) {

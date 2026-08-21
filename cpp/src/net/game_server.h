@@ -5,6 +5,7 @@
 #include <memory>
 #include <optional>
 #include <vector>
+#include <deque>
 #include <asio.hpp>
 #include "crypto/packet_crypt.h"
 
@@ -22,6 +23,14 @@ public:
     asio::awaitable<void> SendGameMessage(uint16_t opcode, std::vector<uint8_t> body);
     asio::awaitable<void> SendGameMessageVia(uint16_t containerOpcode, uint16_t opcode, std::vector<uint8_t> body);
 
+    // Serialized write path: all sends enqueue here so concurrent writers (dispatch + keepalive
+    // timer) never interleave frames on the socket.
+    asio::awaitable<void> WriteFrame(std::vector<uint8_t> frame);
+    // Movement-independent keepalive: co_spawns a loop that re-sends (container,op,body) every
+    // intervalMs so the client's world-entry watchdog keeps getting world-channel traffic even
+    // after it stops sending movement (e.g. after a game-screen transition). Starts once.
+    void StartKeepalive(uint16_t containerOpcode, uint16_t opcode, std::vector<uint8_t> body, int intervalMs);
+
     std::optional<crypto::PacketCrypt> crypt;
     long account_id = 0;
     bool player_entity_sent = false;   // world entry: player 0x0262 sent once (on first 0x038C)
@@ -36,6 +45,9 @@ private:
     asio::ip::tcp::socket sock_;
     GameServer& server_;
     std::vector<uint8_t> buf_;
+    std::deque<std::vector<uint8_t>> write_q_;
+    bool writing_ = false;
+    bool ka_started_ = false;
 };
 
 class GameServer {
