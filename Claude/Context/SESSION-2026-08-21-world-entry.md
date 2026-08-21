@@ -678,3 +678,35 @@ FIRED" and whether the arkship 3D renders. If 0x36A alone doesn't render, try **
 
 ## BOTTOM LINE: disconnect SOLVED + robust; the client holds stably in loading; the world-render
 ## completion is a larger clean-room RE task (missing world-data/handshake) with a concrete next lead (+96).
+
+# ============================================================================
+# *** SOLVED — SERVER-NATIVE WORLD ENTRY. Peryanna stands in the arkship Medbay. ***
+# ============================================================================
+
+THE COMPLETE, SERVER-DRIVEN, NF-FREE WORLD-ENTRY RECIPE (world_handshake.cpp, on the realm-conn):
+  On 0x07DD EnterWorld: send 0x00AD world-enter (worldId + pos).
+  On first 0x038C movement:
+    1. 0x00AD (2nd) -> ChangeWorld (creates fresh game session sub_1403E1400 = qword_140C65898)
+    2. 0x00F1  (body = 16 ZERO bytes) -> sub_1403B67E0 = WORLD-ENTRY INIT: sets session+25632=1.
+       ** CRITICAL: the body MUST be all-zero. A non-zero leading value makes the client's Read
+          over-read (treats it as a count) and DROP the packet before dispatch. All-zero reads clean. **
+    3. 0x0262 player entity (kind 20, playerId/realmId non-zero, Faction1/2=166, a3+148 pos keyframe)
+  At move #4: 0x019B set-player (binds player, fires PlayerChanged, installs container +25744).
+  At move #6: 0x0061 -> sub_1403C74D0 "PlayerEnteredWorld" (empty body) + start 0x845 timer keepalive.
+
+THE MECHANISM (fully reverse-engineered from the client):
+- World-load completeness is a 7-bit mask at session+31560; the session's per-frame update
+  sub_1403E8000 sets the bits and the update sub_1403E85D0 runs its "world ready / drop load screen"
+  block ONLY when the mask == 0x7F (127).
+- bits 0-3 (0x0f): local map subsystems (automatic).
+- bit 4 (0x10): gated on session+25632 != 0, which ONLY sub_1403B67E0 (opcode 0x00F1) sets to 1.
+- bits 5-6 (0x20|0x40): set by sub_1403C74D0 "PlayerEnteredWorld" (opcode 0x0061).
+- Once mask==0x7F, the load screen fades and the 3D world renders. PROVEN server-native (INWORLD-native.png),
+  zero Frida (worldtap.py only observes). The ~30s disconnect is held off by the 0x845 timer keepalive.
+
+REMAINING POLISH (not blockers):
+- Spawn Y (1437.82,85.53,-106.82) is slightly low -> character clips into the medbay floor. Needs the
+  real arkship floor height (read from the live client or the tutorial's PlayerStart).
+- PathTracker.lua addon error popup is a harmless STOCK-UI bug, unrelated to entry.
+- Frida hardware watchpoints (Thread.setHardwareWatchpoint) WORK on this setup - hwwatch.py is the tool
+  that cracked the mask-bit setters. maskwatch.py / worldtap.py / sesswatch.py are the entry diagnostics.

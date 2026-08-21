@@ -289,15 +289,15 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
             auto bAD2 = proto::WorldEntryMessages::BuildWorldEnter(TWID, TWX, TWY, TWZ);
             co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpWorldEnter, bAD2);
             std::printf("realm-conn: -> 0x00AD (2nd, world-load complete) world=%u via 0x03DC\n", TWID);
-            // 1b) world-init set, NOW in the world context so the client actually dispatches them
-            //     (world-scene/zone setup: 0x0988, 0x098B, 0x0981).
-            { auto m = proto::WorldEntryMessages::Build0988Empty();
-              co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::Op0988, m); }
-            { auto m = proto::WorldEntryMessages::Build098BEmpty();
-              co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::Op098B, m); }
-            { auto m = proto::WorldEntryMessages::BuildWorldInit({});
-              co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpWorldInit, m); }
-            std::printf("realm-conn: -> 0x0988/0x098B/0x0981 world-init (world context) via 0x03DC\n");
+            // 1b) 0x00F1 -> sub_1403B67E0 = WORLD-ENTRY INIT. Sets session+25632=1, which is the gate
+            //     for load-mask bit 0x10 (sub_1403E8000): without it the mask stalls at 0x6f and the
+            //     world never finishes loading. Body = [u32 phase][u32][u8 flags] (values don't affect
+            //     the gate; the handler sets +25632 unconditionally). Re-inits the session subsystems.
+            {
+                std::vector<uint8_t> f1(16, 0x00);   // all-zero: any leading count reads 0 (no sub-elems)
+                co_await s.SendGameMessageVia(0x03DC, 0x00F1, f1);
+                std::printf("realm-conn: -> 0x00F1 world-entry init (sets +25632=1 -> unblocks load-mask 0x10)\n");
+            }
             // 2) 0x0262 entity-create. Must construct + land in the client's lookup map (this is the
             //    step currently failing: Read succeeds but construct/add does not).
             auto ent = proto::WorldEntryMessages::BuildPlayerEntity(guid, TWX, TWY, TWZ);
