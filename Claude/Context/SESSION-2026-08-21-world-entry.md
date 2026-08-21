@@ -563,3 +563,80 @@ FIRED" and whether the arkship 3D renders. If 0x36A alone doesn't render, try **
   cpp/src/realm/world_handshake.cpp (0x038C staging: entity -> set-player@4 -> 0x36A@12 -> 0x845 each tick).
 - Probes in <scratch>: statewatch.py (load state 1Hz + disconnect dump), wlprobe.py (ChangeWorld +
   world-load ret + disconnect bt), proberender.py, dropoverlay.py, disctrace.py.
+
+# ============================================================================
+# CONTINUED (autonomous): completion trigger still open; corrections + dead ends
+# ============================================================================
+
+## CONFIRMED THIS STRETCH:
+- 0x636 (world-channel set-player-unit) sent after 0x019B: NO effect on completion. Loader unchanged.
+- CORRECTION: the object reqwatch called "loader" (load-request+96, from sub_1403E1400) IS the
+  GAME/WORLD SESSION qword_140C65898 itself (sub_1403E1400 line 841: `qword_140C65898 = a1`, a 32800-byte
+  obj). Its +8 field starts at 1 (construction, line 102) and reads 2 -> that is a REFCOUNT, not a
+  stuck state machine. So "loader stuck at state 2" was a MISREAD; do not chase it.
+- session+29376 = load progress current, +29384 = max (default 1000, our 0x845 overwrites). Confirmed.
+- The load request that owns the visible OFF WORLD screen: built by sub_1400360F0 (loads
+  UI_CRB_WorldID51_LoadScreen.tex). Its +72 flips 0->1 (~t+7s) but this is NOT fatal (client stays on
+  the loading screen looking healthy for 76s+); likely a cosmetic/world-specific-loadscreen fallback.
+
+## WHERE IT STANDS (honest):
+- SOLVED + committed: player bind + arkship-deck spawn; the ~30s disconnect (0x845 keepalive).
+- OPEN: the client sits stably in the loading screen (vibrant, connected, progress bar full) but never
+  transitions to the 3D world. NO player/bind message (0x0262/0x019B/0x636/0x845) triggers it. 0x36A
+  forces the game screen but disconnects (wrong). The exact completion trigger is NOT yet found; the
+  client's world-entry path is deep (sub_1403E1400 is 1218 lines) and static analysis hasn't cracked it.
+
+## LEADS NOT YET RUN:
+- World 1537 is the SCRIPTED TUTORIAL arkship (Map\ExileArkShipTutorial). It may require tutorial/script
+  state or specific sub-level ids to finish loading. TEST: enter a NORMAL open zone (e.g. world 2979
+  Map\PCPLevianBay, type 0) with a valid position -> does a plain entry complete there? (Position for a
+  non-arkship world is unknown -> test reliability caveat.)
+- world-init 0x0988/0x098B/0x0981 are sent EMPTY and appear NOT dispatched by WorldPaketHandler (no
+  switch case). If they carry the sub-level/zone ids the loader consumes, they may be the missing data -
+  but need to find their real handler/dispatcher first (they may be table-routed, not switch-routed).
+- Verify the arkship spawn (1437.82,85.53,-106.82) is inside world 1537's valid/loaded area; a bad
+  position could stall terrain streaming so the first frame never renders (load screen never fades).
+
+## CURRENT SERVER STATE (world_handshake.cpp 0x038C staging):
+  move#1: 2nd 0x00AD + world-init(empty) + 0x0262 entity;  move#4: 0x019B set-player;
+  move#6: 0x636 set-player-unit;  every tick after set-player: 0x845 progress ramp 0->20 (KEEPALIVE - keep).
+  WorldChangeDoneEnabled=false (0x36A off, harmful). LoadProgressEnabled=true.
+
+# ============================================================================
+# STATE OF PLAY (autonomous stretch end) — disconnect SOLVED; completion OPEN
+# ============================================================================
+
+## THE HEADLINE:
+- WIN: the ~30s post-world-enter disconnect ("Reason 0") is SOLVED. Server-channel keepalive via
+  0x845 loading-progress (each movement tick after set-player) keeps the client stably connected in
+  the loading screen indefinitely. Screenshot-verified: vibrant loading art, full bar, NO error.
+- OPEN: the client never transitions from the loading screen into the rendered 3D world. It loads
+  properly (correct per-world loading art, tips rotating, connected) but the load never "completes".
+
+## RULED OUT this stretch (all measured, do NOT re-chase):
+- NOT Frida interference: entry with ZERO instrumentation attached stalls identically (nofrida.png).
+- NOT world-specific / tutorial-specific: world 990 (Map\Eastern / Everstar Grove, a NORMAL open zone)
+  at a REAL valid spawn (-241.58,-906.53,-3417.53) shows the STANDARD zone loading screen (Jumpstart
+  promo + lore tips) and ALSO stalls at loading. So the blocker is general to our world-entry flow.
+- NOT the spawn position: arkship (1437.82,85.53,-106.82) is a verified-good spot (player bound+spawned
+  there); world 990's position is a real DB entity coord. Both stall.
+- NOT a player-bind message: 0x0262 entity, 0x019B set-player, 0x636 set-player-unit all sent; none
+  advances the load. 0x36A (render-game) forces the game screen but disconnects (harmful, gated off).
+- NOT 0x694 (that is /played PlayedTime, not world time-sync).
+- The load screen IS being ticked (tips rotate) - its per-frame completion check is simply returning
+  "not done". The full progress bar is OUR fake 0x845 data, not the client's real load state.
+
+## WHAT THE COMPLETION LIKELY IS (best hypothesis, unproven):
+  A specific server "initial world state complete / world-entry finalize" push that the client's
+  world-load machinery consumes to mark the world ready and fade the load screen. It is NOT 0x36A and
+  NOT any player-bind message. Candidates to investigate next: the world-init family (0x0988/0x098B/
+  0x0981 - currently sent EMPTY and appear NOT switch-dispatched by WorldPaketHandler; find their real
+  router and whether they carry the sub-level/zone data the loader needs), and any "entity stream
+  complete" / "SetActive" style marker. The client's world-load path is deep (sub_1403E1400 game-session
+  ctor is 1218 lines; the load runs async off sub_1403E70D0). Cracking it is a multi-hour RE task.
+
+## CURRENT DEPLOYED STATE (left sane for the operator):
+- Server (nexus_realm.exe) running; target world reverted to 1537 (1437.82,85.53,-106.82).
+- world_handshake.cpp: keepalive ON (LoadProgressEnabled), 0x36A OFF (WorldChangeDoneEnabled=false),
+  0x636 sent after set-player. Client login->char-select->Enter Game reaches a STABLE, connected
+  loading screen for the arkship. The disconnect that used to kill it in ~30s is gone.

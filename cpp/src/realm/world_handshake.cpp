@@ -19,6 +19,13 @@ static bool WorldChangeDoneEnabled = false; // 0x36A CONFIRMED HARMFUL: forces g
                                             // client disconnects 'Reason 0'. Stable state = keepalive
                                             // loading. Completion must come from the load finishing.
 static bool LoadProgressEnabled = true;   // 0x845 progress/keepalive each tick after set-player
+// TARGET WORLD — EXPERIMENT: 990 (Map\Eastern / Everstar Grove, a normal open zone) at a REAL valid
+// spawn (realm world-DB entity), to test whether a plain entry completes in a non-tutorial world
+// (1537 = ExileArkShipTutorial is scripted). Revert to 1537 / (1437.82,85.53,-106.82) after.
+static uint32_t TWID = 1537;
+static float TWX = 1437.82f, TWY = 85.53f, TWZ = -106.82f;
+// (Tested world 990 Everstar Grove at a real spawn: NORMAL zone loading screen, connected, but ALSO
+//  stalls at loading -> the completion blocker is GENERAL, not tutorial-specific. Reverted to 1537.)
 struct InjectMsg { uint16_t opcode; std::vector<uint8_t> body; };
 static std::vector<InjectMsg> LoadInject() {
     std::vector<InjectMsg> out;
@@ -252,8 +259,8 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
         // SAME connection (uses +184; no reconnect). TODO: per-character worldId/position via a
         // provider. Target = world 1537 (Map\ExileArkShipTutorial, the current tutorial zone),
         // spawn = a valid arkship deck position.
-        uint32_t worldId = 1537;
-        float wx = 1437.82f, wy = 85.53f, wz = -106.82f;
+        uint32_t worldId = TWID;
+        float wx = TWX, wy = TWY, wz = TWZ;
         auto bAD = WorldEntryMessages::BuildWorldEnter(worldId, wx, wy, wz);
         co_await s.SendGameMessageVia(0x03DC, WorldEntryMessages::OpWorldEnter, bAD);
         std::printf("realm-conn: -> 0x00AD WORLD-ENTER world=%u pos(%.1f,%.1f,%.1f) (%zuB) via 0x03DC\n",
@@ -279,9 +286,9 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
         if (!s.player_entity_sent) {
             s.player_entity_sent = true;
             // 1) 0x00AD (2nd) -> world dispatcher -> ChangeWorld (creates the game state / grid).
-            auto bAD2 = proto::WorldEntryMessages::BuildWorldEnter(1537, 1437.82f, 85.53f, -106.82f);
+            auto bAD2 = proto::WorldEntryMessages::BuildWorldEnter(TWID, TWX, TWY, TWZ);
             co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpWorldEnter, bAD2);
-            std::printf("realm-conn: -> 0x00AD (2nd, world-load complete) world=1537 via 0x03DC\n");
+            std::printf("realm-conn: -> 0x00AD (2nd, world-load complete) world=%u via 0x03DC\n", TWID);
             // 1b) world-init set, NOW in the world context so the client actually dispatches them
             //     (world-scene/zone setup: 0x0988, 0x098B, 0x0981).
             { auto m = proto::WorldEntryMessages::Build0988Empty();
@@ -293,7 +300,7 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
             std::printf("realm-conn: -> 0x0988/0x098B/0x0981 world-init (world context) via 0x03DC\n");
             // 2) 0x0262 entity-create. Must construct + land in the client's lookup map (this is the
             //    step currently failing: Read succeeds but construct/add does not).
-            auto ent = proto::WorldEntryMessages::BuildPlayerEntity(guid, 1437.82f, 85.53f, -106.82f);
+            auto ent = proto::WorldEntryMessages::BuildPlayerEntity(guid, TWX, TWY, TWZ);
             co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpEntityCreate, ent);
             std::printf("realm-conn: -> 0x0262 player entity guid=0x%X (%zuB) via 0x03DC\n", guid, ent.size());
         } else if (!s.player_set_sent && s.world_move_count >= 4) {
@@ -305,16 +312,16 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
             co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpSetPlayer, bSet);
             std::printf("realm-conn: -> 0x019B SET-PLAYER guid=0x%X (move #%d) via 0x03DC\n",
                         guid, s.world_move_count);
-        } else if (!s.loadscreen_sent && s.player_set_sent && WorldChangeDoneEnabled && s.world_move_count >= 12) {
-            // 4) 0x036A WORLD-CHANGE COMPLETE (client case 0x36A -> sub_1403B6D10): forces the GAME
-            //    screen. MEASURED: this fires too early (async world-load still in progress), the
-            //    client then stops movement and disconnects 'Reason 0'. Gated off while we find the
-            //    true load-completion trigger. World 1537 itself loads fine (sub_1403E70D0 ret 0).
+        } else if (!s.loadscreen_sent && s.player_set_sent && s.world_move_count >= 6) {
+            // 4) 0x636 SET-PLAYER-UNIT (world-channel, sub_14057A630): the proper WORLD player bind
+            //    (vs 0x019B, the char-select-mgr variant). Needs the container (+25744) which 0x019B
+            //    now installs. This is the legitimate world-entry finalizer; testing whether it
+            //    advances the stuck world-loader (state 2) to complete the load. [32b unit][1b][32b guid]
             s.loadscreen_sent = true;
-            auto bDone = proto::WorldEntryMessages::BuildWorldChangeDone(0);
-            co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpWorldChangeDone, bDone);
-            std::printf("realm-conn: -> 0x036A WORLD-CHANGE-DONE (render game, move #%d) via 0x03DC\n",
-                        s.world_move_count);
+            auto bUnit = proto::WorldEntryMessages::BuildSetPlayerUnit(guid, true);
+            co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpSetPlayerUnit, bUnit);
+            std::printf("realm-conn: -> 0x636 SET-PLAYER-UNIT guid=0x%X (move #%d) via 0x03DC\n",
+                        guid, s.world_move_count);
         }
 
         // KEEPALIVE / PROGRESS EXPERIMENT: once the player is set, send 0x845 loading progress on
