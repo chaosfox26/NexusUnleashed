@@ -19,6 +19,9 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 # Private / LAN IPv4 ranges (RFC1918) + loopback-with-context is fine, flag LAN.
 PRIVATE_IP = re.compile(r"\b(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})\b")
+# Local Windows user-home paths leak the account username. Flag `X:\Users\<name>` and the
+# claude-project `C--Users-<name>-` form, but NOT our own <user>/<home> placeholders.
+LOCAL_PATH = re.compile(r"(?:[A-Za-z]:[\\/]Users[\\/]|C--Users-)(?!<user>|<home>|<)[^\\/\s\"'`)>]+")
 # Allowed: the project's own commit-author placeholder.
 ALLOW_EMAIL = {"noreply@anthropic.com"}
 # RFC 2606 / 6761 reserved TLDs + example domains: reserved for docs/tests, can
@@ -65,6 +68,8 @@ def main():
                             hits.append((rel, i, f"email {m.group(0)}"))
                     for m in PRIVATE_IP.finditer(line):
                         hits.append((rel, i, f"private IP {m.group(0)}"))
+                    for m in LOCAL_PATH.finditer(line):
+                        hits.append((rel, i, f"local user path {m.group(0)}"))
                     for t in terms:
                         if t in low:
                             hits.append((rel, i, f"private term ({len(t)} chars)"))
