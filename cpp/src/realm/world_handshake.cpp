@@ -23,7 +23,9 @@ static bool LoadProgressEnabled = true;   // 0x845 progress/keepalive each tick 
 // spawn (realm world-DB entity), to test whether a plain entry completes in a non-tutorial world
 // (1537 = ExileArkShipTutorial is scripted). Revert to 1537 / (1437.82,85.53,-106.82) after.
 static uint32_t TWID = 1537;
-static float TWX = 1437.82f, TWY = 85.53f, TWZ = -106.82f;
+// Spawn: medbay floor. Old Y 85.53 clipped her into the floor; the client's collision floor beneath
+// that XZ reads ~86.03, so stand her just on top of it (feet-origin entity).
+static float TWX = 1437.82f, TWY = 86.10f, TWZ = -106.82f;
 // (Tested world 990 Everstar Grove at a real spawn: NORMAL zone loading screen, connected, but ALSO
 //  stalls at loading -> the completion blocker is GENERAL, not tutorial-specific. Reverted to 1537.)
 struct InjectMsg { uint16_t opcode; std::vector<uint8_t> body; };
