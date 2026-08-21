@@ -335,6 +335,12 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
             co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpSetPlayer, bSet);
             std::printf("realm-conn: -> 0x019B SET-PLAYER guid=0x%X (move #%d) via 0x03DC\n",
                         guid, s.world_move_count);
+            // 3b) 0x0636 world-channel SET-PLAYER-UNIT (sub_14057A630): the in-world possession that
+            //     0x019B (char-select variant) doesn't complete. She's alive but frozen at spawn (no
+            //     physics/movement), so control isn't activated. 0x0636 = [32b unitId][1b flag][32b guid].
+            auto bUnit = proto::WorldEntryMessages::BuildSetPlayerUnit(guid, true);
+            co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpSetPlayerUnit, bUnit);
+            std::printf("realm-conn: -> 0x0636 SET-PLAYER-UNIT guid=0x%X (control activation)\n", guid);
         } else if (!s.loadscreen_sent && s.player_set_sent && s.world_move_count >= 6) {
             // *** THE COMPLETION TRIGGER: world opcode 0x0061 -> sub_1403C74D0 = "PlayerEnteredWorld".
             // The client's world-load completeness mask (session+31560) needs 0x7F(127): the local
