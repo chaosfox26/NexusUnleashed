@@ -434,3 +434,89 @@ stats, path, etc.) -- the client has AccountInventory* plumbing wired into this 
 none of it. The right next approach is probably to send a fuller post-set-player data set, OR to
 observe a real dismiss (which we can't produce yet). SOLID + UNCHANGED: character binds (PlayerChanged)
 and spawns on the arkship deck -- that part is verified and pushed (c70be8a, 2785c8d).
+
+## FOUND VIA DECONSTRUCT (13:40) — 0x366/0x36A = render the game world
+
+Operator directive: hard-focus the deconstruct, no guessing. Result: the load-art overlay is a
+SCREEN; the game renders via the screen transition sub_1400481B0(a1, qword_140C635F0+5888) = the
+GAME screen. That transition is done by sub_1403B6D10 (world-change-complete: sub_1403FA730 +, if
+a1+25592==0 no error, show game screen; else show error). sub_1403B6D10 is dispatched by world
+cases **0x366 and 0x36A** (WorldPaketHandler.c line 944820). We send NEITHER -> the game never
+renders -> load-art holds. NOT an asset problem: client is a full install (ClientData.archive 13GB,
+all world data local). The loading-manager state machine (forced to "done") did NOT dismiss -> that
+was the wrong object; this screen transition is the real one.
+
+Wire: 0x36A (Read sub_14007E950) = [5b status], 0=success. 0x366 (Read sub_1400A0AA0) = [3b status]
+[32b worldId][1b]. Implemented BuildWorldChangeDone -> 0x36A status 0, sent after set-player
+(move>=6). TEST underway. If it renders the arkship, this is the in-world unlock.
+
+Tooling: deconstruct-deepmine.py (Starlight GPU, 28.8k files) surfaced WorldPaketHandler.c (the named
+world dispatcher) which made this traceable. STARLIGHT.md updated.
+
+# ============================================================================
+# CAPSTONE / RESUME-HERE (2026-08-21, pre-compact) — read this first
+# ============================================================================
+
+## STATE OF PLAY
+- SERVER: nexus_realm.exe running from cpp/build/Release (started with stdout-><scratch>/server.log).
+- CLIENT: WildStar client at realm-portable/clients/Wildstar; drive it with the <scratch> scripts
+  (wslaunch.ps1 -> ~75s to login; wslogin.ps1; wsclick.ps1 X Y; ws-shot.ps1 out.png). Char = Peryanna
+  Meadowclover, charId 32, guid the client streams is 0x97998a0.
+- Operator ASLEEP, full autonomy granted: build any tools needed, no questions, get in-world.
+  DO NOT touch the corpus or NF. Everything derived from the CLIENT deconstruct only.
+
+## SOLVED + PUSHED (commits c70be8a, 2785c8d, fdae063, cad4060 on master):
+The character BINDS (PlayerChanged fires) and SPAWNS standing on the arkship deck (world 1537),
+built from scratch, no NF. The working 0x0262 player-entity recipe (cpp/src/proto/world_entry.cpp
+BuildPlayerEntity):
+  guid(32) + type=20 Player(6) + Player-block[u64 playerId, 14b realmId=1, name wstr, ...218b]
+  + top-level: ... Faction1=Faction2=166 (Exiles Player) at struct+212/+216 (installs the +272 unit
+  component via sub_14045AC60/sub_140716FA0 -- without a valid faction, set-player #411) ...
+  + a3+148 MOVEMENT array: count=1, element [5b type=2 position-keyframe][3x f32 pos][1b]  <-- THIS
+  is the channel that actually places the entity (construction applies it via sub_1404586E0 -> the
+  spline interpolator). The 64-byte command array (a3+192) is read but NOT applied at spawn.
+Two identity fields (playerId u64 @Player+0, realmId 14b @Player+8) MUST be non-zero or the
+constructor rejects the entity -> #610. Server sequence (world_handshake.cpp): on 1st 0x038C send
+0x00AD(2nd)+world-init+0x0262; at move#4 send 0x019B set-player.
+Live-verified: entity+4576 and world-mgr anchor = (1437.82,85.53,-106.82); PlayerChanged fires;
+set-player returns 0.
+
+## OPEN (the ONLY remaining gate): the "OFF WORLD" load-art overlay won't drop into the 3D game.
+BEST LEAD, found straight from the deconstruct (operator-directed, not guessed):
+  The game renders via sub_1403B6D10 = "world-change-complete -> show the GAME screen"
+  (sub_1400481B0(a1, qword_140C635F0+5888) when a1+25592==0 no-error; else shows an error screen).
+  sub_1403B6D10 is dispatched by WORLD cases **0x366 and 0x36A** (WorldPaketHandler.c:944820).
+  We send NEITHER. Payloads: 0x36A (Read sub_14007E950) = [5b status], 0=success (4B);
+  0x366 (Read sub_1400A0AA0) = [3b status][32b worldId][1b] (12B).
+STATUS: BuildWorldChangeDone(0x36A, status 0) is implemented + wired to send after set-player
+(else-if !loadscreen_sent && player_set_sent). Rebuilt. **TEST NOT YET RUN — operator paused right
+before the result.** RESUME = run the entry cycle, watch nettap for ">>> RENDER-GAME sub_1403B6D10
+FIRED" and whether the arkship 3D renders. If 0x36A alone doesn't render, try **0x366 with worldId
+1537** (it carries the worldId), and/or the loading-progress path (0x83C show, 0x845 progress -> a1
++29376/29384/29388 bar). The render fn needs a1+25592==0.
+
+## RULED OUT (do NOT re-chase — cost hours each, misidentified 3x):
+- NOT an asset/CDN problem: client is a FULL install, ClientData.archive = 13 GB, all world data LOCAL.
+- The load-art overlay is NOT gated by the loading-manager state machine (loadScreen=qword_140C65A48,
+  inner mgr @+200, state @+20). I FORCED that machine to "done" (state 4 via the 0x3D0 completion
+  sub_140729D70) and the overlay did NOT drop -> wrong object. Its tick (sub_140728000, driven by
+  sub_1404D5C80) never even runs (update loop doesn't call it). State inits to 11 ("ready/waiting").
+- The realm state machine (qword_140C66DA8, state@+368) is NULL once in-world (char-select mgr torn
+  down) -> irrelevant. worldMgr+32736 is the ACCOUNT-INVENTORY mgr, not world load (earlier misID).
+- 0x3D0 loading-control: dispatched but does NOT dismiss; blind spam corrupts the loading state.
+
+## TOOLS BUILT THIS SESSION (all keepers, Starlight/hardware-first):
+- Tools-Working/Tools/deconstruct-deepmine.py — Starlight GPU miner over BOTH deconstructs (28.8k
+  files, 1-byte floor): 32-thread scan + bag_matrix over ALL function bodies on the 5090 + opcode
+  xref + semantic clusters. Surfaced WorldPaketHandler.c (the named world dispatcher) which made the
+  0x366/0x36A find possible. Outputs deepmine-report.md + deepmine-opcode-xref.json. Doc in STARLIGHT.md.
+- <scratch> instrumentation (client-only, NF-free): nettap.py (full in/out tap: pump + both
+  dispatchers + construct + set-player + lua + render-game hook), strace.py (loading state-machine
+  tracer, hooks all +20 writers), prove.py/set40.py/force.py/lm.py/ls.py/items.py/vt.py/findls.py
+  (one-shot diagnostics), deser.py (client Read decoder), probe-all.json (opcode->Read-fn table).
+
+## KEY OPCODES (S->C unless noted), all client-derived:
+  0x00AD world-enter [15b worldId][5 f32]  |  0x0262 entity-create  |  0x019B set-player
+  0x0244 client->server encrypted container | 0x03DC server->client container
+  0x366/0x36A world-change-complete -> render game (THE lead) | 0x83C show load screen (1B)
+  0x845 loading progress | 0x0117 char list | 0x058F realm-enter (re-key)

@@ -152,6 +152,13 @@ std::vector<uint8_t> WorldEntryMessages::BuildSetPlayer(uint32_t guid, uint32_t 
     return w.ToArray();
 }
 
+std::vector<uint8_t> WorldEntryMessages::BuildWorldChangeDone(uint8_t status) {
+    // 0x36A wire (client Read sub_14007E950): a single 5-bit status. 0 = success -> render game.
+    PacketWriter w;
+    w.WriteBits(status & 0x1F, 5);
+    return w.ToArray();
+}
+
 std::vector<uint8_t> WorldEntryMessages::BuildLoadScreenState(uint8_t state) {
     // 0x3D0 wire (client Read sub_14007FDC0): a single 3-bit state value.
     PacketWriter w;

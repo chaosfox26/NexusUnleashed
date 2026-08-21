@@ -54,6 +54,13 @@ public:
     static constexpr uint16_t OpSetPlayer = 0x019B;
     static std::vector<uint8_t> BuildSetPlayer(uint32_t guid, uint32_t field1 = 0);
 
+    // 0x036A — WORLD-CHANGE COMPLETE -> render the game world. Client dispatch case 0x366/0x36A ->
+    // sub_1403B6D10, which (on no error) transitions the UI from the world load-art to the game
+    // screen (qword_140C635F0+5888). This is the message that actually drops the loading overlay
+    // and renders the world. Wire (client Read sub_14007E950): [5b status] (0 = success).
+    static constexpr uint16_t OpWorldChangeDone = 0x036A;
+    static std::vector<uint8_t> BuildWorldChangeDone(uint8_t status = 0);
+
     // 0x03D0 — LOADING-SCREEN control. Client dispatch cases 0x3CF-0x3D2 all route to the load
     // screen object (qword_140C65A48). 0x3D0 is a single 3-bit state (client Read sub_14007FDC0).
     // Sending it is what dismisses the world-load overlay once the player is placed. Wire: [3b state].

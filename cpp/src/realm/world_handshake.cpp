@@ -253,18 +253,9 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
         std::printf("realm-conn: -> 0x00AD WORLD-ENTER world=%u pos(%.1f,%.1f,%.1f) (%zuB) via 0x03DC\n",
                     worldId, wx, wy, wz, bAD.size());
 
-        auto b0988 = WorldEntryMessages::Build0988Empty();
-        co_await s.SendGameMessageVia(0x03DC, WorldEntryMessages::Op0988, b0988);
-        std::printf("realm-conn: -> 0x0988 (%zuB, empty lists) via 0x03DC\n", b0988.size());
-
-        auto b098B = WorldEntryMessages::Build098BEmpty();
-        co_await s.SendGameMessageVia(0x03DC, WorldEntryMessages::Op098B, b098B);
-        std::printf("realm-conn: -> 0x098B (%zuB, count 0) via 0x03DC\n", b098B.size());
-
-        auto bInit = WorldEntryMessages::BuildWorldInit({});  // empty id list, first candidate
-        co_await s.SendGameMessageVia(0x03DC, WorldEntryMessages::OpWorldInit, bInit);
-        std::printf("realm-conn: -> 0x0981 world-init (%zuB, 0 ids) via 0x03DC\n", bInit.size());
-
+        // NOTE: world-init (0x0988/0x098B/0x0981) is NOT sent here — at this point the client is
+        // still on the char-select/realm side and drops them. They are sent in the 0x038C handler
+        // AFTER the 2nd 0x00AD (ChangeWorld), when the world channel is live.
         co_return;
     });
 
@@ -285,6 +276,15 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
             auto bAD2 = proto::WorldEntryMessages::BuildWorldEnter(1537, 1437.82f, 85.53f, -106.82f);
             co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpWorldEnter, bAD2);
             std::printf("realm-conn: -> 0x00AD (2nd, world-load complete) world=1537 via 0x03DC\n");
+            // 1b) world-init set, NOW in the world context so the client actually dispatches them
+            //     (world-scene/zone setup: 0x0988, 0x098B, 0x0981).
+            { auto m = proto::WorldEntryMessages::Build0988Empty();
+              co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::Op0988, m); }
+            { auto m = proto::WorldEntryMessages::Build098BEmpty();
+              co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::Op098B, m); }
+            { auto m = proto::WorldEntryMessages::BuildWorldInit({});
+              co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpWorldInit, m); }
+            std::printf("realm-conn: -> 0x0988/0x098B/0x0981 world-init (world context) via 0x03DC\n");
             // 2) 0x0262 entity-create. Must construct + land in the client's lookup map (this is the
             //    step currently failing: Read succeeds but construct/add does not).
             auto ent = proto::WorldEntryMessages::BuildPlayerEntity(guid, 1437.82f, 85.53f, -106.82f);
@@ -300,12 +300,13 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
             std::printf("realm-conn: -> 0x019B SET-PLAYER guid=0x%X (move #%d) via 0x03DC\n",
                         guid, s.world_move_count);
         } else if (!s.loadscreen_sent && s.player_set_sent) {
-            // 4) 0x03D0 loading-screen control (client cases 0x3CF-0x3D2 -> load screen). Sent right
-            //    after the player is bound + placed to dismiss the world-load overlay. Trying state 0.
+            // 4) 0x036A WORLD-CHANGE COMPLETE (client case 0x366/0x36A -> sub_1403B6D10): on no error
+            //    it transitions the UI from the world load-art to the GAME screen (renders the world).
+            //    This is the deconstruct-found message that actually drops the loading overlay.
             s.loadscreen_sent = true;
-            auto bLs = proto::WorldEntryMessages::BuildLoadScreenState(0);
-            co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpLoadScreen, bLs);
-            std::printf("realm-conn: -> 0x03D0 LOAD-SCREEN state=0 (move #%d) via 0x03DC\n",
+            auto bDone = proto::WorldEntryMessages::BuildWorldChangeDone(0);
+            co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpWorldChangeDone, bDone);
+            std::printf("realm-conn: -> 0x036A WORLD-CHANGE-DONE (render game, move #%d) via 0x03DC\n",
                         s.world_move_count);
         }
         co_return;
