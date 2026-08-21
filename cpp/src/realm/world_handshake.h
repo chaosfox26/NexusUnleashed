@@ -19,8 +19,6 @@ struct WorldHandshake {
     static std::string RealmHost;
     static uint32_t RealmPort;
 
-    static std::vector<std::pair<uint16_t, std::vector<uint8_t>>> WorldEntrySequence;
-
     static void Register(net::GameServer& server);
     static void RegisterRealmConnection(net::GameServer& server);
 

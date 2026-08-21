@@ -82,28 +82,6 @@ int main() {
     realmServer.Start();
     std::printf("realm/auth server listening on %u\n", cfg.auth_port);
 
-    {
-        std::FILE* wf = std::fopen("captures/world-entry-replay.bin", "rb");
-        if (wf) {
-            uint32_t count = 0;
-            if (std::fread(&count, 4, 1, wf) == 1) {
-                for (uint32_t i = 0; i < count; ++i) {
-                    uint16_t op; uint32_t len;
-                    if (std::fread(&op, 2, 1, wf) != 1) break;
-                    if (std::fread(&len, 4, 1, wf) != 1) break;
-                    std::vector<uint8_t> b(len);
-                    if (len && std::fread(b.data(), 1, len, wf) != len) break;
-                    realm::WorldHandshake::WorldEntrySequence.emplace_back(op, std::move(b));
-                }
-            }
-            std::fclose(wf);
-            std::printf("world-entry replay: loaded %zu messages\n",
-                        realm::WorldHandshake::WorldEntrySequence.size());
-        } else {
-            std::printf("world-entry replay: captures/world-entry-replay.bin not found (Enter Game will no-op)\n");
-        }
-    }
-
     net::GameServer realmConn(io, cfg.bind_address, cfg.world_port, false);
     realm::WorldHandshake::RegisterRealmConnection(realmConn);
     realmConn.Start();

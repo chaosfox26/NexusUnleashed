@@ -1,13 +1,22 @@
 # Spec: the world-entry message sequence (the script to render the world)
 
-## LIVE RESULT 2026-08-20: THE CLIENT LOADS INTO THE WORLD
-Replaying the recorded world-load burst on `0x07DD` **works**: the real 16042 client leaves
-character-select, shows the **zone loading screen**, and begins streaming `0x038C` player
-movement (position floats changing every message) — i.e. the player is placed in the world.
-Reproduce path (implemented): `captures/world-entry-replay.bin` = the 651 one-shot S->C
-messages from the capture (`0x0988` → first `0x0935`, wire `0x03DC` envelopes stripped),
-loaded at boot, streamed via the `0x03DC` container on the realm-lane cipher when `0x07DD`
-arrives. `main.cpp` loader + `WorldHandshake::WorldEntrySequence` + the `0x07DD` handler.
+## PROVENANCE DECISION 2026-08-20: THE REPLAY IS RETIRED — WORLD ENTRY IS BUILT FROM SCRATCH
+The `world-entry-replay.bin` approach — replaying server->client bytes captured from
+`realm-source/captures/` (the AGPL/NexusForever-lineage realm-portable engine's output) — is
+**NF reference-poison** by this project's own rule (`CONTINUE.md` §2) and has been **removed**:
+the `.bin` is deleted, and the loader + `WorldEntrySequence` + the `0x07DD`-replay handler are
+gone from `main.cpp` / `world_handshake.*`. It proved the client *can* be driven into the zone,
+nothing more.
+
+**World entry is now built by hand, like everything else in this engine:** each server->client
+message's wire format is reverse-engineered from the **client's own deserializer** (the `Read`
+functions in WildStar64.exe) and the bytes are **generated per-character from our own DB/world
+data** — zero captures, zero NF. Client->server bytes (the `0x07DD` trigger, `0x058F`, `0x038C`
+follow-ups) remain clean (the client's own) and stay as observed facts. The tables below record
+the observed opcode ORDER and SIZES (facts about what the client consumes); the PAYLOADS are all
+`TODO — derive from client + generate`, none carried over from the replay.
+
+_(Everything below is the observed sequence shape — the build target — not implemented bytes.)_
 
 **Still stuck on the loading screen (the last mile):** the burst is truncated at the first
 heartbeat and the server ignores the client's `0x038C` movement, so the client never gets the
