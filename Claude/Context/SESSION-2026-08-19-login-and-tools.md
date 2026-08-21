@@ -56,7 +56,7 @@ NOT proceed.** 5 attempts, all identical error (no client feedback: the client's
 - Handler chain: `CLoginStart` msg vtable `0x180125088`, **method[5]=`0x18000A320`** = LoginStart-reply handler. SRP client (`CSrpClient` vtable `0x18012CDB8`) is at **`[this+0x60]`**. `CSrpClient::method[5]=0x18002DE00` = state machine (`[srp+8]`), state 0 → `0x18002d4e0` (salt+B parse). It **validates B as a bignum, B<N** (`0x18002D60D`, `jns error`) → STS uses **standard OpenSSL SRP (big-endian)**, NOT the game-channel SRP variant.
 
 **THE KEY UNSOLVED PIECES (why error 15), in priority order:**
-1. **Reply ENVELOPE is wrong.** Client crash log (08/17, `C:\Games\Wildstar\Errors\…260817…log`) leaked: `HandleRequestVerifiedIPList -- Could not find Items element <Reply type="array" />`. **STS replies are `<Reply type="…">` envelopes with typed sub-elements — NOT `<Content>`.** Every attempt used the wrong envelope, so the client likely fails at the ENVELOPE parse before ever reaching KeyData/SRP. **NEXT STEP: RE the exact `<Reply>` envelope + KeyData element schema (type attributes) from the client, don't guess.**
+1. **Reply ENVELOPE is wrong.** Client crash log (08/17, `realm-portable\clients\Wildstar\Errors\…260817…log`) leaked: `HandleRequestVerifiedIPList -- Could not find Items element <Reply type="array" />`. **STS replies are `<Reply type="…">` envelopes with typed sub-elements — NOT `<Content>`.** Every attempt used the wrong envelope, so the client likely fails at the ENVELOPE parse before ever reaching KeyData/SRP. **NEXT STEP: RE the exact `<Reply>` envelope + KeyData element schema (type attributes) from the client, don't guess.**
 2. **KeyData encoding unresolved.** The base64 codec `0x18001F310` is called ONLY from the platform-init function `0x180018D90` (WSAStartup/disk) — NOT the login path. So KeyData is raw or a different encoding. Raw binary in XML is fragile (salt/B contain `<`/`&`). Small OpenSSL base64 fn `0x180081610` has crypto callers — maybe THAT decodes it. UNRESOLVED — RE which decode the reply path uses.
 3. **B byte order** = big-endian (confirmed by the B<N validation).
 
@@ -75,7 +75,7 @@ frozen realm before an unrelated in-world crash).
 - **MariaDB: UP** on 3307, started STANDALONE by me: `database/bin/mariadbd.exe --no-defaults --datadir="…/realm-portable/data" --port=3307 --plugin-dir="…/database/lib/plugin" --bind-address=127.0.0.1`. (The bundled `data/my.ini` still points at the dead D: drive — always override datadir.)
 - **Frozen realm: DOWN.** Operator ordered a FULL shutdown; I force-killed all `NexusUnleashed.*` servers + `mariadbd`. `servers/NexusUnleashed.StsServer/StsServer.json` reverted to port 6600 (clean). The Launcher app + `nxnode` (the logging host on 127.0.0.1:24950) left running.
 - **Operator CANNOT PLAY** until the frozen realm is back up — and our engine + standalone MariaDB hold its ports (6600/23115/24000/3307). To let them play: kill our engine + our MariaDB, then they restart the realm via the launcher.
-- Client: `C:\Games\Wildstar` (WildStar64.exe). Launcher points it at `localhost` (from `realm-portable/launcher/data/config.json` Host=localhost) on the fixed ports — so it lands on OUR engine when the frozen realm is down.
+- Client: `realm-portable\clients\Wildstar` (WildStar64.exe). Launcher points it at `localhost` (from `realm-portable/launcher/data/config.json` Host=localhost) on the fixed ports — so it lands on OUR engine when the frozen realm is down.
 
 ## 7. Deferred / open
 - `GetKeyFromTicket` (world key derivation) — re-source from the CLIENT (quarantined).

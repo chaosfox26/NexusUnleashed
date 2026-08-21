@@ -361,13 +361,14 @@ Handlers on the realm connection:
   the client's dispatcher (`sub_140020EA0`, opcode 230) removes the character when `result == 0`, which
   frees the slot. Body is two byte-aligned u32s `{result, 0}`.
 - **`0x07DD`** = Enter Game on a selected character (body = u64 characterId) — the world-entry trigger.
-  Reproduce step: stream the recorded world-load burst (`0x0988`, zone blobs, player self, entity
-  spawns) via `0x03DC` so the client leaves char-select and loads the world.
+  Currently a clean stub (logs the charId). The NF-lineage replay approach (streaming
+  `captures/world-entry-replay.bin`) was REMOVED (commit `cdc62fc`); world entry is now built by hand,
+  message by message, from the client's own deserializers + our DB (`spec/protocol/world-entry.md`).
 
 **Host wiring:** `CharacterListBodyProvider` (accountId → `0x0117` body), `CreateCharacterProvider`
-(accountId, decrypted body → new char id, 0 on failure), `DeleteCharacterProvider` (accountId,
-characterId → true if deleted), and `WorldEntrySequence` (the recorded burst, loaded from
-`captures/world-entry-replay.bin`). The providers keep the networking layer free of a DB dependency.
+(accountId, decrypted body → new char id, 0 on failure), and `DeleteCharacterProvider` (accountId,
+characterId → true if deleted). The providers keep the networking layer free of a DB dependency. (The
+former `WorldEntrySequence` replay provider was removed with the NF replay — see `0x07DD` above.)
 
 **Diagnostics (dev-only helpers in `world_handshake.cpp`):** `LoadInject()` reads
 `inject.txt` lines `<opcodeHex> <bodyHex>` and sends them as CLEAR frames on realm-enter to probe the
@@ -384,8 +385,8 @@ server; the world channel arrives later. `stdout` is unbuffered so log lines flu
   race/class/sex/faction from the client's own `CharacterCreation` table (the packet only carries the
   creation ID). `ActivePath`, `WorldId`, `WorldZoneId` are TODO (path is a separate field still to pin;
   world comes from `startEnum` → starting zone). Sliders → stored + resolved to visuals.
-- Loads `captures/world-entry-replay.bin` for the `0x07DD` Enter-Game reproduce step (a length-prefixed
-  list of `(opcode, body)`); absent file → Enter Game no-ops.
+- The former `captures/world-entry-replay.bin` loader (the NF-lineage `0x07DD` replay) was REMOVED
+  (commit `cdc62fc`). World entry is built by hand from the client's deserializers — no replay loaded.
 - **Worker pool:** one worker per hardware thread by default. `nusl.exe` overrides the count via
   `NUSL_THREADS` to match its CPU-cores slider; the process affinity mask it sets pins the pool to those
   cores. Prints `worker pool: N threads`.

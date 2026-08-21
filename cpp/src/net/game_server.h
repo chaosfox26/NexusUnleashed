@@ -24,6 +24,9 @@ public:
 
     std::optional<crypto::PacketCrypt> crypt;
     long account_id = 0;
+    bool player_entity_sent = false;   // world entry: player 0x0262 sent once (on first 0x038C)
+    int  world_move_count = 0;         // count of 43-byte movement packets seen (for staging)
+    bool player_set_sent = false;      // world entry: 0x019B set-player sent (after entity exists)
     std::string remote() const;
 
 private:

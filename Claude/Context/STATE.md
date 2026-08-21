@@ -1,7 +1,26 @@
 # NexusUnleashed Engine — State of the Build
 
-> **▶ RESUME (2026-08-20, part 3) — CHARACTERS RENDER · REALM SELECT · THE LAUNCHER · OPTIMIZATION.**
-> Read `SESSION-2026-08-20-launcher-realm-optimization.md` first — it is the current authority.
+> **▶ RESUME (2026-08-20, part 4) — THE SCRUB (pure code, PUSHED) · LIVE VERIFICATION · SETTINGS-PANEL PLAN.**
+> Read **`SESSION-2026-08-20-scrub-and-settings.md`** first — it is the current authority.
+> **The source is now pure code:** every build note / RE derivation / wire annotation was moved out of the
+> C++ (`cpp/src`) and C# (`src`,`test`,`tools`) source into **`cpp/docs/CODE-NOTES.md`** and
+> **`docs/CODE-NOTES-csharp.md`** (C# done with a Roslyn tool so string literals were untouched; Arctium
+> **MIT headers preserved**). Verified behavior-neutral (C++ tests pass; C# byte-identical before/after,
+> Protocol 28/0; clean boot; full **live** playthrough — login→char-select→**character create** on the
+> stripped binary, char persists + renders). Committed + **pushed public** `afa4c07`.
+> **RULE going forward:** keep code pure; new build notes go into the CODE-NOTES archives.
+>
+> **NEXT (scoped + de-risked): the cogwheel Settings panel in nusl** — edit `RealmName`, `RealmType`
+> (**PvE/PvP only**), `MessageOfTheDay` → writes `realm.json`. Engine: `RealmType`→`PvpType` (trivial);
+> **welcome broadcast opcode `0x03E1` (993) already reversed** (body `{tier u32, wide-string}`, from
+> `sub_140045A70`; shows in char-select's `wndServerMessage`, suppressed only by the transient
+> `WasDisconnectedForLag` flag from our restart-testing). TODO there: pin the `0x03E1` wire bit-packing.
+> **Biggest real gap stays the OUTFIT** (characters render in underwear — `countB`/equipped-gear visuals
+> not sent). Client launch quirk + Back-button (works, Y≈1400) + boundary note: in the session doc.
+>
+> <details><summary>Prior resume (part 3 — characters render · realm select · the launcher · optimization)</summary>
+>
+> Read `SESSION-2026-08-20-launcher-realm-optimization.md`.
 > A real 16042 client now **creates a character that persists and renders** (cat ears / gold hair /
 > pale skin decoded from the client's own tables — screenshot-proven), with **delete** and **realm
 > selection** all working live. Key protocol wins: **the container fix** (post-re-key char-select
@@ -21,6 +40,7 @@
 > persist a full character, then build the **world server** (map load, entity spawn, movement) —
 > the real North Star; even a perfect create-response lands at the world-load wall until it exists.
 > Do NOT brute-force opcodes. The banners below are prior state.
+> </details>
 > </details>
 
 > **🟢 THE ENGINE IS NOW C++ — AT PARITY, PROVEN LIVE (2026-08-19).** Real 16042 client

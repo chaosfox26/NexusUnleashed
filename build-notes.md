@@ -1,8 +1,15 @@
 # NexusUnleashed — BUILD NOTES (the go-to record)
 
-_Last updated 2026-08-19. **This is the single source of truth for what has been built.**
-Claude's continuation docs (`Claude/Context/CONTINUE.md`, `STATE.md`, `CPP-PORT-PLAN.md`)
-point here. Read this first to see where the project stands._
+> **⚠️ PARTIALLY BEHIND (as of 2026-08-21).** §0a below (2026-08-20) says the account-retrieval barrier
+> is "awaiting one live test" — but later sessions got PAST it: the client reaches character-select, the
+> **character creator, and character CREATION works** (persists + renders). The **active frontier is now
+> WORLD ENTRY** (port 24000), and the NF-lineage world-entry replay was **removed** (commit `cdc62fc`) —
+> world entry is built by hand, NF-free. Current authority: `Claude/Context/CONTINUE.md`, `ROADMAP.md`,
+> `spec/protocol/world-entry.md`. Also: the whole project now lives under `Desktop\realm-portable\` (the
+> umbrella) — read `..\PROJECT-MAP.md` + `..\INDEX.md`.
+
+_Last updated 2026-08-19 (see the banner above for what's since changed). Claude's continuation docs
+(`Claude/Context/CONTINUE.md`, `STATE.md`, `CPP-PORT-PLAN.md`) point here._
 
 ---
 

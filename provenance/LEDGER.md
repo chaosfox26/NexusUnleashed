@@ -385,3 +385,28 @@ clean-room story rests on named, NF-free roots, not on memory.
 Proven (5/5): the full two-phase encrypted handshake works end to end over a
 socket, self-contained. The real 16042 client simply replaces the synthetic one —
 the mechanism of the client-as-oracle loop is now demonstrated, not just designed.
+
+## FOCUS PASS — cpp/src/realm/world_handshake.cpp provenance (2026-08-21)
+
+Traced every constant/opcode/format in the C++ realm handshake before building
+world entry on top of it. `nf-guard.py` CLEAN (no code path references any
+NF-derived tree or the captures).
+
+| item | class | source | clean? |
+|---|---|---|---|
+| Opcodes (0x0592,0x0591,0x03db,0x0117,0x025C,0x00DC,0x0352,0x00E6,0x07DD,…) | 1-client | client dispatch tree + handler RVAs (`WS+…`, CODE-NOTES §realm) | ✅ |
+| Bodies 0x0591 / 0x03db / 0x07A1 / 0x0761 / 0x0117 / create+delete results | 1-client | client's own deserializers (`deser.py`; RVAs documented) + our DB | ✅ |
+| `WorldChannelSeed 0xD283F5B34A8DC685`, `RealmLaneKey 0x9A868DE642EF9906` | 1-client | runtime-observed from the client's own cipher object (Frida) | ✅ |
+| conn states 6→9→10→11; RealmName/host/port | 1-client / our config | client conn-dispatcher facts / realm.json | ✅ |
+| `0x07DD` handler | authored | clean stub (NF replay removed `cdc62fc`) | ✅ |
+| **`HelloBody()` — the 47-byte 0x0003 hello** | **⚠ capture-provenance** | format is client-understood (the `0b14332f01` message-definitions stamp is a client fact the client validates), but the literal 47 bytes were lifted "byte-for-byte" from a captured S→C hello, not reconstructed from the client's Read | **FLAG** |
+
+**Action item:** reconstruct `HelloBody()`'s 47 bytes field-by-field from the
+client's hello structure (stamp = client message-definitions hash; remainder from
+the client's hello Read), converting its provenance from captured-template to
+client-derived. Scheduled as the first step of the world-entry build (the hello
+leads the handshake). Low practical risk (client accepts it; tiny fixed struct);
+this is provenance hygiene under the strict no-NF-capture rule.
+
+Stale docs corrected the same pass: CODE-NOTES §world_handshake / §main.cpp no
+longer describe the removed `WorldEntrySequence` / `world-entry-replay.bin`.

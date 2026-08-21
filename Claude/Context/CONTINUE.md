@@ -124,7 +124,7 @@ model strings are in `local-notes.md`; the general requirements:
 - **Python 3.13** with `pefile`, `capstone`, `frida` (17.x) for RE. Install:
   `python -m pip install pefile capstone frida frida-tools`.
 - **The WildStar 16042 client** as the behavioral/format oracle:
-  `C:/Games/Wildstar/Client64/WildStar64.exe` (imagebase `0x140000000`),
+  `realm-portable/clients/Wildstar/Client64/WildStar64.exe` (imagebase `0x140000000`),
   `StsConnLib64.MT.dll` (STS/SRP). The full 16042 CDN mirror is available locally
   (see the sibling realm-portable project's notes).
 
@@ -189,7 +189,7 @@ model strings are in `local-notes.md`; the general requirements:
 
 ## 5. HOW TO RUN
 
-Repo: `Desktop/NexusUnleashed-Engine` (public: github.com/chaosfox26/NexusUnleashed,
+Repo: `Desktop/realm-portable/NexusUnleashed-Engine` (public: github.com/chaosfox26/NexusUnleashed,
 branch `master`).
 
 ```bash

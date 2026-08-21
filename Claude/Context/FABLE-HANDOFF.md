@@ -51,7 +51,7 @@ already use to DECODE the client's inbound `0x0244` containers). Files:
    `"C:\Program Files\Microsoft Visual Studio\18\Community\...\CMake\bin\cmake.exe" --build cpp/build --config Release --target nexus_realm`
    (server exe locks itself while running — stop it first).
 2. Run server from `cpp/build/Release/` (needs `realm.json` beside it, gitignored).
-3. Client is at `C:\Games\Wildstar\Client64\WildStar64.exe`. To force a fresh realm
+3. Client is at `realm-portable\clients\Wildstar\Client64\WildStar64.exe`. To force a fresh realm
    handshake: restart the server (client drops to "Connection Closed"), then log in.
 4. Drive login with `<scratch>/wslogin.ps1` (test creds; clicks fields + Log In).
 5. Watch: the **server log** (`realm-run.log`) for the `[RAW IN]` frames + our sends, and a
@@ -68,7 +68,7 @@ already use to DECODE the client's inbound `0x0244` containers). Files:
   `0x0244` container). `conn-trace.py` — hooks the connection/account state-write sites to
   see where the handshake stalls. `diag-dispatch.py` — hooks the account dispatcher/handlers.
 - `wsdis.py` / `xref.py` / `xref-addr.py` — static disasm + xref of the client
-  (`C:\Games\Wildstar\Client64\WildStar64.exe`, base 0x140000000).
+  (`realm-portable\clients\Wildstar\Client64\WildStar64.exe`, base 0x140000000).
 - `probe-all.json` — the client's full registered opcode table (1121 ops, sizes, fn ptrs).
 - Frida gets flaky after many attach/detach cycles — kill all python hooks and relaunch ONE
   if a hook goes silent.

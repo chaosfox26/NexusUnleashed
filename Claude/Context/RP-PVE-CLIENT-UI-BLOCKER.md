@@ -14,7 +14,7 @@ The 16042 client's realm-type is **hardcoded to PvE/PvP** in its own pre-game UI
   until its Lua has an RP branch.
 
 ## Why the client edit is a whole project (THE BLOCKER)
-The pre-game UI is **not loose files** — there are ZERO loose `.lua` in `C:\Games\Wildstar`. The
+The pre-game UI is **not loose files** — there are ZERO loose `.lua` in `realm-portable\clients\Wildstar`. The
 entire stock UI is packed inside **`Patch\ClientData.archive` (13 GB)** (`Knowledge\client-ui` is only
 an EXTRACTED reference — editing it does nothing to the running client). Pre-game UI also can't be
 overridden by an in-game addon (addons load post-login). So showing "RP-PvE" requires:
