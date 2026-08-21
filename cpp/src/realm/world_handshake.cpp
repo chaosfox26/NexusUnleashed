@@ -313,15 +313,19 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
             std::printf("realm-conn: -> 0x019B SET-PLAYER guid=0x%X (move #%d) via 0x03DC\n",
                         guid, s.world_move_count);
         } else if (!s.loadscreen_sent && s.player_set_sent && s.world_move_count >= 6) {
-            // 0x36A is a CONFIRMED DEAD END (3x): the world-dispatch 0x36A -> sub_1403B6D10 shows the
-            // GAME screen, but that transitions the client to the "in-world" state whose OWN watchdog
-            // disconnects because the world isn't actually loaded. Not a keepalive problem.
-            // Instead: start the movement-independent 0x845 keepalive so the loading state is held
-            // robustly regardless of whether the client keeps sending movement.
+            // *** THE COMPLETION TRIGGER: world opcode 0x0061 -> sub_1403C74D0 = "PlayerEnteredWorld".
+            // The client's world-load completeness mask (session+31560) needs 0x7F(127): the local
+            // map-load bits (0x0F, set automatically) PLUS 0x20|0x40, which ONLY this 0x61 handler
+            // sets. Without 0x61 the mask stalls at 0x0F and the session update never runs its
+            // completion block, so the load screen never fades. sub_1403C74D0 takes only the session
+            // (ignores the body), so 0x61 is an empty message. This is the message we never sent.
             s.loadscreen_sent = true;
+            co_await s.SendGameMessageVia(0x03DC, 0x0061, std::vector<uint8_t>{});
+            std::printf("realm-conn: -> 0x0061 PlayerEnteredWorld (sets load-mask 0x20|0x40) via 0x03DC\n");
+            // Hold the connection with the movement-independent 0x845 keepalive.
             auto ka = proto::WorldEntryMessages::BuildLoadProgress(20, 0, 20);
             s.StartKeepalive(0x03DC, proto::WorldEntryMessages::OpLoadProgress, ka, 2000);
-            std::printf("realm-conn: -> started movement-independent 0x845 keepalive (2s); loading held\n");
+            std::printf("realm-conn: -> started movement-independent 0x845 keepalive (2s)\n");
         }
 
         // KEEPALIVE / PROGRESS EXPERIMENT: once the player is set, send 0x845 loading progress on
