@@ -54,6 +54,12 @@ public:
     static constexpr uint16_t OpSetPlayer = 0x019B;
     static std::vector<uint8_t> BuildSetPlayer(uint32_t guid, uint32_t field1 = 0);
 
+    // 0x03D0 — LOADING-SCREEN control. Client dispatch cases 0x3CF-0x3D2 all route to the load
+    // screen object (qword_140C65A48). 0x3D0 is a single 3-bit state (client Read sub_14007FDC0).
+    // Sending it is what dismisses the world-load overlay once the player is placed. Wire: [3b state].
+    static constexpr uint16_t OpLoadScreen = 0x03D0;
+    static std::vector<uint8_t> BuildLoadScreenState(uint8_t state);
+
     // 0x636 — THE world-channel SET PLAYER UNIT (client dispatch case 0x636 -> sub_14057A630).
     // Unlike 0x019B it has the expectedPlayer FALLBACK: if entity[guid] exists it binds it now;
     // if not, it stores guid at expectedPlayer(+25728) so the next 0x0262 entity-create with that

@@ -299,6 +299,14 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
             co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpSetPlayer, bSet);
             std::printf("realm-conn: -> 0x019B SET-PLAYER guid=0x%X (move #%d) via 0x03DC\n",
                         guid, s.world_move_count);
+        } else if (!s.loadscreen_sent && s.player_set_sent) {
+            // 4) 0x03D0 loading-screen control (client cases 0x3CF-0x3D2 -> load screen). Sent right
+            //    after the player is bound + placed to dismiss the world-load overlay. Trying state 0.
+            s.loadscreen_sent = true;
+            auto bLs = proto::WorldEntryMessages::BuildLoadScreenState(0);
+            co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpLoadScreen, bLs);
+            std::printf("realm-conn: -> 0x03D0 LOAD-SCREEN state=0 (move #%d) via 0x03DC\n",
+                        s.world_move_count);
         }
         co_return;
     });

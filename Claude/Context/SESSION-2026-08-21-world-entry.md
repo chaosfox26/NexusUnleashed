@@ -377,3 +377,43 @@ from LOADING is driven by the world-load/render-ready path, not a realm message.
 world-load-complete / loading-overlay dismiss (world overlay tex UI_CRB_WorldID51_LoadScreen, set up
 ~line 173735) and what it waits for -- candidates: real world-init (0x0981) sublevel ids (I send
 empty), or a world-stream/population-complete the client expects.
+
+## LOADING-SCREEN CONTROL FOUND (12:30) — opcodes 0x3CF-0x3D2
+
+The char/realm mgr (qword_140C66DA8) is NULL once in the world -> the "OFF WORLD" overlay is NOT the
+realm state machine; it's the world load-screen object at qword_140C65A48 (class ctor sub_1404D56B0,
+vtable off_140B690F0). World dispatcher sub_1403EC6A0 cases **0x3CF/0x3D0/0x3D1/0x3D2** (975-978) all
+route to that object (via sub_1404D6210 + vtable[88]). We send NONE of them -> the overlay never gets
+its control/dismiss signal. Read fns: 0x3D0=sub_14007FDC0 = a single **3-bit state**; 0x3CF/0x3D1/0x3D2
+are larger. 0x3D0 is the likely dismiss. Added BuildLoadScreenState(3b) -> 0x03D0, sent after set-player
+(move>=8). TEST underway (trying state 0; nettap hooks sub_1404D6210 process + sub_1404D5AE0 destroy).
+
+## LOADING SCREEN = 3D WORLD-SCENE LOAD never completes (12:55) — the real final gate
+
+Deep-dived the overlay. Findings (all live-verified on the running client):
+- Once in the world the char/realm mgr (qword_140C66DA8) is NULL -> the "OFF WORLD" overlay is the
+  WORLD load screen (qword_140C65A48 = *(worldMgr+5544), class sub_1404D56B0, vtable off_140B690F0),
+  NOT the realm state machine.
+- Loading opcodes 0x3CF-0x3D2 route to it (dispatcher sub_1403EC6A0 case @944929 -> sub_1404D6210 +
+  vtable[88]); guarded by *(loadScreen+24). Built + sent 0x03D0 (3-bit, Read sub_14007FDC0) after
+  set-player; client DISPATCHES it (W-DISP op=0x3d0) but it does NOT dismiss the overlay.
+- Destroying the load screen (sub_1404D5AE0) just respawns it => the overlay is a SYMPTOM.
+- ROOT: the world-load-complete flag worldMgr's loadObj+40 (loadObj = *(worldMgr+32736)) never
+  becomes 4. It is set by sub_1403FA730(worldMgr) (called from ChangeWorld) ONLY if *(loadObj+24) is
+  non-null. **Live: loadObj+24 = 0x0** -> the 3D world SCENE for world 1537 is not loaded, so
+  world-load-complete never fires and the overlay never drops. Calling sub_1403FA730 by hand is a
+  no-op because of the null guard.
+
+So the character is BOUND + POSITIONED (logically in the world) but the client's 3D world-scene
+asset load for the arkship (world 1537) never completes (loadObj+24 stays null). That is the last
+gate: figure out why the client's world-scene load doesn't populate loadObj+24 -- candidates: the
+client needs world/sublevel data the server must provide (the 0x0981/0x0988/0x098B world-init set,
+which currently is sent too early and dropped, and is empty), or a world-scene-load message/sequence
+we haven't sent. This is a fresh, deep sub-system (client world-asset streaming).
+
+## STATE FOR OPERATOR (resume here)
+DONE + pushed (commits c70be8a, 2785c8d): player binds (PlayerChanged) + spawns on the arkship deck,
+built from scratch, no NF. The 0x0262 recipe (kind 20, ids, faction 166, a3+148 type-2 position
+keyframe) is solid. REMAINING: the 3D world-scene never loads (loadObj+24 null) -> loading screen
+holds. Next: instrument the client's world-scene/map loader to see what it's waiting for; most
+likely the world-init (0x0981 sublevel ids) sent at the right time (post-ChangeWorld) with real data.
