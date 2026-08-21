@@ -312,3 +312,68 @@ a NEW outbound container **0x0244** (55B, encrypted uplink) every movement tick 
 streaming player movement (thinks it's logically in-world), but the loading-screen UI gate hasn't
 released. Next: find what dismisses the load screen (world-ready condition) / whether 0x0244 needs
 a response / whether the spawn position (1437.82,85.53,-106.82 world 1537) is valid terrain.
+
+## LOADING-SCREEN GATE = player is at (0,0,0)/void (11:25)
+
+Live read of the bound player entity (frida, entity 0x...4010): type=20 OK, faction 166 stored at
++288 OK, but **position @+4576 and @+3952 = (0,0,0)**, and a full scan of the 14256-byte entity for
+the spawn floats (1437.82/85.53/-106.82) found NONE. So the player has no location -> placed at
+origin/void -> client's world-load can't complete -> loading screen holds (never drops to 3D).
+
+My 0x0262 command block (BuildPlayerEntity) is structurally CORRECT vs the client command reader
+sub_140094BF0 (posX/Y/Z 32b x3, 18b, 1b, then 3 sub-count arrays) and the entity Read RETURNs 0.
+But the command's posX/Y/Z is NOT applied to the entity's active transform (+4576). The transform
+is computed (sub at 1328355 writes +4576 from a spline-matrix) only when a movement/spline command
+EXECUTES; my command has all sub-counts (spline nodes) = 0, so nothing moves the entity off origin.
+No top-level position field exists in the entity Read; the only position channel is the command.
+
+NEXT: make the player spawn at a valid arkship position. Options to try: (a) command with a real
+spline node (24-byte sub-element sub_140094AA0) carrying the destination; (b) a separate post-bind
+movement/teleport message that sets the transform; (c) find how the local player consumes the 0x00AD
+world-enter position (worldId+5 floats -> char mgr +456..476) and whether that should seed +4576.
+This is the entity movement/spline subsystem -- a fresh area. Player BIND itself is solved + pushed
+(commit c70be8a).
+
+## SPLINE POSITION (11:40) — position lives in the spline POINT, not the command header
+
+Diagnostic (nettap CMD-READ + MOVE-APPLY hooks): my command's header posX/Y/Z IS read correctly
+(1437.8,85.5,-106.8) and MOVE-APPLY sub_1405B5070 DOES run -- but with nodeCount=0 the transform
+stays (0,0,0). So the header posX/Y/Z is a reference, NOT the applied position. The applied position
+is in the spline chain: command -> node(sub_140094AA0) -> point(sub_140094890). Decoded:
+  command tail: [nodeCount 32b][nodes][8b count 28B elems][8b count 32B elems]
+  node (24B):   [32b time][8b][8b][16b][4b][8b pointCount][points]
+  point (80B):  [19b flags][32b posX][32b posY][32b posZ][2b sel=0 -> funcs[0]=sub_1400853F0 1b]
+BuildPlayerEntity now emits nodeCount=1 -> 1 node -> 1 point carrying the arkship posX/Y/Z. Rebuilt.
+TEST PENDING: does entity+4576 now = 1437.8 and the loading screen drop.
+
+## POSITION = the a3+148 movement array, NOT the command array (11:55) — the winning channel
+
+Root cause of (0,0,0): the spline interpolator sub_1405B5070 only runs when construction calls
+sub_1404586E0, and that is called (construction LABEL_163, line 1033089) with the **a3+148 array**
+(count@a3+148 5b, elems@a3+152, reader sub_1400AF930) -- NOT the 64-byte command array (a3+192)
+where I had put the position. The command array is read but never applied at spawn, so the entity
+transform stayed 0 and the player sat in the void.
+
+Confirmed by instrument: POINT-READ showed my command spline point read perfectly (1437.8) but
+MOVE-APPLY(ours) never fired => interpolator never touched our entity via the command path.
+
+FIX: put the position in the a3+148 movement array. Element = sub_1400AF930 = [5b type][type data];
+type 2 (funcs_1400AF98E[2]=sub_1400AD350) = position keyframe = [3x 32b float posX/Y/Z (sub_14006C1C0)]
+[1b]. BuildPlayerEntity now sets a3+148 count=1 -> one type-2 element with the arkship pos, and
+reverts the command array to count 0. sub_1404586E0 should apply it -> entity+4576 = pos -> set-player
+copies it -> player placed -> loading screen drops. TEST PENDING.
+
+## POSITION WORKS (12:10) — player bound AND placed on the arkship deck
+
+Live read after the a3+148 type-2 fix: entity+4576 = (1437.82, 85.53, -106.82) and the world mgr
+player anchor (+29280 / +27920) = same. The type-2 movement keyframe in the a3+148 array is applied
+by construction -> sub_1404586E0 -> the interpolator, seeding the full transform matrix (+3936..+4720
+all carry the pos). set-player copies it. So the player is now BOUND + POSITIONED on the arkship.
+
+REMAINING: loading screen STILL holds (>40s) even with a valid position -> the drop is NOT gated on
+position alone. Realm state machine a1+368 (qword_140C66DA8): stays 5 (LOADING); in state 5 the realm
+dispatcher sub_140020EA0 ignores messages, and no state=6 writer fires from state 5 -- so the exit
+from LOADING is driven by the world-load/render-ready path, not a realm message. Next: find the
+world-load-complete / loading-overlay dismiss (world overlay tex UI_CRB_WorldID51_LoadScreen, set up
+~line 173735) and what it waits for -- candidates: real world-init (0x0981) sublevel ids (I send
+empty), or a world-stream/population-complete the client expects.

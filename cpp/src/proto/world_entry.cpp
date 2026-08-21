@@ -109,19 +109,20 @@ std::vector<uint8_t> WorldEntryMessages::BuildPlayerEntity(uint32_t guid, float 
     w.WriteBits(0, 8);            // a3+128  8b
     w.WriteBits(0, 5);            // a3+129  5b count1=0
     w.WriteUInt32(0);             // a3+144  32b
-    w.WriteBits(0, 5);            // a3+148  5b count2=0
+    // a3+148 = the MOVEMENT array (count 5b, elements sub_1400AF930). Construction applies THIS
+    // array (not the 64-byte command array) via sub_1404586E0 -> the spline interpolator, seeding
+    // the entity's initial transform (+4576). This is the channel that actually places the entity.
+    // Element type 2 (funcs_1400AF98E[2]=sub_1400AD350) = position keyframe: [3x 32b float][1b].
+    w.WriteBits(1, 5);            // a3+148  5b movement count = 1
+    // ---- movement element (sub_1400AF930): [5b type][type data] ----
+    w.WriteBits(2, 5);            //   5b type = 2 (position keyframe)
+    w.WriteSingle(x);             //   32b posX (sub_14006C1C0)
+    w.WriteSingle(y);             //   32b posY
+    w.WriteSingle(z);             //   32b posZ
+    w.WriteBits(0, 1);            //   1b
     w.WriteBits(0, 8);            // a3+160  8b count3=0
     w.WriteBits(0, 7);            // a3+176  7b count4=0 (visuals)
-    w.WriteBits(1, 9);            // a3+192  9b command count = 1
-    // -- command block (sub_140094BF0) --
-    w.WriteSingle(x);             //   +0  32b posX
-    w.WriteSingle(y);             //   +4  32b posY
-    w.WriteSingle(z);             //   +8  32b posZ
-    w.WriteBits(0, 18);           //   +C  18b
-    w.WriteBits(0, 1);            //   +10 1b
-    w.WriteUInt32(0);             //   +14 32b sub-count1 = 0
-    w.WriteBits(0, 8);            //   +20 8b sub-count2 = 0
-    w.WriteBits(0, 8);            //   +30 8b sub-count3 = 0
+    w.WriteBits(0, 9);            // a3+192  9b command count = 0 (position not carried here)
     // -- resume top-level --
     w.WriteUInt32(0);             // a3+208  32b
     // a3+212 / a3+216 are the entity's two faction fields (Faction1 / Faction2). The construction
