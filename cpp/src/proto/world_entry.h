@@ -67,6 +67,11 @@ public:
     static constexpr uint16_t OpLoadScreen = 0x03D0;
     static std::vector<uint8_t> BuildLoadScreenState(uint8_t state);
 
+    // 0x845 loading progress: [u32 current][u32 field1][u32 max]. Fills the load bar and
+    // provides world-channel keepalive traffic during the client's load state.
+    static constexpr uint16_t OpLoadProgress = 0x0845;
+    static std::vector<uint8_t> BuildLoadProgress(uint32_t current, uint32_t field1, uint32_t max);
+
     // 0x636 — THE world-channel SET PLAYER UNIT (client dispatch case 0x636 -> sub_14057A630).
     // Unlike 0x019B it has the expectedPlayer FALLBACK: if entity[guid] exists it binds it now;
     // if not, it stores guid at expectedPlayer(+25728) so the next 0x0262 entity-create with that

@@ -159,6 +159,17 @@ std::vector<uint8_t> WorldEntryMessages::BuildWorldChangeDone(uint8_t status) {
     return w.ToArray();
 }
 
+std::vector<uint8_t> WorldEntryMessages::BuildLoadProgress(uint32_t current, uint32_t field1, uint32_t max) {
+    // 0x845 loading progress (client handler WorldPaketHandler case 0x845): a4[0]=current,
+    // a4[1]=field1, a4[2]=max -> fills the load bar (a1+29376 current / a1+29384 max). Also
+    // serves as world-channel keepalive traffic while the client is in its load state.
+    PacketWriter w;
+    w.WriteUInt32(current);
+    w.WriteUInt32(field1);
+    w.WriteUInt32(max);
+    return w.ToArray();
+}
+
 std::vector<uint8_t> WorldEntryMessages::BuildLoadScreenState(uint8_t state) {
     // 0x3D0 wire (client Read sub_14007FDC0): a single 3-bit state value.
     PacketWriter w;

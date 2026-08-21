@@ -520,3 +520,46 @@ FIRED" and whether the arkship 3D renders. If 0x36A alone doesn't render, try **
   0x0244 client->server encrypted container | 0x03DC server->client container
   0x366/0x36A world-change-complete -> render game (THE lead) | 0x83C show load screen (1B)
   0x845 loading progress | 0x0117 char list | 0x058F realm-enter (re-key)
+
+# ============================================================================
+# BREAKTHROUGH (2026-08-21 cont, autonomous): THE POST-WORLD-ENTER DISCONNECT IS SOLVED
+# ============================================================================
+
+## What was happening (measured, not guessed):
+- World 1537 LOADS FINE. ChangeWorld (world 0xAD -> sub_1403B6DE0) calls sub_1403E70D0(a1,1537,pos)
+  = the map load kickoff; MEASURED ret=0 (ok, load started). ChangeWorld ret=0. So it was NEVER a
+  world-load failure. Player binds (PlayerChanged) + spawns on the deck (confirmed prior).
+- The client was disconnecting ~20-30s after world-enter with "You've lost connection. Reason 0".
+  Server was CLEAN (still running, no errors, no close) -> the drop is 100% client-side.
+- 0x36A was NOT the cause: with 0x36A gated OFF the client still dropped. The drop is an independent
+  client-side WATCHDOG (ticked from the main frame loop sub_140013D00), not an inline check.
+
+## THE FIX: server-channel keepalive via 0x845 loading-progress.
+- 0x845 (WorldPaketHandler case 0x845) = loading progress: body [u32 current][u32 field1][u32 max],
+  writes the load bar (a1+29376 current / a1+29384 max). NEW BuildLoadProgress in world_entry.cpp.
+- world_handshake.cpp 0x038C handler now sends 0x845 on EACH movement tick after set-player,
+  ramping current 0->20 (LoadProgressEnabled=true).
+- RESULT, MEASURED (statewatch.py, 1Hz poll): with keepalive on, the client STAYS CONNECTED and keeps
+  processing (progress 5->10 through t+76s, no disconnect). Screenshot world3.png: the OFF WORLD screen
+  is now VIBRANT cyan with a FULL progress bar and NO "lost connection" text (vs the dim grey +
+  "Reason 0" before). The client sits stably in loading, waiting for a completion signal.
+- Interpretation: the client's world-entry watchdog wants ongoing world-channel traffic (progress).
+  Movement stops -> keepalive stops -> watchdog fires. So the keepalive must eventually move to a
+  server-side TIMER (asio) so it survives the client pausing movement (e.g. after a screen transition).
+  GameServer exposes io() (asio::io_context&) for this; not yet wired.
+
+## REMAINING: the load never COMPLETES (loadState/loadObj+40 stays 0, loadObj+24 stays null).
+- The visible OFF WORLD overlay is the LOAD REQUEST's own screen (built by sub_1400360F0, which loads
+  UI_CRB_WorldID51_LoadScreen.tex etc.), NOT qword_140C65A48 (that object's +96 widget is null -
+  earlier dropoverlay.py proved calling its destroy is a no-op). So dropping qword_140C65A48 does
+  nothing; the load REQUEST must complete to tear down its screen.
+- The load request is created in ChangeWorld (sub_1403B6DE0 line 173+, sub_1400360F0 setup) and ticked
+  by the main loop. It completes when the client-side world/map load finishes -> then its screen drops
+  and the game renders. That completion is what we still need to trigger.
+- 0x36A (sub_1403B6D10) DOES show the GAME SCREEN (sub_1400481B0 == game screen, err=0 confirmed) but
+  does NOT drop the load-request overlay. CURRENT TEST (WorldChangeDoneEnabled=true, fire once at
+  move>=12): does the 3D world render behind/instead of the overlay while keepalive holds the line?
+- Key files: cpp/src/proto/world_entry.cpp (BuildLoadProgress, BuildWorldChangeDone), 
+  cpp/src/realm/world_handshake.cpp (0x038C staging: entity -> set-player@4 -> 0x36A@12 -> 0x845 each tick).
+- Probes in <scratch>: statewatch.py (load state 1Hz + disconnect dump), wlprobe.py (ChangeWorld +
+  world-load ret + disconnect bt), proberender.py, dropoverlay.py, disctrace.py.

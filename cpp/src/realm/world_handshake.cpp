@@ -13,6 +13,12 @@
 #include <vector>
 
 namespace {
+// Toggle for the premature 0x36A world-change-done experiment. OFF: stay in the client's
+// loading state (keeps sending 0x038C, connection stable) so we can find the true completion.
+static bool WorldChangeDoneEnabled = false; // 0x36A CONFIRMED HARMFUL: forces game screen early ->
+                                            // client disconnects 'Reason 0'. Stable state = keepalive
+                                            // loading. Completion must come from the load finishing.
+static bool LoadProgressEnabled = true;   // 0x845 progress/keepalive each tick after set-player
 struct InjectMsg { uint16_t opcode; std::vector<uint8_t> body; };
 static std::vector<InjectMsg> LoadInject() {
     std::vector<InjectMsg> out;
@@ -299,15 +305,26 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
             co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpSetPlayer, bSet);
             std::printf("realm-conn: -> 0x019B SET-PLAYER guid=0x%X (move #%d) via 0x03DC\n",
                         guid, s.world_move_count);
-        } else if (!s.loadscreen_sent && s.player_set_sent) {
-            // 4) 0x036A WORLD-CHANGE COMPLETE (client case 0x366/0x36A -> sub_1403B6D10): on no error
-            //    it transitions the UI from the world load-art to the GAME screen (renders the world).
-            //    This is the deconstruct-found message that actually drops the loading overlay.
+        } else if (!s.loadscreen_sent && s.player_set_sent && WorldChangeDoneEnabled && s.world_move_count >= 12) {
+            // 4) 0x036A WORLD-CHANGE COMPLETE (client case 0x36A -> sub_1403B6D10): forces the GAME
+            //    screen. MEASURED: this fires too early (async world-load still in progress), the
+            //    client then stops movement and disconnects 'Reason 0'. Gated off while we find the
+            //    true load-completion trigger. World 1537 itself loads fine (sub_1403E70D0 ret 0).
             s.loadscreen_sent = true;
             auto bDone = proto::WorldEntryMessages::BuildWorldChangeDone(0);
             co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpWorldChangeDone, bDone);
             std::printf("realm-conn: -> 0x036A WORLD-CHANGE-DONE (render game, move #%d) via 0x03DC\n",
                         s.world_move_count);
+        }
+
+        // KEEPALIVE / PROGRESS EXPERIMENT: once the player is set, send 0x845 loading progress on
+        // each movement tick, ramping to 100%. Tests whether the ~25-30s post-world-enter drop is a
+        // receive-timeout (no server world-traffic) and simultaneously fills the load bar.
+        if (LoadProgressEnabled && s.player_set_sent) {
+            uint32_t cur = s.world_move_count > 20 ? 20 : (uint32_t)s.world_move_count;
+            auto bp = proto::WorldEntryMessages::BuildLoadProgress(cur, 0, 20);
+            co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpLoadProgress, bp);
+            std::printf("realm-conn: -> 0x0845 load progress %u/20 (move #%d)\n", cur, s.world_move_count);
         }
         co_return;
     });
