@@ -37,3 +37,22 @@ present choices. You already know the answers — decide and act.** No NF, ever 
 Login cycle scripts in <scratch>: wslaunch.ps1, wslogin.ps1, wsclick.ps1 x y, ws-shot.ps1 out.
 cmake: add VS18 CMake bin to PATH then `cmake --build cpp/build --config Release --target nexus_realm`.
 Client boots ~75s to login. Server = nexus_realm.exe in cpp/build/Release (start with output redirect).
+
+## UPDATE (12:55) — RESUME POINT after deep push
+
+SOLVED + pushed (c70be8a, 2785c8d, fdae063): character BINDS (PlayerChanged) and SPAWNS on the
+arkship deck (world 1537). 0x0262 recipe final: kind 20 + player id(u64@+8) + realm id(14b@+16) +
+Faction1/2=166(@+212/+216) + a3+148 movement array [5b count=1][5b type=2][3x f32 pos][1b].
+Sequence: 0x00AD -> 0x0262 -> 0x019B (all via 0x03DC).
+
+LAST GATE (NOT solved) — the client's 3D WORLD SCENE never loads:
+- overlay = world load screen qword_140C65A48; drops only when world-load-complete fires
+  (sub_1403FA730 sets loadObj+40=4, loadObj=*(worldMgr+32736)), gated on *(loadObj+24)!=null.
+- LIVE: loadObj+40=0, +24=null, load-state=0 (IDLE). The scene load never even STARTS.
+- Sending 0x03D0 (loading-control) is dispatched but does not dismiss (symptom).
+RESUME: find what TRIGGERS the client's world-scene/map load to start after world-enter. loadObj
+class = sub_140434560 (ctor sets +280=sub_1404357F0 = likely its tick/load callback -- start there).
+Candidates: a world-server "enter/load world" message beyond 0x00AD; the 0x0981/0x0988/0x098B set
+(NOT in the world dispatcher -> handled elsewhere; currently sent too early + empty -> dropped);
+or the client waits on world DATA. Instrument loadObj's load method + the map loader; do NOT assume.
+Server left UP; client left on the loading screen for inspection.

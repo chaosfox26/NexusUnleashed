@@ -417,3 +417,20 @@ built from scratch, no NF. The 0x0262 recipe (kind 20, ids, faction 166, a3+148 
 keyframe) is solid. REMAINING: the 3D world-scene never loads (loadObj+24 null) -> loading screen
 holds. Next: instrument the client's world-scene/map loader to see what it's waiting for; most
 likely the world-init (0x0981 sublevel ids) sent at the right time (post-ChangeWorld) with real data.
+
+## CORRECTION (13:00) — worldMgr+32736 is the ACCOUNT-INVENTORY mgr, NOT the world load
+
+Retract the previous section's identification. worldMgr+32736 (loadObj) is created by sub_140434560
+whose callback +280=sub_1404357F0 fires **"AccountInventoryUpdate"**; sibling methods fire
+"UpdateInventory"/"AccountInventoryWindowShow". So sub_1403FA730 setting loadObj+40=4 is about the
+ACCOUNT INVENTORY, not the world scene. The "loadObj+24 null => world scene not loaded" conclusion is
+WITHDRAWN -- it was the wrong object (I also earlier mis-attributed the realm state machine). The
+loading-screen dismiss mechanism is therefore still UNIDENTIFIED by static RE (two misattributions
+now -- static tracing of the load screen is error-prone).
+
+NEW leading hypothesis (worth testing next, not yet done): the world-load overlay likely waits for
+the initial PLAYER/ACCOUNT data the real server streams after the player entity (inventory, spells,
+stats, path, etc.) -- the client has AccountInventory* plumbing wired into this area. Our server sends
+none of it. The right next approach is probably to send a fuller post-set-player data set, OR to
+observe a real dismiss (which we can't produce yet). SOLID + UNCHANGED: character binds (PlayerChanged)
+and spawns on the arkship deck -- that part is verified and pushed (c70be8a, 2785c8d).
