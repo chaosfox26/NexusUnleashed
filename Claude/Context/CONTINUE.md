@@ -65,9 +65,15 @@ W-DISP 0xad at +1.5s before the movement sequence.) game_server.SpawnDelayed is 
   the LAS-assignment mechanism (does level-1 auto-slot from the book, or is there a server action-set
   message?). TESTED 2026-08-22: 0x111 type-4 x3 (spell 5872 Quick Shot) -> AbilityBookChange fired 3x
   (book updated) but the bar slots stayed EMPTY + LOCKED. Auto-slot DISPROVEN: book != bar. The bar's
-  LAS slots are LOCKED at lvl 1 -> must (a) UNLOCK them (ActionSetLib.IsSlotUnlocked, level/progression
-  gated; find the server unlock msg) and (b) ASSIGN abilities to the LAS (find the LAS-assign msg),
-  plus the class-7 spell->LAS ids. Dedicated spell/LAS-system dive.
+  LAS slots are LOCKED at lvl 1 (slot 0 empty-but-available; slots 1+ padlocked = correct for lvl 1).
+  TESTED 2: the 0x025E char-data blob's count2 array (element sub_14008CDF0 = [32b spellId][18b baseId]
+  [5b slot][5b tier]) populated with (5872,5166,0,1) -> blob still parses (CharacterCreated fires) but
+  NO ability on the bar. So count2 is an ability COLLECTION, not the LAS bar. 0x025E arrays decoded:
+  count1 = items (same item struct sub_14008C0D0 as 0x111), count2 = ability collection [32/18/5/5],
+  count3 = 2-byte elems, count4 = [14b][32b] elems (14b too small for spell4 ids -> not spells).
+  NEXT (dedicated LAS dive): the bar reads ActionSetLib; find the actual LAS-assign server message
+  (getdesc candidate opcodes / trace the client LAS store) - it's separate from the ability collection.
+  Also need the correct class-7 LAS ability ids (5872 Quick Shot may be wrong/needs validation).
 - REAL HUD STATS (#12): real class/level max-HP (currently placeholder 250) via the stat tables +
   unit-property ids (sub_140458140: id12=Health cur/max; ids 1-25 map other stats).
 - PURE-CODE SCRUB: move this session's inline build-note comments into cpp/docs/CODE-NOTES.md.

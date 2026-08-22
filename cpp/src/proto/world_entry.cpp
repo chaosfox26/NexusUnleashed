@@ -116,7 +116,7 @@ std::vector<uint8_t> WorldEntryMessages::BuildCharacterDataMinimal() {
     w.WriteBits(0, 32);
     w.WriteBits(0, 14);
     w.WriteBits(0, 16);
-    w.WriteBits(0, 32);
+    w.WriteBits(0, 32);   // count2 (ability collection - element [32b][18b][5b][5b]; not the LAS bar)
     w.WriteBits(0, 32);
     w.WriteBits(0, 16);
     w.WriteBits(0, 32);
