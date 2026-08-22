@@ -362,6 +362,13 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
             co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpEntityCreate, ent);
             std::printf("realm-conn: -> 0x0262 player entity guid=0x%X race=%u sex=%u visuals=%zu (%zuB) via 0x03DC\n",
                         guid, ap.Race, ap.Sex, ap.Visuals.size(), ent.size());
+            // PATH AS EARLY AS POSSIBLE (move#1): 0x06BC builds the path object BEFORE PathTracker's
+            // OnDocumentReady runs, so PathTrackerSetup() sees a valid path and builds wndActiveHeader.
+            // Then when 0x06BC's PlayerPathRefresh -> ResizeAll fires, the header already exists ->
+            // no NRE. (Sent at move#4 it lost the race to the addon's early load.)
+            auto ppEarly = proto::WorldEntryMessages::BuildSetPlayerPath(1);
+            co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpSetPlayerPath, ppEarly);
+            std::printf("realm-conn: -> 0x06BC SetPlayerPath (Soldier, move#1 EARLY) -> PathTracker header pre-built\n");
         } else if (!s.player_set_sent && s.world_move_count >= 4) {
             // 3) 0x019B set-player (primary; sub_1403B5AD0): looks up the entity, sets BOTH the
             //    current player (+120) AND the container (+25744) from it, then fires PlayerChanged.
@@ -392,12 +399,10 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
                 }
                 std::printf("realm-conn: -> %zu x 0x111 item-add (equipped+inventory) -> ItemAdded\n",
                             s.we_item_msgs.size());
+                // (Path already sent at move#1 so PathTracker's header is built before this fires.)
                 auto cd = proto::WorldEntryMessages::BuildCharacterDataMinimal();
                 co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpCharacterData, cd);
                 std::printf("realm-conn: -> 0x025E character-data (%zuB) -> fires CharacterCreated\n", cd.size());
-                auto pp = proto::WorldEntryMessages::BuildSetPlayerPath(1);
-                co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpSetPlayerPath, pp);
-                std::printf("realm-conn: -> 0x06BC SetPlayerPath (Soldier, early) -> PathTracker green\n");
             }
         } else if (!s.loadscreen_sent && s.player_set_sent && s.world_move_count >= 6) {
             // *** THE COMPLETION TRIGGER: world opcode 0x0061 -> sub_1403C74D0 = "PlayerEnteredWorld".
