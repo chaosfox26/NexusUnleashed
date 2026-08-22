@@ -48,11 +48,15 @@ W-DISP 0xad at +1.5s before the movement sequence.) game_server.SpawnDelayed is 
 ## ACTIVE TASK — remaining proving-ground polish (continuous)
 
 ## OTHER OPEN POLISH (after PathTracker)
-- POSE: she renders lying down = a StandState (client enum Stand/Sit/LyingDown/DeathPose/... via
-  GetStandState). HP is fine (250/250, probed) so NOT death. Setter is name-stripped; trace
-  GetStandState's native -> unit-struct offset -> find the entity field / ServerUnit* msg that sets it;
-  set Stand(0). Likely a top-level 0x0262 field (selectors/tail) or a unit property. Arkship "wake up
-  unconscious" intro state.
+- POSE: she renders lying down = StandState. CONFIRMED offset via live probe: **unit+4896 (session+120)
+  = the render stand-state = 2 (LyingDown)**. HP fine (250/250) so NOT death. The client RE-APPLIES 2
+  every tick (Frida writes of 0 were overwritten x49) -> it's maintained from an authoritative source,
+  not a stale field. Readers that branch on ==2: sub_1403AFB10:272, sub_1403B2240:154 (animation
+  select). Static writer-search is noisy (offset 4896 collides across structs - it's an anim blend
+  index in sub_1405B5070). NEXT (dedicated pass): find the AUTHORITATIVE stand-state field (copied to
+  +4896 each tick) + where the entity construction / a ServerUnit* message sets it; set Stand(0). Likely
+  set from the 0x0262 entity data (default 2) or a unit property/emote. Arkship intro "unconscious" state.
+  Probes: %TEMP%/claude/pose_probe.py, pose_set.py.
 - ABILITIES ON BAR (#11): 0x111 location-type-4 = ability-book add (fires AbilityBookChange); need
   class-7 (Spellslinger) spell ids from Spell4/Spell4Base + the LAS-assignment message.
 - REAL HUD STATS (#12): real class/level max-HP (currently placeholder 250) via the stat tables +

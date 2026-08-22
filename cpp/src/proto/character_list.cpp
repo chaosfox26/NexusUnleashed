@@ -49,8 +49,8 @@ static void WriteCharacter(PacketWriter& w, const CharacterRecord& c) {
     w.WriteSingle(c.LocationZ);
     w.WriteSingle(0.f);
     w.WriteSingle(0.f);
-    w.WriteBits(c.Path & 0x7, 3);   // player path -> char-select carries it into the world so
-    w.WriteBit(false);              // PathTracker's GetPlayerPathType() is valid at addon load
+    w.WriteBits(c.Path & 0x7, 3);   // player path (drives the char-select path icon)
+    w.WriteBit(false);
     w.WriteBit(false);
     w.WriteUInt32(c.FactionId);
     w.WriteBits(0, 4);
