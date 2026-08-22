@@ -1100,3 +1100,29 @@ OR build a client-derived Item2 reader -> item->displayId (dress body) + item->C
 (pick correct class-7 starter kit) + Spell4 for abilities (loc-type-4 0x111 -> AbilityBookChange, + LAS
 assignment message TBD for the bar). WEAPON currently = Esper 81351 (bar works; cosmetic until stand pose).
 Input note: keyboard works (P=character panel, Esc=close top window); repeated presses TOGGLE - press once.
+
+### ★ OPCODE RECONCILE + SERVER-SIDE PERSISTENCE (2026-08-22)  commit f3e2d95
+OPCODE RECONCILE (#10): captured every client->server opcode via realm stdout->server.log
+(-RedirectStandardOutput). The engine already logs each inbound: "[RAW IN] container inner=0xNNNN"
++ "<- op=0xNNNN" for unhandled. RESULT: the client->server surface is TINY and now fully handled:
+  0x0592/0x058F realm-enter (handled), 0x07DD enter-world (handled), 0x038C movement (handled, 40+/entry),
+  0x07A4/0x07DF/create/0x0352-delete (handled), 0x07E0 (0B post-enter "world ready" ack - NOW handled,
+  no-op), 0x0000 (1B, benign decode artifact). **Opening the Character panel (P), Inventory (I), and
+  Options (Esc) sends NOTHING to the server** - those panels are 100% client-local.
+PERSISTENCE ANSWER (#9, the operator's "does it save"):
+  - UI / options / keybinds / addon layout = CLIENT-SIDE SavedVariables (%APPDATA%\NCSOFT\WildStar\
+    AddonSaveData\), written by the client on clean logout. Server not involved -> they already persist.
+  - CHARACTER STATE = SERVER-SIDE. Was NOT saved at all (no logout/save path existed). BUILT: an
+    on_disconnect hook (game_server) -> DbCharacterStore::UpdateCharacterState(charId, worldId, hasPos,
+    x,y,z) UPDATEs `character` SET lastOnline=NOW(), worldId[, locationX/Y/Z]. VERIFIED end-to-end:
+    char 32 lastOnline NULL -> "2026-08-22 01:00:20", position preserved (not corrupted).
+  - LIVE POSITION NOT YET PERSISTED: 0x038C does NOT carry the absolute world position as a plain
+    float triple. Scans: off15 = denormal-zero junk; off27 = (-30105,1005,205)-changing (velocity or a
+    scaled/delta encoding), never the spawn (1437.82,85.53,-106.82). Position save GATED OFF (hasPos
+    stays false) so the stored spawn is preserved. TODO: RE the client 0x038C movement send format to
+    decode position (then flip we_has_pos on and it persists through the same path).
+STATE: action bar (670a7a6), persistent gear (b7536bc), reconcile+save (f3e2d95) all committed+verified.
+Remaining of the operator's "all 3": #11 abilities on bar (needs class-7 Spell4 ids + LAS-assign msg;
+0x111 loc-type-4 = ability-book add path), #12 full HUD stats (health done via 0x0262 prop id 12;
+resource/other stats need the UnitProperty id map from sub_140458140 switch: id12=Health cur/max,
+ids 1-9 -> unit+536..568, id20 -> unit+72, etc.).
