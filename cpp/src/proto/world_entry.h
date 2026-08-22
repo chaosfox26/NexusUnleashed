@@ -4,139 +4,63 @@
 #include <utility>
 #include <vector>
 
-// World-entry message serializers. Wire layouts are CLIENT-DERIVED (deser.py on the
-// client's own Read functions; see spec/protocol/world-entry.md "CLIENT-DERIVED
-// MESSAGE FORMATS"). Zero captures, zero NF. Generated from our DB per-character.
+// World-entry message serializers. Wire layouts are client-derived; generated per-character from
+// the DB. See cpp/docs/CODE-NOTES.md "World entry" for the format/reference details.
 namespace nexus::proto {
 
-struct WorldEntryTarget {
-    uint64_t Guid = 0;      // the player's entity guid (character id)
-    uint32_t WorldId = 0;   // target world (client already knows this from the char list)
-    float X = 0.f, Y = 0.f, Z = 0.f;
-    uint32_t Race = 0, Class = 0, Sex = 0, FactionId = 0;
-};
-
-// The per-character body the 0x0262 player entity renders. Loaded from characterdb
-// (race/class/sex from `character`; Visuals = slot->displayId rows from
-// character_appearance, the same rows the char-select screen renders). Faction is the
-// ENTITY-CONSTRUCTION faction (must install the +272 unit component); it is NOT the DB
-// factionId (167 for Exiles) — 166 (Exiles Player) is the value the client construction
-// accepts. Body rendering is faction-agnostic, so 166 is used for every race for now.
+// Per-character body the 0x0262 player entity renders. Race/class/sex from `character`; Visuals =
+// {slot, displayId} rows from character_appearance. Faction is the entity-construction key (166),
+// NOT the DB factionId.
 struct PlayerAppearance {
-    uint32_t Race = 4;      // DB character.race   (4 = Aurin)
-    uint32_t Class = 7;     // DB character.class
-    uint32_t Sex = 1;       // DB character.sex    (1 = female)
-    uint32_t Faction = 166; // entity-construction faction (installs +272); NOT DB factionId
+    uint32_t Race = 4;
+    uint32_t Class = 7;
+    uint32_t Sex = 1;
+    uint32_t Faction = 166;
     std::u16string Name = u"Peryanna Meadowclover";
-    std::vector<std::pair<uint16_t, uint16_t>> Visuals; // {slot, displayId}
+    std::vector<std::pair<uint16_t, uint16_t>> Visuals;
 };
 
 class WorldEntryMessages {
 public:
-    // 0x0981 world-init: [u32 count][count x u32 id]
-    static constexpr uint16_t OpWorldInit = 0x0981;
-    static std::vector<uint8_t> BuildWorldInit(const std::vector<uint32_t>& ids);
-
-    // 0x0988: [u32 n1][n1 x {wstr,wstr,u32,u32,u32,1b}][3b][u32 n2][n2 x {u32,wstr,u32,u32}]
-    // First candidate sends both lists empty (the client-derived shape with zero entries).
-    static constexpr uint16_t Op0988 = 0x0988;
-    static std::vector<uint8_t> Build0988Empty();
-
-    // 0x098B zone blob: [u32 count][...]; first candidate sends count 0.
-    static constexpr uint16_t Op098B = 0x098B;
-    static std::vector<uint8_t> Build098BEmpty();
-
-    // 0x00AD — THE WORLD-ENTER response. Client handler sub_140022480 runs ONLY in
-    // char-select state 4 (right after Enter Game/0x07DD): reads 6 u32s (worldId + 5 floats)
-    // into +456..476, sets up the world connection with the pending char, and sets mgr
-    // state 5 (LOADING). Wire (client Read sub_14007E9E0): [15 bits worldId][5 x float32]
-    // (the 5 floats = X,Y,Z + 2, matching the char-list vec5 pattern). This is what makes
-    // the client leave char-select and load the world at the spawn.
+    // 0x00AD world-enter: [15b worldId][5 x f32].
     static constexpr uint16_t OpWorldEnter = 0x00AD;
     static std::vector<uint8_t> BuildWorldEnter(uint32_t worldId, float x, float y, float z,
                                                 float f4 = 0.f, float f5 = 0.f);
 
-    // 0x0262 entity-create. Client Read WS+0x96FA0, 270 fixed bits + arrays. Minimal player
-    // entity: guid + type + all arrays empty (cmdCount 0). The client fires PlayerChanged when
-    // it matches an entity to the player it's tracking (guid read live from the client's 0x038C
-    // movement). Full tree in spec/protocol/world-entry.md.
+    // 0x0262 entity-create (kind 20 = Player): identity + race/sex/class/name, Health property,
+    // a position keyframe, item-visuals, and faction (installs the unit component).
     static constexpr uint16_t OpEntityCreate = 0x0262;
-    static std::vector<uint8_t> BuildPlayerEntityMinimal(uint32_t guid, uint32_t type);
-    // Full entity WITH a position command (so it's placed in the world grid + lookup map).
-    // Appearance (race/sex/class/name/item-visuals) comes per-character from the DB.
     static std::vector<uint8_t> BuildPlayerEntity(uint32_t guid, float x, float y, float z,
                                                   const PlayerAppearance& appearance);
 
-    // 0x019B — SET PLAYER UNIT (char-select mgr variant, sub_1403B5AD0). Requires the entity to
-    // already exist AND carry a +272 component; rejected as "foreign Message Id #411" on the world
-    // channel. Superseded by 0x636 below. Kept for reference.
+    // 0x019B set-player.
     static constexpr uint16_t OpSetPlayer = 0x019B;
     static std::vector<uint8_t> BuildSetPlayer(uint32_t guid, uint32_t field1 = 0);
 
-    // 0x036A — WORLD-CHANGE COMPLETE -> render the game world. Client dispatch case 0x366/0x36A ->
-    // sub_1403B6D10, which (on no error) transitions the UI from the world load-art to the game
-    // screen (qword_140C635F0+5888). This is the message that actually drops the loading overlay
-    // and renders the world. Wire (client Read sub_14007E950): [5b status] (0 = success).
+    // 0x036A world-change-complete: [5b status] (0 = success).
     static constexpr uint16_t OpWorldChangeDone = 0x036A;
     static std::vector<uint8_t> BuildWorldChangeDone(uint8_t status = 0);
 
-    // 0x03D0 — LOADING-SCREEN control. Client dispatch cases 0x3CF-0x3D2 all route to the load
-    // screen object (qword_140C65A48). 0x3D0 is a single 3-bit state (client Read sub_14007FDC0).
-    // Sending it is what dismisses the world-load overlay once the player is placed. Wire: [3b state].
-    static constexpr uint16_t OpLoadScreen = 0x03D0;
-    static std::vector<uint8_t> BuildLoadScreenState(uint8_t state);
-
-    // 0x845 loading progress: [u32 current][u32 field1][u32 max]. Fills the load bar and
-    // provides world-channel keepalive traffic during the client's load state.
+    // 0x0845 loading progress / world-channel keepalive: [u32 current][u32 field1][u32 max].
     static constexpr uint16_t OpLoadProgress = 0x0845;
     static std::vector<uint8_t> BuildLoadProgress(uint32_t current, uint32_t field1, uint32_t max);
 
-    // 0x025E — THE CHARACTER-DATA blob (client dispatch case 0x25E -> sub_1403B5F80), which at its end
-    // fires the client event "CharacterCreated" that 26 stock addons listen to (ActionBarFrame shows
-    // its art bar on it; PathTracker gets its path). sub_1403B5F80 is straight-line (no early-return
-    // before the fire), so a blob that merely PARSES reaches the fire. A zeroed body reads as all
-    // fixed fields 0 + all array counts 0 (empty-but-valid character) -> fires CharacterCreated.
+    // 0x025E character-data blob -> fires CharacterCreated.
     static constexpr uint16_t OpCharacterData = 0x025E;
     static std::vector<uint8_t> BuildCharacterDataMinimal();
 
-    // 0x06BC — SET PLAYER PATH (client dispatch case 0x6BC -> sub_1404927D0 -> fires "SetPlayerPath").
-    // PathTracker (and the path UI) only build their windows on this event; without it PathTracker
-    // bails in PathTrackerSetup (path nil) and then errors forever in ResizeAll (wndActiveHeader nil).
-    // Wire (reader sub_14008D480): [3b pathType][16 bytes][4b][f32]. pathType is 1-based:
-    // 1 Soldier / 2 Settler / 3 Scientist / 4 Explorer (0 = none). Fixes the red PathTracker addon.
+    // 0x06BC set player path: [3b pathType][16 bytes][4b][f32] (1 Soldier / 2 Settler / 3 Scientist / 4 Explorer).
     static constexpr uint16_t OpSetPlayerPath = 0x06BC;
     static std::vector<uint8_t> BuildSetPlayerPath(uint8_t pathType);
 
-    // 0x0935 — per-entity position/movement update (client dispatch case 0x935 -> entity lookup by
-    // guid, then sub_1403D9A60). Requires the entity to exist. Used as a GAMEPLAY-valid keepalive
-    // after the game screen (0x0845 loading-progress errors once the loading screen is torn down;
-    // 0x0935 targets the live player entity so it processes cleanly and feeds the receive watchdog).
-    // Wire (handler reads a4 as dwords): [u32 guid][u32 field1][f32 value].
-    static constexpr uint16_t OpEntityMove = 0x0935;
-    static std::vector<uint8_t> BuildEntityHeartbeat(uint32_t guid);
-
-    // 0x111 — ITEM ADD (client dispatch case 0x111 -> sub_1403B8380 -> creates the item in the
-    // client item cache (a1+160) keyed by its LOCATION, then fires "ItemAdded" via sub_1403B8060).
-    // Wire is CLIENT-DERIVED from read fn sub_14008CDA0 -> sub_14008C0D0 (+ a 6b tail at +168):
-    //   u64 guid @+0 | u64 @+8 | 18b ITEM-ID @+16 | location{9b type @+20, 32b slot @+24} |
-    //   32b @+28 | 32b @+32 | u64 @+40 | 32b @+48 | u64 @+56 | f32 @+64 | 32b @+68 | 8b @+72 |
-    //   32b @+76 | 32b @+80 | 32b @+84 | 2x{3b,32b,32b} @+88 | 18b @+112 |
-    //   3b countA @+116 -> countA*4 raw bytes | 4b countB @+128 -> countB*4 raw bytes |
-    //   6b countC @+144 -> countC * (16-byte element sub_1400852F0) | 32b @+160 | 6b @+168.
-    // Location model (from OUR characterdb.item table): type 0 = EQUIPPED, slot 16 = weapon
-    // (matches ActionBarFrame IsWeaponEquipped: GetSlot()==16). An item added directly at
-    // {type 0, slot 16} equips it -> hud.skillsBarDisplay flips -> the action bar shows.
-    // Location type 4 is the ability-book path (fires "AbilityBookChange"), handled separately.
+    // 0x111 item add: guid + itemId + location{type,slot} + instance state.
     static constexpr uint16_t OpItemAdd = 0x111;
     static std::vector<uint8_t> BuildItemAdd(uint64_t itemGuid, uint32_t itemId,
                                              uint16_t locationType, uint32_t slotIndex,
                                              uint32_t stackCount = 1, float durability = 1.0f);
 
-    // 0x636 — THE world-channel SET PLAYER UNIT (client dispatch case 0x636 -> sub_14057A630).
-    // Unlike 0x019B it has the expectedPlayer FALLBACK: if entity[guid] exists it binds it now;
-    // if not, it stores guid at expectedPlayer(+25728) so the next 0x0262 entity-create with that
-    // guid auto-binds as the player (client sub_1403D9760 line 928340) and fires PlayerChanged.
-    // Wire (client Read sub_1400B09D0): [32b unitId][1b flag][32b playerGuid].
+    // 0x636 set-player-unit: [32b unitId][1b flag][32b playerGuid]. Sent before 0x0262 so the
+    // expectedPlayer fallback auto-binds the created entity as the player.
     static constexpr uint16_t OpSetPlayerUnit = 0x636;
     static std::vector<uint8_t> BuildSetPlayerUnit(uint32_t guid, bool flag = true);
 };
