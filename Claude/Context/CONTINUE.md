@@ -56,7 +56,12 @@ W-DISP 0xad at +1.5s before the movement sequence.) game_server.SpawnDelayed is 
   index in sub_1405B5070). NEXT (dedicated pass): find the AUTHORITATIVE stand-state field (copied to
   +4896 each tick) + where the entity construction / a ServerUnit* message sets it; set Stand(0). Likely
   set from the 0x0262 entity data (default 2) or a unit property/emote. Arkship intro "unconscious" state.
-  Probes: %TEMP%/claude/pose_probe.py, pose_set.py.
+  Probes: %TEMP%/claude/pose_probe.py, pose_set.py. HW-WATCHPOINT (hwwatch_pose.py) caught the writer:
+  instruction +0x5b81fb (in sub_1405B5070, the ANIMATION blend/state computation), called per-tick from
+  +0x1c8add/+0x1c8991 (unit update). So +4896 is COMPUTED by the anim system from an upstream
+  authoritative pose - not directly settable. NEXT: watchpoint/trace the anim system's INPUT (the
+  authoritative stand-state the server sets via a ServerUnit* message or the 0x0262 entity data) and
+  set Stand(0). Deep animation-system dive.
 - ABILITIES ON BAR (#11): ability-book add = 0x111 location-type-4 (a2[5]==4 branch of sub_1403B77D0
   -> sub_140608C60(slot,spellId) + fires "AbilityBookChange"). But the action bar shows the LAS
   (ActionSetLib), a separate equipped set - adding to the book != on the bar. OPEN: (a) class-7
