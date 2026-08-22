@@ -91,6 +91,14 @@ public:
     static constexpr uint16_t OpLoadProgress = 0x0845;
     static std::vector<uint8_t> BuildLoadProgress(uint32_t current, uint32_t field1, uint32_t max);
 
+    // 0x025E — THE CHARACTER-DATA blob (client dispatch case 0x25E -> sub_1403B5F80), which at its end
+    // fires the client event "CharacterCreated" that 26 stock addons listen to (ActionBarFrame shows
+    // its art bar on it; PathTracker gets its path). sub_1403B5F80 is straight-line (no early-return
+    // before the fire), so a blob that merely PARSES reaches the fire. A zeroed body reads as all
+    // fixed fields 0 + all array counts 0 (empty-but-valid character) -> fires CharacterCreated.
+    static constexpr uint16_t OpCharacterData = 0x025E;
+    static std::vector<uint8_t> BuildCharacterDataMinimal();
+
     // 0x0935 — per-entity position/movement update (client dispatch case 0x935 -> entity lookup by
     // guid, then sub_1403D9A60). Requires the entity to exist. Used as a GAMEPLAY-valid keepalive
     // after the game screen (0x0845 loading-progress errors once the loading screen is torn down;

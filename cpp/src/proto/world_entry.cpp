@@ -198,6 +198,14 @@ std::vector<uint8_t> WorldEntryMessages::BuildLoadScreenState(uint8_t state) {
     return w.ToArray();
 }
 
+std::vector<uint8_t> WorldEntryMessages::BuildCharacterDataMinimal() {
+    // Minimal 0x025E: a zeroed body. The client's bit-packed reader takes all fixed fields as 0 and
+    // every count-prefixed array as empty, i.e. a valid "empty" character, then sub_1403B5F80 fires
+    // "CharacterCreated" -> the action bar art + 26 addons initialize. 512 zero bytes generously
+    // covers the fixed-field region; the reader consumes what it needs and ignores the remainder.
+    return std::vector<uint8_t>(512, 0x00);
+}
+
 std::vector<uint8_t> WorldEntryMessages::BuildEntityHeartbeat(uint32_t guid) {
     // 0x0935 keepalive for the player entity. Handler (WorldPaketHandler case 0x935) reads a4[0]=guid,
     // a4[1]=field1, (float)a4[2]=value, looks up the entity, and calls sub_1403D9A60. Sending it for
