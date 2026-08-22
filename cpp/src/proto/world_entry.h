@@ -115,6 +115,23 @@ public:
     static constexpr uint16_t OpEntityMove = 0x0935;
     static std::vector<uint8_t> BuildEntityHeartbeat(uint32_t guid);
 
+    // 0x111 — ITEM ADD (client dispatch case 0x111 -> sub_1403B8380 -> creates the item in the
+    // client item cache (a1+160) keyed by its LOCATION, then fires "ItemAdded" via sub_1403B8060).
+    // Wire is CLIENT-DERIVED from read fn sub_14008CDA0 -> sub_14008C0D0 (+ a 6b tail at +168):
+    //   u64 guid @+0 | u64 @+8 | 18b ITEM-ID @+16 | location{9b type @+20, 32b slot @+24} |
+    //   32b @+28 | 32b @+32 | u64 @+40 | 32b @+48 | u64 @+56 | f32 @+64 | 32b @+68 | 8b @+72 |
+    //   32b @+76 | 32b @+80 | 32b @+84 | 2x{3b,32b,32b} @+88 | 18b @+112 |
+    //   3b countA @+116 -> countA*4 raw bytes | 4b countB @+128 -> countB*4 raw bytes |
+    //   6b countC @+144 -> countC * (16-byte element sub_1400852F0) | 32b @+160 | 6b @+168.
+    // Location model (from OUR characterdb.item table): type 0 = EQUIPPED, slot 16 = weapon
+    // (matches ActionBarFrame IsWeaponEquipped: GetSlot()==16). An item added directly at
+    // {type 0, slot 16} equips it -> hud.skillsBarDisplay flips -> the action bar shows.
+    // Location type 4 is the ability-book path (fires "AbilityBookChange"), handled separately.
+    static constexpr uint16_t OpItemAdd = 0x111;
+    static std::vector<uint8_t> BuildItemAdd(uint64_t itemGuid, uint32_t itemId,
+                                             uint16_t locationType, uint32_t slotIndex,
+                                             uint32_t stackCount = 1, float durability = 1.0f);
+
     // 0x636 — THE world-channel SET PLAYER UNIT (client dispatch case 0x636 -> sub_14057A630).
     // Unlike 0x019B it has the expectedPlayer FALLBACK: if entity[guid] exists it binds it now;
     // if not, it stores guid at expectedPlayer(+25728) so the next 0x0262 entity-create with that

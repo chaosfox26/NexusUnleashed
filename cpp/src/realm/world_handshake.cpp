@@ -351,6 +351,14 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
             // ResizeAll timer tick -> the addon loads with ZERO errors -> fully GREEN (not yellow).
             if (!s.chardata_sent) {
                 s.chardata_sent = true;
+                // ITEM ADD FIRST: put a weapon in the client item cache at the EQUIPPED weapon slot
+                // (location type 0, slot 16) BEFORE 0x025E. ActionBarFrame:InitializeBars runs on the
+                // CharacterCreated that 0x025E fires and calls IsWeaponEquipped() (GetSlot()==16); if the
+                // weapon is already cached it sets hud.skillsBarDisplay=1 -> the action bar becomes visible.
+                // itemId 81351 = a real 16042-client weapon; guid is a server-assigned instance id.
+                auto ia = proto::WorldEntryMessages::BuildItemAdd(0x5000000010ull, 81351, 0, 16);
+                co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpItemAdd, ia);
+                std::printf("realm-conn: -> 0x111 item-add (id 81351 @ equip slot 16, %zuB) -> ItemAdded\n", ia.size());
                 auto cd = proto::WorldEntryMessages::BuildCharacterDataMinimal();
                 co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpCharacterData, cd);
                 std::printf("realm-conn: -> 0x025E character-data (%zuB) -> fires CharacterCreated\n", cd.size());

@@ -270,4 +270,43 @@ std::vector<uint8_t> WorldEntryMessages::BuildSetPlayerUnit(uint32_t guid, bool 
     return w.ToArray();
 }
 
+std::vector<uint8_t> WorldEntryMessages::BuildItemAdd(uint64_t itemGuid, uint32_t itemId,
+                                                     uint16_t locationType, uint32_t slotIndex,
+                                                     uint32_t stackCount, float durability) {
+    // CLIENT-DERIVED from read fn sub_14008C0D0 (the item struct) + the 6b tail in sub_14008CDA0.
+    // Field order EXACTLY as the reader consumes it. The client renders the item from its own
+    // Item2.tbl by ITEM-ID (@+16); everything else is instance state. Unknowns are 0 and will be
+    // pinned by live test against the client (the behavioral oracle) if the item mis-renders.
+    PacketWriter w;
+    w.WriteUInt64(itemGuid);              // @+0    u64  item instance guid   (sub_14006C120)
+    w.WriteUInt64(0);                     // @+8    u64
+    w.WriteBits(itemId & 0x3FFFF, 18);    // @+16   18b  ITEM-ID (Item2.tbl key) (sub_14006C090 N=0x12)
+    // location substruct (sub_14008DA10): [9b type][32b slot]
+    w.WriteBits(locationType & 0x1FF, 9); // @+20   9b   location type (0 = equipped)
+    w.WriteUInt32(slotIndex);             // @+24   32b  slot index (16 = weapon)
+    w.WriteUInt32(stackCount);            // @+28   32b  (candidate: stack count)
+    w.WriteUInt32(0);                     // @+32   32b
+    w.WriteUInt64(0);                     // @+40   u64
+    w.WriteUInt32(0);                     // @+48   32b
+    w.WriteUInt64(0);                     // @+56   u64
+    w.WriteSingle(durability);            // @+64   f32  (candidate: durability) (sub_14006C1C0)
+    w.WriteUInt32(0);                     // @+68   32b
+    w.WriteBits(0, 8);                    // @+72   8b   (sub_14006BE30)
+    w.WriteUInt32(0);                     // @+76   32b
+    w.WriteUInt32(0);                     // @+80   32b
+    w.WriteUInt32(0);                     // @+84   32b
+    for (int i = 0; i < 2; ++i) {         // @+88   2 x {3b, 32b, 32b}  (rune/glyph slots)
+        w.WriteBits(0, 3);
+        w.WriteUInt32(0);
+        w.WriteUInt32(0);
+    }
+    w.WriteBits(0, 18);                   // @+112  18b
+    w.WriteBits(0, 3);                    // @+116  3b   countA = 0 -> no 4-byte-block A
+    w.WriteBits(0, 4);                    // @+128  4b   countB = 0 -> no 4-byte-block B
+    w.WriteBits(0, 6);                    // @+144  6b   countC = 0 -> no 16-byte element array
+    w.WriteUInt32(0);                     // @+160  32b
+    w.WriteBits(0, 6);                    // @+168  6b   (tail, sub_14008CDA0)
+    return w.ToArray();
+}
+
 } // namespace nexus::proto
