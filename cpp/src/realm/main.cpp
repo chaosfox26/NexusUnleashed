@@ -112,6 +112,16 @@ int main() {
 
     net::GameServer realmConn(io, cfg.bind_address, cfg.world_port, false);
     realm::WorldHandshake::RegisterRealmConnection(realmConn);
+    // Persist live character state (position/world) when the world connection drops -> gear,
+    // appearance AND position now survive across logins (server-side persistence).
+    realmConn.on_disconnect = [&charStore](net::GameSession& s) {
+        if (s.we_charid == 0) return;
+        bool ok = charStore.UpdateCharacterState(s.we_charid, s.we_world,
+                                                 s.we_has_pos, s.we_x, s.we_y, s.we_z);
+        std::printf("realm: disconnect save char %llu world=%u pos=%s(%.2f,%.2f,%.2f) -> %s\n",
+                    (unsigned long long)s.we_charid, s.we_world,
+                    s.we_has_pos ? "" : "(none)", s.we_x, s.we_y, s.we_z, ok ? "OK" : "FAILED");
+    };
     realmConn.Start();
     std::printf("realm connection server listening on %u\n", cfg.world_port);
 

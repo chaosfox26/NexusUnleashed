@@ -116,6 +116,7 @@ awaitable<void> GameSession::Run() {
             }
         }
     } catch (const std::exception&) {}
+    if (server_.on_disconnect) { try { server_.on_disconnect(*this); } catch (const std::exception&) {} }
     co_return;
 }
 

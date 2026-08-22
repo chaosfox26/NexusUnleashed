@@ -57,6 +57,12 @@ public:
     // characterdb.item on 0x07DD and streamed to the client at move#4 so its cache has the gear
     // (equip slot 16 weapon -> action bar shows; other slots -> paperdoll / inventory).
     std::vector<std::vector<uint8_t>> we_item_msgs;
+    // persistence: the entering character id (from 0x07DD) and the latest live position parsed
+    // from the client's 0x038C movement stream, saved to characterdb on disconnect.
+    uint64_t we_charid = 0;
+    uint32_t we_world = 0;
+    bool  we_has_pos = false;
+    float we_x = 0.f, we_y = 0.f, we_z = 0.f;
 
     std::string remote() const;
 
@@ -76,12 +82,14 @@ public:
     using Handler   = std::function<asio::awaitable<void>(GameSession&, const std::vector<uint8_t>&)>;
     using Connected = std::function<asio::awaitable<void>(GameSession&)>;
     using Unhandled = std::function<void(GameSession&, uint16_t, const std::vector<uint8_t>&)>;
+    using Disconnected = std::function<void(GameSession&)>;
 
     GameServer(asio::io_context& io, const std::string& address, uint16_t port, bool worldChannel);
 
     void On(uint16_t opcode, Handler h) { handlers_[opcode] = std::move(h); }
     Connected on_connected;
     Unhandled on_unhandled;
+    Disconnected on_disconnect;   // fires when a session's socket closes (save character state)
 
     void Start();
 

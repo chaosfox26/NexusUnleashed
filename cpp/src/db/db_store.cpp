@@ -181,6 +181,22 @@ std::vector<CharacterItem> DbCharacterStore::GetCharacterItems(uint64_t characte
     return items;
 }
 
+bool DbCharacterStore::UpdateCharacterState(uint64_t characterId, uint32_t worldId,
+                                            bool hasPos, float x, float y, float z) {
+    if (characterId == 0) return false;
+    Conn c(ci_, ci_.database);
+    std::string q = "UPDATE `character` SET lastOnline=NOW()";
+    if (worldId) q += ", worldId=" + std::to_string(worldId);
+    if (hasPos) {
+        q += ", locationX=" + std::to_string(x) +
+             ", locationY=" + std::to_string(y) +
+             ", locationZ=" + std::to_string(z);
+    }
+    q += " WHERE id=" + std::to_string(characterId);
+    if (mysql_real_query(c.m, q.c_str(), (unsigned long)q.size()) != 0) return false;
+    return mysql_affected_rows(c.m) >= 0;
+}
+
 uint64_t DbCharacterStore::CreateCharacter(long accountId, const NewCharacter& nc) {
     if (accountId <= 0) return 0;
     Conn c(ci_, ci_.database);

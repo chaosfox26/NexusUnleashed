@@ -50,6 +50,11 @@ public:
     std::vector<proto::CharacterRecord> GetCharacters(long accountId);
     // Items owned by a character (equipped + inventory), for streaming on world entry.
     std::vector<CharacterItem> GetCharacterItems(uint64_t characterId);
+    // Persist live character state on logout (position + world + lastOnline). Position is only
+    // written when hasPos is true (a real movement was observed), so a straight enter/exit keeps
+    // the stored spawn. Returns true on a successful UPDATE.
+    bool UpdateCharacterState(uint64_t characterId, uint32_t worldId,
+                              bool hasPos, float x, float y, float z);
     uint64_t CreateCharacter(long accountId, const NewCharacter& nc);
     bool DeleteCharacter(long accountId, uint64_t characterId);
 private:

@@ -7,6 +7,7 @@
 #include "sts/auth_flow.h"
 #include <cstdio>
 #include <cstring>
+#include <cmath>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -181,6 +182,12 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
         co_return;
     };
 
+    // 0x07E0 = client "world ready / loaded" ack, sent once (0 bytes) right after world entry.
+    // No state to update; acknowledged so it stops showing as unhandled in the opcode reconcile.
+    server.On(0x07E0, [](net::GameSession&, const std::vector<uint8_t>&) -> awaitable<void> {
+        std::printf("realm-conn: <- 0x07E0 client world-ready ack (no-op)\n");
+        co_return;
+    });
     server.On(0x058F, [](net::GameSession& s, const std::vector<uint8_t>& body) -> awaitable<void> {
         std::printf("realm-conn: <- 0x058F realm-enter (%zuB) -> RE-KEY channel to RealmLaneKey\n", body.size());
         s.crypt.emplace(net::WorldPacket::RealmLaneKey);
@@ -258,6 +265,8 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
         uint64_t charId = 0;
         for (size_t i = 0; i < body.size() && i < 8; ++i) charId |= (uint64_t)body[i] << (8 * i);
         std::printf("realm-conn: <- 0x07DD EnterWorld charId=%llu\n", (unsigned long long)charId);
+        s.we_charid = charId;   // remember for the disconnect save
+        s.we_world  = TWID;
 
         // Load the entering character's body from characterdb so the 0x0262 player entity (built
         // later on the first 0x038C movement, once we know the client's live guid) renders THIS
@@ -321,6 +330,11 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
         for (int i = 0; i < 8; ++i) guid64 |= (uint64_t)body[7 + i] << (8 * i);
         uint32_t guid = (uint32_t)guid64;
         if (guid == 0) co_return;
+
+        // NOTE: 0x038C does NOT carry the absolute world position as a plain float triple (scans
+        // matched only junk / a non-position encoding), so live position is NOT persisted yet -
+        // decoding the client's movement format is a separate task. lastOnline + worldId still
+        // persist on disconnect below; we_has_pos stays false so the stored spawn is preserved.
 
         if (!s.player_entity_sent) {
             s.player_entity_sent = true;
