@@ -1212,3 +1212,100 @@ DEEP FRONTIER (each a dedicated dive; trailheads in CONTINUE.md):
   COMPUTED from an upstream authoritative pose -> trace that input; set Stand(0).
 - HUD stats: HP is gameFormula-derived (250 ok for lvl1); other stats via unit-property ids
   (sub_140458140: id12=Health; ids 1-25 = others).
+
+---
+
+## ★★ 2026-08-22 — STANDING POSE DEEP DIVE (measurement-driven; operator "drive the client" mode)
+
+**State of the bug:** character renders LYING DOWN and is MOVEMENT-LOCKED. Verified in EVERY world
+(swapped spawn to Everstar Grove world 990 — identical lying), so it is NOT the arkship intro. All
+findings below are LIVE measurements against the running retail client via Frida (tools in
+%TEMP%/claude), not inference.
+
+**PRIOR NOTES DISPROVEN (do not trust the old pose notes):**
+- `unit+4896` is NOT the render pose — it is a velocity-blend index. Hammered it to 0 (3599 writes,
+  held at 0) → NO visual change. (pose_hammer.py)
+- `unit+440` is the STAND-STATE, not HP. Proven: GetStandState Lua binding = sub_140656560 reads
+  `*(int*)(entity+440)` and indexes the enum table off_140C3AC50 (Stand=0,Sit=1,LyingDown=2,...).
+- Real HP is `unit+444` (cur) and `unit+464` (max) — live = 250/250. She is NOT dead/downed.
+  (health_scan.py) The old hp_probe.py that read +440 as HP was WRONG.
+
+**RULED OUT (each measured):**
+- Intro/tutorial — lies in normal zone 990 too.
+- HP/death — 250/250 live.
+- Player-bind — 0x019B handler sub_1403B5AD0 sets `session+120`(player unit) + `session+25744`
+  (container), requires the `unit+272` component (installed by faction 166), fires "PlayerChanged".
+  All present; UI/emotes/panel all work.
+- Stand-state — +440=0 (Stand). Called SetStandState(sub_14045BF30) live Sit(1)→Stand(0): flag
+  changed, NO visual change. (pose_transition_test.py)
+- Spline — the type-2 movement I send creates a live spline node in the +3936 subsystem
+  (spline_probe.py saw a real heap ptr at unit+3936+128). BUT clearing it (clear_spline.py) left her
+  STILL frozen+lying → spline is a RED HERRING. **WARNING: writing a live spline node ptr to 0
+  CRASHED the client** (dangling pointer). Read-only probe live pointers.
+- Camera / gameplay-mode — **operator confirmed the CAMERA WORKS** (mouse-look + zoom). Only the
+  CHARACTER is locked. So the client IS in gameplay mode with a valid camera target.
+
+**KEY POSITIVE FINDINGS:**
+1. A SECOND, UNBOUND copy of the entity (spawned via BuildPlayerEntity with a different guid, NOT
+   set as player) ALSO lies down, identically. → the lying is the DEFAULT IDLE animation applied to
+   ANY entity my 0x0262 creates. It is NOT about being the controlled/player unit.
+2. Emotes /sit and /stand flip +440 (0→1→0) via sub_1404739B0 and even call the play-animation
+   function sub_140474400(unit, animId, flag) — but the operator confirmed her body does NOT visually
+   change. → her MODEL ANIMATION CONTROLLER appears FROZEN at the initial (lying) frame; logic runs
+   but the animation never advances.
+3. Writing unit+4576 (position) live does NOT stick — an interpolator overwrites it each frame.
+4. Movement input (operator held W ~5s; I also held W 3s while reading unit+4576) produced ZERO
+   position/velocity change. (move_test.py, watch_live.py)
+
+**ENTITY DATA VERIFIED CORRECT** — hooked the client's own 0x0262 reader sub_140096FA0 (opcode 610,
+registered with struct size 288) and dumped the parsed struct (dump_entity.py). Field map of
+sub_140096FA0 (offsets into the parsed struct a3):
+- +0 guid(32b); +4 kind(6b)=20 → dispatch funcs_14009702A[kind] reads kind-block into +8
+  (Player kind-block reader = sub_1400962D0, which my builder matches field-for-field).
+- +128 (8b) scalar; +129 (5b) = unit-property COUNT; property array (16B elems, reader sub_140096230:
+  5b id + 2b type + type-data; type2 reader sub_14007A040 = 2×u32 {cur,max}).
+- +144 (32b); +148 (5b)=movement COUNT; movement array (reader sub_1400AF930: 5b type + type-data;
+  type2 reader sub_1400AD350 = 3 f32 + 1b → applied by sub_1407138F0 as a spline node in +3936).
+- +160 (8b) count3; array via sub_1400961D0 (12B). +176 (7b) item-visual count; visual reader
+  sub_1400AB890 = 7b slot + 15b displayId + 14b + 32b (matches my builder). +192 (9b) count5;
+  array via sub_140094BF0 (64B). +208 (32b); +212 (14b) Faction1; +216 (14b) Faction2; +220 (32b);
+  +224 (u64); +232/+240/+264 each = 2b optional-component selector (sel0 → no-op reader
+  sub_1400853F0 reads 1 bit; sel1 → real sub-reader); +276 (14b); +280 (17b); +284 (15b).
+- DUMP RESULT (both my player entity AND the unbound copy): propCnt=1 prop{12,2,250,250},
+  movCnt=1 mov{type2, spawn coords}, faction 166/166, all selectors 0. So the data is RIGHT.
+
+**CURRENT LEAD / RESUME HERE:** the model animation controller is not advancing for created
+entities (frozen at the initial lying frame). NEXT MEASUREMENT: run %TEMP%/claude/anim_tick.py —
+it hooks the per-frame anim update sub_1405B5070 and the play-anim sub_140474400 and counts calls
+for the player unit. If sub_1405B5070 never fires for her unit → her animation is not being ticked
+(root cause); then find why a WORLD-created entity's animation set doesn't link/activate, given
+char-select force-loads the SAME model+anims and STANDS. (anim_tick.py was written but the client
+crashed from the spline write before it ran; client since relaunched and back in-world.)
+
+**Client functions catalogued this session:**
+- entity reader sub_140096FA0 (0x0262); Player kind-block reader sub_1400962D0; property reader
+  sub_140096230 (+type readers funcs_1400962B1, type2=sub_14007A040); movement reader sub_1400AF930
+  (+type readers funcs_1400AF98E[36], type2=sub_1400AD350→apply sub_1407138F0); item-visual reader
+  sub_1400AB890; no-op sub-reader sub_1400853F0.
+- GetStandState=sub_140656560 (reads entity+440); SetStandState=sub_14045BF30(unit,state,data);
+  server opcode 0x93C = [u32 guid][u32 state][u32 data] (registered client-side short-form size 12).
+- emote/anim: sub_1404739B0 (emote handler) → SetStandState + sub_140474400(unit,animId,flag)=play.
+- movement apply/interpolator sub_1404586E0 (sets unit+4896=2, +4932=39 defaults); per-frame anim
+  blend sub_1405B5070 (writes +4896 velocity blend); movement-element dispatch sub_1405B4AB0
+  (29 loco command types across subsystems +3904/+3936/+4080/+4144/+4256/+4320/+4208/+4232).
+- 0x636 handler sub_14057A630 (needs session+25744; calls player-anim-setup sub_14057A450 +
+  sub_14055BAC0 footstep/scale; calling it live did NOT fix pose). 0x019B handler sub_1403B5AD0.
+- movement-report loop sub_14057A2C0 (sends 0x637 from session+28808; runs = client thinks it
+  controls the player).
+
+**Code changes in tree this session (world_entry.cpp/.h, world_handshake.cpp) — NONE fixed the pose,
+all harmless & left in:** added OpSetStandState 0x93C + BuildStandState (sent +2500ms after 0x0061);
+movement position-keyframe trailing bit 0→1 (settle). Diagnostic 2nd-entity spawn added then removed.
+TWID reverted to 1537.
+
+**Frida probe tools created in %TEMP%/claude/:** watch_live.py (field monitor + SetStandState hook
+w/ backtrace), dump_entity.py (hooks reader, dumps parsed struct), anim_tick.py (READY — anim tick
+counter), spline_probe.py, clear_spline.py (DANGEROUS — crashed client), health_scan.py, locostate.py,
+call636.py, pose_transition_test.py, pose_hammer.py, move_test.py, pose440_probe.py, hwwatch_pose.py.
+Client-drive: wslaunch.ps1, wslogin.ps1, wsclick.ps1 x y, wsvk.ps1 vk ms, ws-shot.ps1 path;
+drive_login.sh (50s→login→13s→Enter Game(1276,1388)→35s→screenshot to grove_pose.png).

@@ -319,11 +319,13 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
                 co_await self->SendGameMessageVia(0x03DC, WorldEntryMessages::OpCharacterData,
                     WorldEntryMessages::BuildCharacterDataMinimal());
                 std::printf("realm-conn: [PROACTIVE] server-driven entry sent (guid=0x%X) during loading\n", pguid);
-                self->SpawnDelayed(2500, [self]() -> awaitable<void> {
+                self->SpawnDelayed(2500, [self, pguid]() -> awaitable<void> {
                     co_await self->SendGameMessageVia(0x03DC, 0x0061, std::vector<uint8_t>{});
+                    co_await self->SendGameMessageVia(0x03DC, WorldEntryMessages::OpSetStandState,
+                        WorldEntryMessages::BuildStandState(pguid, 0, 0));
                     self->StartKeepalive(0x03DC, WorldEntryMessages::OpLoadProgress,
                         WorldEntryMessages::BuildLoadProgress(20, 0, 20), 2000);
-                    std::printf("realm-conn: [PROACTIVE] 0x0061 + keepalive (load complete)\n");
+                    std::printf("realm-conn: [PROACTIVE] 0x0061 + stand-state(0) + keepalive (load complete)\n");
                     co_return;
                 });
                 co_return;

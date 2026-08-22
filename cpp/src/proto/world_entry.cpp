@@ -51,13 +51,14 @@ std::vector<uint8_t> WorldEntryMessages::BuildPlayerEntity(uint32_t guid, float 
     w.WriteUInt32(250);
     w.WriteUInt32(250);
     w.WriteUInt32(0);
-    // movement array: 1 position keyframe (places the entity)
+    // movement array: 1 position keyframe (places the entity). The trailing bit finalizes the
+    // locomotion node (settle at this position) rather than opening a transit node.
     w.WriteBits(1, 5);
     w.WriteBits(2, 5);
     w.WriteSingle(x);
     w.WriteSingle(y);
     w.WriteSingle(z);
-    w.WriteBits(0, 1);
+    w.WriteBits(1, 1);
     w.WriteBits(0, 8);
     // item-visual array: [7b slot][15b displayId][14b][32b] per character_appearance row
     w.WriteBits((uint32_t)(appearance.Visuals.size() & 0x7F), 7);
@@ -145,6 +146,15 @@ std::vector<uint8_t> WorldEntryMessages::BuildSetPlayerUnit(uint32_t guid, bool 
     w.WriteBits(guid, 32);   // unitId
     w.WriteBit(flag);
     w.WriteBits(guid, 32);   // playerGuid (expectedPlayer / bind target)
+    return w.ToArray();
+}
+
+std::vector<uint8_t> WorldEntryMessages::BuildStandState(uint32_t guid, uint32_t standState,
+                                                        uint32_t stateData) {
+    PacketWriter w;
+    w.WriteUInt32(guid);
+    w.WriteUInt32(standState);
+    w.WriteUInt32(stateData);
     return w.ToArray();
 }
 

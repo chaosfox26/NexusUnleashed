@@ -59,6 +59,11 @@ public:
     // expectedPlayer fallback auto-binds the created entity as the player.
     static constexpr uint16_t OpSetPlayerUnit = 0x636;
     static std::vector<uint8_t> BuildSetPlayerUnit(uint32_t guid, bool flag = true);
+
+    // 0x93C set-stand-state: [u32 guid][u32 standState][u32 stateData]. State 0 = Stand, 2 = LyingDown.
+    static constexpr uint16_t OpSetStandState = 0x93C;
+    static std::vector<uint8_t> BuildStandState(uint32_t guid, uint32_t standState = 0,
+                                                uint32_t stateData = 0);
 };
 
 } // namespace nexus::proto

@@ -55,14 +55,45 @@ msgs pre-move#1 — proven.) Messages in cpp/src/proto/world_entry.cpp.
    item that grants it (item cache session+2704). NEXT: find the LAS-assign server message (getdesc /
    trace ActionSetLib store) + the correct class-7 LAS spell ids (spell4Base has no class column —
    try Jabbithole/wiki). LAS slots lock by level (correct at lvl 1; slot 0 is open).
-2. **Standing pose** — renders lying. `unit+4896` (unit=session+120) = render stand-state = 2
-   (LyingDown), re-applied per tick by the ANIMATION system (writer +0x5b81fb in sub_1405B5070, called
-   from the unit update +0x1c8add/+0x1c8991) — it's COMPUTED from an upstream authoritative pose, not
-   directly settable. HP is fine (not death). NEXT: watchpoint/trace the anim INPUT → the authoritative
-   stand-state the server sets (a ServerUnit* msg or 0x0262 entity data) → set Stand(0).
+2. **Standing pose (ACTIVE — deep dive, 2026-08-22)** — she renders LYING + movement-locked in
+   EVERY world (verified in Everstar Grove 990, so NOT the arkship intro). All of it measured live
+   with Frida against the running client (tools in %TEMP%/claude, see below). **Old notes here were
+   WRONG and are disproven:** +4896 is a velocity-blend index (hammered it to 0 for 3600 writes, no
+   effect); +440 is the STAND-STATE not HP (GetStandState=sub_140656560 reads entity+440); real HP is
+   unit+444/+464 = live 250/250 (she is NOT dead/downed).
+   **RULED OUT by measurement:** intro, HP/death, player-bind (0x019B handler sub_1403B5AD0 sets
+   +120 player-unit +25744 container, fires PlayerChanged — all good), stand-state (+440=0 Stand;
+   forcing Sit/Stand transitions changes the flag but NOT the visible pose), the spline node (cleared
+   the live +3936 node — still frozen; red herring — DON'T write live spline ptrs, that CRASHED the
+   client once), and camera/gameplay-mode (**camera WORKS** — operator confirmed mouse-look + zoom;
+   only the CHARACTER is locked).
+   **KEY measured facts:** (a) a SECOND, UNBOUND copy of the entity ALSO lies down → the lying is the
+   DEFAULT IDLE animation applied to ANY entity my 0x0262 creates, not a player-control thing. (b)
+   Emotes /sit /stand flip +440 (0→1→0) and even call the play-animation fn, but her body does NOT
+   visually change → her MODEL ANIMATION CONTROLLER appears FROZEN at the initial lying frame. (c)
+   Writing unit+4576 position live does NOT stick (held by an interpolator).
+   **Entity data is CORRECT** — hooked the client's own reader sub_140096FA0 (op 0x0262/610, struct
+   size 288): propCnt=1{id12 Health type2 250/250}, movCnt=1 type2 position→exact spawn coords,
+   faction 166/166, all 3 optional tail-selectors 0. Full field map in the session log.
+   **CURRENT LEAD / NEXT:** confirm the model animation controller isn't ticking for created entities —
+   run `%TEMP%/claude/anim_tick.py` (hooks per-frame anim update sub_1405B5070 + play-anim
+   sub_140474400, counts calls for the player unit). If sub_1405B5070 never fires for her → her anim
+   isn't ticking (root); trace why a world-created entity's animation SET doesn't link (char-select
+   force-loads it and STANDS with the same model). Key fns: entity reader sub_140096FA0; SetStandState
+   sub_14045BF30 (server op 0x93C [u32 guid][u32 state][u32 data]); emote/anim applier sub_1404739B0 →
+   sub_140474400(unit,animId,flag); movement apply sub_1404586E0. EModelSequence enum in
+   client-ui/LuaDocData/data.xml (DefaultStand/PistolsStand/... but Lua ids, not internal values).
+   **Code already in tree (harmless, did NOT fix pose):** BuildStandState/OpSetStandState 0x93C sent
+   in the +2500ms block after 0x0061; movement position-keyframe trailing bit set 1 (settle). The
+   diagnostic 2nd-entity spawn was added then REMOVED. TWID is back to 1537.
+   **Operator collaboration mode:** the operator chose "you drive the client" — they test hands-on, I
+   instrument in parallel. Probes: watch_live.py, dump_entity.py, anim_tick.py, spline_probe.py,
+   health_scan.py, locostate.py, call636.py, pose_hammer.py, move_test.py (all in %TEMP%/claude).
 3. **Real HUD stats** — HP is gameFormula-derived (250 placeholder ok for lvl 1); resource/other stats
    via unit-property ids (sub_140458140: id12=Health cur/max; ids 1-25 = other stats).
 
-## LIVE STATE
-Realm UP; client may be closed (relaunch with wslaunch.ps1). Everything committed, remote clean.
-Full session detail: Claude/Context/SESSION-2026-08-21-world-entry.md.
+## LIVE STATE (2026-08-22)
+Realm UP; client relaunched and in-world on the arkship (lying/frozen — the open pose bug).
+Build cmake is at `C:/Program Files/Microsoft Visual Studio/18/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe`.
+Full session detail: Claude/Context/SESSION-2026-08-21-world-entry.md (see the 2026-08-22 pose section).
+Frida driving-loop lesson: read-only probe live pointers; writing a live spline node ptr crashed the client once.
