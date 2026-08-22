@@ -57,8 +57,17 @@ W-DISP 0xad at +1.5s before the movement sequence.) game_server.SpawnDelayed is 
   +4896 each tick) + where the entity construction / a ServerUnit* message sets it; set Stand(0). Likely
   set from the 0x0262 entity data (default 2) or a unit property/emote. Arkship intro "unconscious" state.
   Probes: %TEMP%/claude/pose_probe.py, pose_set.py.
-- ABILITIES ON BAR (#11): 0x111 location-type-4 = ability-book add (fires AbilityBookChange); need
-  class-7 (Spellslinger) spell ids from Spell4/Spell4Base + the LAS-assignment message.
+- ABILITIES ON BAR (#11): ability-book add = 0x111 location-type-4 (a2[5]==4 branch of sub_1403B77D0
+  -> sub_140608C60(slot,spellId) + fires "AbilityBookChange"). But the action bar shows the LAS
+  (ActionSetLib), a separate equipped set - adding to the book != on the bar. OPEN: (a) class-7
+  (Spellslinger) starter spell4 ids - spell4Base.tsv has NO direct class column (class is via a
+  prereq / a separate ability-book table; check Jabbithole archive + client ability tables), and (b)
+  the LAS-assignment mechanism (does level-1 auto-slot from the book, or is there a server action-set
+  message?). TESTED 2026-08-22: 0x111 type-4 x3 (spell 5872 Quick Shot) -> AbilityBookChange fired 3x
+  (book updated) but the bar slots stayed EMPTY + LOCKED. Auto-slot DISPROVEN: book != bar. The bar's
+  LAS slots are LOCKED at lvl 1 -> must (a) UNLOCK them (ActionSetLib.IsSlotUnlocked, level/progression
+  gated; find the server unlock msg) and (b) ASSIGN abilities to the LAS (find the LAS-assign msg),
+  plus the class-7 spell->LAS ids. Dedicated spell/LAS-system dive.
 - REAL HUD STATS (#12): real class/level max-HP (currently placeholder 250) via the stat tables +
   unit-property ids (sub_140458140: id12=Health cur/max; ids 1-25 map other stats).
 - PURE-CODE SCRUB: move this session's inline build-note comments into cpp/docs/CODE-NOTES.md.
