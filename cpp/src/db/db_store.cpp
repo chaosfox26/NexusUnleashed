@@ -158,6 +158,29 @@ std::vector<proto::CharacterRecord> DbCharacterStore::GetCharacters(long account
     return list;
 }
 
+std::vector<CharacterItem> DbCharacterStore::GetCharacterItems(uint64_t characterId) {
+    std::vector<CharacterItem> items;
+    if (characterId == 0) return items;
+    Conn c(ci_, ci_.database);
+    std::string q =
+        "SELECT itemId, location, bagIndex, stackCount, durability FROM item "
+        "WHERE ownerId=" + std::to_string(characterId) + " ORDER BY location, bagIndex";
+    if (mysql_real_query(c.m, q.c_str(), (unsigned long)q.size()) != 0) return items;
+    MYSQL_RES* res = mysql_store_result(c.m);
+    if (!res) return items;
+    while (MYSQL_ROW row = mysql_fetch_row(res)) {
+        CharacterItem it;
+        it.ItemId     = row[0] ? (uint32_t)std::stoul(row[0]) : 0;
+        it.Location   = row[1] ? (uint16_t)std::stoul(row[1]) : 0;
+        it.BagIndex   = row[2] ? (uint32_t)std::stoul(row[2]) : 0;
+        it.StackCount = row[3] ? (uint32_t)std::stoul(row[3]) : 1;
+        it.Durability = row[4] ? std::stof(row[4]) : 1.f;
+        if (it.ItemId) items.push_back(it);
+    }
+    mysql_free_result(res);
+    return items;
+}
+
 uint64_t DbCharacterStore::CreateCharacter(long accountId, const NewCharacter& nc) {
     if (accountId <= 0) return 0;
     Conn c(ci_, ci_.database);

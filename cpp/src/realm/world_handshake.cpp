@@ -87,6 +87,7 @@ std::function<std::vector<uint8_t>(long)> WorldHandshake::CharacterListBodyProvi
 std::function<uint64_t(long, const std::vector<uint8_t>&)> WorldHandshake::CreateCharacterProvider;
 std::function<bool(long, uint64_t)> WorldHandshake::DeleteCharacterProvider;
 std::function<proto::PlayerAppearance(long, uint64_t)> WorldHandshake::WorldEntryAppearanceProvider;
+std::function<std::vector<WorldHandshake::WorldEntryItem>(uint64_t)> WorldHandshake::WorldEntryItemsProvider;
 bool WorldHandshake::SendAccountData = false;
 bool WorldHandshake::SendRealmList = false;
 bool WorldHandshake::IncludeRealm = true;
@@ -270,6 +271,22 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
                         (unsigned long long)charId, ap.Race, ap.Class, ap.Sex, ap.Visuals.size());
         }
 
+        // Load the character's items and pre-build a 0x111 item-add per item, to stream at move#4.
+        // Each item gets a stable per-slot instance guid (high tag + location/slot) so equip lookups
+        // and the 0x17F stack path have a consistent key. DB-driven -> gear persists across logins.
+        s.we_item_msgs.clear();
+        if (WorldEntryItemsProvider) {
+            auto items = WorldEntryItemsProvider(charId);
+            for (const auto& it : items) {
+                uint64_t itemGuid = 0x5000000000ull | ((uint64_t)it.Location << 20) | it.BagIndex;
+                s.we_item_msgs.push_back(proto::WorldEntryMessages::BuildItemAdd(
+                    itemGuid, it.ItemId, it.Location, it.BagIndex,
+                    it.StackCount ? it.StackCount : 1, it.Durability));
+            }
+            std::printf("realm-conn: world-entry items loaded charId=%llu count=%zu\n",
+                        (unsigned long long)charId, s.we_item_msgs.size());
+        }
+
         // World entry, built by hand from the client's own deserializers + our DB (NF-free;
         // spec/protocol/world-entry.md). FIRST CANDIDATE: the leading messages with
         // client-derived shapes (empty lists) to observe whether the client leaves
@@ -351,14 +368,16 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
             // ResizeAll timer tick -> the addon loads with ZERO errors -> fully GREEN (not yellow).
             if (!s.chardata_sent) {
                 s.chardata_sent = true;
-                // ITEM ADD FIRST: put a weapon in the client item cache at the EQUIPPED weapon slot
-                // (location type 0, slot 16) BEFORE 0x025E. ActionBarFrame:InitializeBars runs on the
-                // CharacterCreated that 0x025E fires and calls IsWeaponEquipped() (GetSlot()==16); if the
-                // weapon is already cached it sets hud.skillsBarDisplay=1 -> the action bar becomes visible.
-                // itemId 81351 = a real 16042-client weapon; guid is a server-assigned instance id.
-                auto ia = proto::WorldEntryMessages::BuildItemAdd(0x5000000010ull, 81351, 0, 16);
-                co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpItemAdd, ia);
-                std::printf("realm-conn: -> 0x111 item-add (id 81351 @ equip slot 16, %zuB) -> ItemAdded\n", ia.size());
+                // ITEMS FIRST: stream every item-add (equipped + inventory) BEFORE 0x025E so the client
+                // cache is populated when ActionBarFrame:InitializeBars runs on CharacterCreated. The
+                // equipped weapon (location 0, slot 16) makes IsWeaponEquipped() true -> action bar shows;
+                // the armor slots fill the character-sheet paperdoll; inventory items fill the bags.
+                // DB-driven from characterdb.item -> gear is persistent per character.
+                for (const auto& ia : s.we_item_msgs) {
+                    co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpItemAdd, ia);
+                }
+                std::printf("realm-conn: -> %zu x 0x111 item-add (equipped+inventory) -> ItemAdded\n",
+                            s.we_item_msgs.size());
                 auto cd = proto::WorldEntryMessages::BuildCharacterDataMinimal();
                 co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpCharacterData, cd);
                 std::printf("realm-conn: -> 0x025E character-data (%zuB) -> fires CharacterCreated\n", cd.size());

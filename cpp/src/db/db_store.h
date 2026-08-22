@@ -34,10 +34,22 @@ struct NewCharacter {
     std::vector<std::pair<uint32_t, uint32_t>> Customization;
 };
 
+// One row of characterdb.item — a character's owned/equipped item instance.
+// location 0 = equipped (bagIndex = equip slot, e.g. 16 = weapon); location 1 = inventory bag.
+struct CharacterItem {
+    uint32_t ItemId = 0;
+    uint16_t Location = 0;
+    uint32_t BagIndex = 0;
+    uint32_t StackCount = 1;
+    float Durability = 1.f;
+};
+
 class DbCharacterStore {
 public:
     explicit DbCharacterStore(const std::string& authConnString);
     std::vector<proto::CharacterRecord> GetCharacters(long accountId);
+    // Items owned by a character (equipped + inventory), for streaming on world entry.
+    std::vector<CharacterItem> GetCharacterItems(uint64_t characterId);
     uint64_t CreateCharacter(long accountId, const NewCharacter& nc);
     bool DeleteCharacter(long accountId, uint64_t characterId);
 private:

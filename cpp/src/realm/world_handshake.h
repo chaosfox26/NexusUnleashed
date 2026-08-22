@@ -16,6 +16,12 @@ struct WorldHandshake {
     // so the 0x0262 player entity renders each character as itself. Returns defaults if not found.
     static std::function<proto::PlayerAppearance(long accountId, uint64_t characterId)> WorldEntryAppearanceProvider;
 
+    // One owned item row for world entry (mirrors db::CharacterItem without the db dependency).
+    struct WorldEntryItem { uint32_t ItemId; uint16_t Location; uint32_t BagIndex; uint32_t StackCount; float Durability; };
+    // Loads the entering character's items (equipped + inventory) from characterdb.item so the
+    // client's item cache is populated on entry (weapon -> action bar; armor -> paperdoll).
+    static std::function<std::vector<WorldEntryItem>(uint64_t characterId)> WorldEntryItemsProvider;
+
     static bool SendAccountData;
     static bool SendRealmList;
     static bool IncludeRealm;

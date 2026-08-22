@@ -53,6 +53,10 @@ public:
     uint32_t we_race = 4, we_class = 7, we_sex = 1, we_faction = 166;
     std::u16string we_name = u"Peryanna Meadowclover";
     std::vector<std::pair<uint16_t, uint16_t>> we_visuals; // {slot, displayId} from character_appearance
+    // world entry: pre-built 0x111 item-add message bodies (equipped + inventory), loaded from
+    // characterdb.item on 0x07DD and streamed to the client at move#4 so its cache has the gear
+    // (equip slot 16 weapon -> action bar shows; other slots -> paperdoll / inventory).
+    std::vector<std::vector<uint8_t>> we_item_msgs;
 
     std::string remote() const;
 

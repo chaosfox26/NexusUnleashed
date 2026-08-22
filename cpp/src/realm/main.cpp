@@ -96,6 +96,15 @@ int main() {
                     (unsigned long long)charId, acc);
         return ap;
     };
+    realm::WorldHandshake::WorldEntryItemsProvider =
+        [&charStore](uint64_t charId) -> std::vector<realm::WorldHandshake::WorldEntryItem> {
+        std::vector<realm::WorldHandshake::WorldEntryItem> out;
+        for (const auto& it : charStore.GetCharacterItems(charId))
+            out.push_back({ it.ItemId, it.Location, it.BagIndex, it.StackCount, it.Durability });
+        std::printf("realm: world-entry items: char %llu -> %zu item(s)\n",
+                    (unsigned long long)charId, out.size());
+        return out;
+    };
     net::GameServer realmServer(io, cfg.bind_address, cfg.auth_port, false);
     realm::WorldHandshake::Register(realmServer);
     realmServer.Start();
