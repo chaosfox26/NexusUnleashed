@@ -371,6 +371,12 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
                 auto cd = proto::WorldEntryMessages::BuildCharacterDataMinimal();
                 co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpCharacterData, cd);
                 std::printf("realm-conn: -> 0x025E character-data (%zuB) -> fires CharacterCreated (UI init)\n", cd.size());
+                // 0x06BC SetPlayerPath -> fires "SetPlayerPath" so PathTracker (+ path objective UI)
+                // BUILD their windows; without it PathTracker errors forever (wndActiveHeader nil).
+                // pathType 1 = Soldier (1-based). TODO: per-character from DB character.activePath+1.
+                auto pp = proto::WorldEntryMessages::BuildSetPlayerPath(1);
+                co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpSetPlayerPath, pp);
+                std::printf("realm-conn: -> 0x06BC SetPlayerPath (Soldier) -> fixes PathTracker\n");
             }
         } else if (WorldChangeDoneEnabled && !s.worldchange_sent && s.loadscreen_sent && s.world_move_count >= 10) {
             // RE-TEST (Phase 08): 0x036A world-change-complete -> sub_1403B6D10 shows the GAME screen

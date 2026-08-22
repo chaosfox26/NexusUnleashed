@@ -212,7 +212,11 @@ std::vector<uint8_t> WorldEntryMessages::BuildCharacterDataMinimal() {
     w.WriteBits(0, 32);                 // u32 @+152
     w.WriteBits(0, 32);                 // u32 @+156
     w.WriteBits(0, 32);                 // u32 @+160
-    w.WriteBits(0, 3);                  // 3 bits @+164
+    w.WriteBits(1, 3);                  // PATH TYPE @+164 -> session+28140. 0 = none (GetPlayerPathType
+                                        // returns nil -> PathTracker bails before building its header ->
+                                        // the wndActiveHeader-nil error). 1 = Soldier (wire is 1-based:
+                                        // 1 Soldier / 2 Settler / 3 Scientist / 4 Explorer). Fixes the
+                                        // red PathTracker addon. TODO: per-character from DB activePath+1.
     w.WriteBits(0, 16);                 // word @+166 (sub_14006BFF0 = 16 bits)
     w.WriteBits(0, 32);                 // u32 @+168
     // sub_1400AB910 sub-struct @+176: [14 bits][16-bit count][count x 8B]; count 0 = empty
@@ -230,6 +234,18 @@ std::vector<uint8_t> WorldEntryMessages::BuildCharacterDataMinimal() {
     w.WriteBits(0, 1);                  // 1 bit @+1268
     w.WriteBits(0, 32);                 // u32 @+1272
     w.WriteBits(0, 32);                 // count4 ([14b+u32] elems) = 0 -> no elements
+    return w.ToArray();
+}
+
+std::vector<uint8_t> WorldEntryMessages::BuildSetPlayerPath(uint8_t pathType) {
+    // 0x06BC SetPlayerPath, byte-exact to reader sub_14008D480: [3b pathType][16 bytes][4b][f32].
+    // The 16 bytes + 4b + float are path progress/state; zeroed = a fresh path. Firing this drives
+    // PathTracker (and the path objective UI) to build -> clears the red PathTracker error.
+    PacketWriter w;
+    w.WriteBits(pathType & 0x7, 3);       // path type (1-based; 1 = Soldier)
+    for (int i = 0; i < 16; ++i) w.WriteBits(0, 8); // 16 bytes path state
+    w.WriteBits(0, 4);                     // 4 bits
+    w.WriteSingle(0.0f);                   // float
     return w.ToArray();
 }
 

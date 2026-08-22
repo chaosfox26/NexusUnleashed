@@ -99,6 +99,14 @@ public:
     static constexpr uint16_t OpCharacterData = 0x025E;
     static std::vector<uint8_t> BuildCharacterDataMinimal();
 
+    // 0x06BC — SET PLAYER PATH (client dispatch case 0x6BC -> sub_1404927D0 -> fires "SetPlayerPath").
+    // PathTracker (and the path UI) only build their windows on this event; without it PathTracker
+    // bails in PathTrackerSetup (path nil) and then errors forever in ResizeAll (wndActiveHeader nil).
+    // Wire (reader sub_14008D480): [3b pathType][16 bytes][4b][f32]. pathType is 1-based:
+    // 1 Soldier / 2 Settler / 3 Scientist / 4 Explorer (0 = none). Fixes the red PathTracker addon.
+    static constexpr uint16_t OpSetPlayerPath = 0x06BC;
+    static std::vector<uint8_t> BuildSetPlayerPath(uint8_t pathType);
+
     // 0x0935 — per-entity position/movement update (client dispatch case 0x935 -> entity lookup by
     // guid, then sub_1403D9A60). Requires the entity to exist. Used as a GAMEPLAY-valid keepalive
     // after the game screen (0x0845 loading-progress errors once the loading screen is torn down;
