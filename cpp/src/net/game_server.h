@@ -40,9 +40,8 @@ public:
     bool player_entity_sent = false;   // world entry: player 0x0262 sent once (on first 0x038C)
     int  world_move_count = 0;         // count of 43-byte movement packets seen (for staging)
     bool player_set_sent = false;      // world entry: 0x019B set-player sent (after entity exists)
-    bool loadscreen_sent = false;      // world entry: 0x03D0 loading-screen dismiss sent
-    bool worldchange_sent = false;     // world entry: 0x036A world-change-complete (game-screen) sent
-    bool chardata_sent = false;        // world entry: 0x025E character-data blob sent (fires CharacterCreated)
+    bool loadscreen_sent = false;      // world entry: 0x0061 load-complete sent
+    bool chardata_sent = false;        // world entry: 0x025E character-data sent (fires CharacterCreated)
     bool keepalive_stop = false;       // set to halt the keepalive entirely
     // The keepalive loop re-reads these each tick, so the keepalive MESSAGE can be switched live
     // (loading-progress 0x0845 before the game screen -> a gameplay-valid heartbeat 0x0935 after).

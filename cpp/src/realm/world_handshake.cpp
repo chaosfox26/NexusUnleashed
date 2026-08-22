@@ -14,31 +14,9 @@
 #include <vector>
 
 namespace {
-// Toggle for the premature 0x36A world-change-done experiment. OFF: stay in the client's
-// loading state (keeps sending 0x038C, connection stable) so we can find the true completion.
-static bool WorldChangeDoneEnabled = false; // 0x36A RETEST v4 result (Phase 08): the game screen
-                                            // transitions (client stays on the in-world view) but STILL
-                                            // drops "Reason 0" post-screen regardless of keepalive
-                                            // message (0x0845 / 0x0935 / valid 0x0636 all fail). So the
-                                            // game-screen state has a deeper requirement than a valid
-                                            // keepalive -- most likely the WORLD-SERVER gameplay protocol
-                                            // (retail hands world entry to a separate world server).
-                                            // That handshake is the true remaining work. Off = stable.
-static bool LoadProgressEnabled = true;   // 0x845 progress/keepalive each tick after set-player
-static bool ProactiveEntry = true;        // server-driven entry on a timer during loading (before the
-                                          // addon UI loads), so the player is bound + path set in time
-                                          // for PathTracker. false = movement-gated entry (fallback).
-// TARGET WORLD — EXPERIMENT: 990 (Map\Eastern / Everstar Grove, a normal open zone) at a REAL valid
-// spawn (realm world-DB entity), to test whether a plain entry completes in a non-tutorial world
-// (1537 = ExileArkShipTutorial is scripted). Revert to 1537 / (1437.82,85.53,-106.82) after.
-// World 1537 = Map\ExileArkShipTutorial (her stored home). The lying-down/movement-lock was
-// CONFIRMED NOT tutorial-specific (she lay down identically in world 990 Everstar Grove) — root
-// cause was the entity carrying no Health property, so the client rendered her dead (DeathPose).
-// Fixed in BuildPlayerEntity (Health property id 12). Medbay floor spawn.
-static uint32_t TWID = 1537;
+static bool ProactiveEntry = true;        // server-driven entry on a timer during loading; false = movement-gated
+static uint32_t TWID = 1537;              // spawn world (ExileArkShipTutorial Medbay)
 static float TWX = 1437.82f, TWY = 86.10f, TWZ = -106.82f;
-// (Tested world 990 Everstar Grove at a real spawn: NORMAL zone loading screen, connected, but ALSO
-//  stalls at loading -> the completion blocker is GENERAL, not tutorial-specific. Reverted to 1537.)
 struct InjectMsg { uint16_t opcode; std::vector<uint8_t> body; };
 static std::vector<InjectMsg> LoadInject() {
     std::vector<InjectMsg> out;
@@ -459,28 +437,10 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
             auto ka = proto::WorldEntryMessages::BuildLoadProgress(20, 0, 20);
             s.StartKeepalive(0x03DC, proto::WorldEntryMessages::OpLoadProgress, ka, 2000);
             std::printf("realm-conn: -> started movement-independent 0x845 keepalive (2s)\n");
-        } else if (WorldChangeDoneEnabled && !s.worldchange_sent && s.loadscreen_sent && s.world_move_count >= 10) {
-            // RE-TEST (Phase 08): 0x036A world-change-complete -> sub_1403B6D10 shows the GAME screen
-            // (not just the load-art). Gameplay keybinds (C/W) are SUPPRESSED until the game-screen UI
-            // state is active - Escape (system) works but gameplay input is gated. 0x36A was "harmful"
-            // EARLIER only because it fired before the world was really loaded; now she's fully in-world
-            // (alive, physics, keepalive running), so this may finally enable gameplay control without
-            // the watchdog disconnect. Sent LATE (move>=10), well after 0x0061 + keepalive.
-            s.worldchange_sent = true;
-            // Switch the keepalive from loading-progress (0x0845, which errors once the loading screen
-            // is gone) to a gameplay-valid 0x0935 entity heartbeat for the live player, so the receive
-            // watchdog keeps being fed after the game screen shows.
-            s.ka_op = proto::WorldEntryMessages::OpSetPlayerUnit;         // 0x0636, known-correct format
-            s.ka_body = proto::WorldEntryMessages::BuildSetPlayerUnit(guid, true);
-            auto bwc = proto::WorldEntryMessages::BuildWorldChangeDone(0);
-            co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpWorldChangeDone, bwc);
-            std::printf("realm-conn: -> 0x036A WORLD-CHANGE-DONE (game screen); keepalive -> 0x0636\n");
         }
 
-        // KEEPALIVE / PROGRESS EXPERIMENT: once the player is set, send 0x845 loading progress on
-        // each movement tick, ramping to 100%. Tests whether the ~25-30s post-world-enter drop is a
-        // receive-timeout (no server world-traffic) and simultaneously fills the load bar.
-        if (LoadProgressEnabled && s.player_set_sent && !s.worldchange_sent) {
+        // Fallback path: ramp the load bar / feed the world-channel keepalive each movement tick.
+        if (s.player_set_sent) {
             uint32_t cur = s.world_move_count > 20 ? 20 : (uint32_t)s.world_move_count;
             auto bp = proto::WorldEntryMessages::BuildLoadProgress(cur, 0, 20);
             co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpLoadProgress, bp);

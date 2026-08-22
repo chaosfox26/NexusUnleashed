@@ -92,12 +92,6 @@ std::vector<uint8_t> WorldEntryMessages::BuildSetPlayer(uint32_t guid, uint32_t 
     return w.ToArray();
 }
 
-std::vector<uint8_t> WorldEntryMessages::BuildWorldChangeDone(uint8_t status) {
-    PacketWriter w;
-    w.WriteBits(status & 0x1F, 5);   // 0 = success
-    return w.ToArray();
-}
-
 std::vector<uint8_t> WorldEntryMessages::BuildLoadProgress(uint32_t current, uint32_t field1, uint32_t max) {
     PacketWriter w;
     w.WriteUInt32(current);

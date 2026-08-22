@@ -37,10 +37,6 @@ public:
     static constexpr uint16_t OpSetPlayer = 0x019B;
     static std::vector<uint8_t> BuildSetPlayer(uint32_t guid, uint32_t field1 = 0);
 
-    // 0x036A world-change-complete: [5b status] (0 = success).
-    static constexpr uint16_t OpWorldChangeDone = 0x036A;
-    static std::vector<uint8_t> BuildWorldChangeDone(uint8_t status = 0);
-
     // 0x0845 loading progress / world-channel keepalive: [u32 current][u32 field1][u32 max].
     static constexpr uint16_t OpLoadProgress = 0x0845;
     static std::vector<uint8_t> BuildLoadProgress(uint32_t current, uint32_t field1, uint32_t max);
