@@ -1126,3 +1126,34 @@ Remaining of the operator's "all 3": #11 abilities on bar (needs class-7 Spell4 
 0x111 loc-type-4 = ability-book add path), #12 full HUD stats (health done via 0x0262 prop id 12;
 resource/other stats need the UnitProperty id map from sub_140458140 switch: id12=Health cur/max,
 ids 1-9 -> unit+536..568, id20 -> unit+72, etc.).
+
+### ★ THE PROVING GROUND PUSH (2026-08-22) — TOOLS + APPEARANCE (both screens) FIXED
+NEW TOOLS (Starlight Protocol, in NexusUnleashed-Engine/tools/, commit 388fdf6):
+- client_tbl.py: correct model-free .tbl reader (fixes record-close via ABSOLUTE per-row
+  positioning + per-row string pad; trailing pad tolerated), 32-worker parallel --dumpall,
+  --verify gate. VALIDATED 7/8 value-exact vs engine dumps (9.1M+ values on Creature2 alone);
+  8th = Creature2ArcheType, the documented file-true vs engine-shifted case (reader is file-true).
+- loadout.py: authoritative starter gear + appearance resolver for any race/class/sex.
+APPEARANCE DATA FLOW (fully cracked, all client-derived):
+  CharacterCreation(class,race,sex,enabled) -> starter itemIds. Class7/Aurin/F = [81363,81362,
+  81364,8534,81350,81375,81376,80875]; 81350 is the SPELLSLINGER WEAPON (I'd wrongly seeded the
+  Esper 81351 - fixed in DB). Starter items have Item2.itemDisplayId=0; the real display resolves
+  via Item2(itemSourceId,item2TypeId) + ItemDisplaySourceEntry(src,type,levelrange)->itemDisplayId.
+  Visual slot = Item2Type(type).itemSlotId (ItemSlot enum: Chest=1,Legs=2,Head=3,Shoulder=4,Feet=5,
+  Hands=6,WeaponPrimary=20,Shields=43; body customization 24-70). Resolved class7 set:
+  {1:3233 chest, 2:3234 legs, 4:3885 shoulder, 5:3235 feet, 6:84 hands, 20:22 weapon}.
+THE FIX (both screens, ZERO engine code): both char-select (char list) AND in-game (0x0262) render
+from characterdb.character_appearance. Adding the resolved equipment {slot,displayId} rows there
+DRESSES the body in BOTH. Applied for char 32 -> VERIFIED dressed in char-select AND in-world.
+The tool caught a hand-mapping error (shoulder/hands displays swapped) - the value of tools-first.
+HP/POSE: probe (hp_probe.py) reads live HP cur=250 max=250 (unit+440/+460) -> health IS applied.
+The lying-down pose is NOT an HP/dead issue (friend's lead ruled out) - it's a stand-state (arkship
+intro "unconscious" start). Real class/level max-HP still TODO for the HUD (currently placeholder 250).
+PATHTRACKER ERROR (lua:726 wndActiveHeader nil) - ROOT-CAUSED, NOT fixed: stock addon fires
+PlayerPathRefresh->ResizeAll before PathTrackerSetup builds the header; setup bails at OnDocumentReady
+(GetPlayerPathType needs the player BOUND = move#4, which is AFTER the addon loads). 0x06BC dispatches
+fine (fires PlayerPathRefresh THEN SetPlayerPath - refresh first = the race). Sending path at move#1
+did NOT beat it. Can't edit the stock addon (client install). Needs a deeper mechanism (path in the
+pre-addon initial player state, or binding the player before addon doc-ready). commit 388fdf6+.
+STATE OF POLISH: appearance BOTH screens DONE. action bar DONE. gear persistent DONE. OPEN: pose
+stand-state, PathTracker load-race, abilities on bar (LAS), real HUD stats. Realm+client up.
