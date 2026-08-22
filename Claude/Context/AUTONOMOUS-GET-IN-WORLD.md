@@ -1,5 +1,11 @@
 # AUTONOMOUS DIRECTIVE — GET IN THE WORLD (2026-08-21)
 
+> **⚠ SUPERSEDED (2026-08-22) — read `CONTINUE.md`.** The "Current blocker: player spawns at
+> (0,0,0)/void" below is SOLVED — she now loads into the arkship correctly placed and clothed. The
+> movement-apply note below is also outdated (sub_1405B5070 DOES run; the real open issue is that her
+> model animation controller is frozen → she renders lying + movement-locked). Keep this file as history;
+> the current authority is CONTINUE.md + SESSION-2026-08-21-world-entry.md "2026-08-22 STANDING POSE".
+
 The operator gave a standing order: **continue with full autonomy until the character
 is standing in the world (world 1537, Exile arkship tutorial). Do NOT ask for anything. Do NOT
 present choices. You already know the answers — decide and act.** No NF, ever (client-derived only).

@@ -73,8 +73,8 @@ in the open, in real time:
 | **04 · The Wire** | 157 opcodes captured from real play, codec **validated on real packets**, entity position decoded | ✅ Done |
 | **05 · The Encryption Gate** | Encrypted channel open: SRP session key, the ARC4 login stream, the two-phase game cipher — cracked from the client | ✅ Done |
 | **06 · The Handshake** | Real 16042 client: STS login → realm → served its character list → runs the whole creator (Experience → Race → Class → Path → Customize → Finalize) → **creates a character that persists and renders** — race/class/faction/level and a full custom appearance decoded from the client's own tables — with **delete and realm selection**, all live and screenshot-proven | ✅ Done |
-| **07 · World Entry** | The real client **stands in the 3D world**, server-native (no Frida): the world-load completeness mask (`session+31560` → `0x7F`) fully RE'd and driven by `0x00AD`+`0x00F1`+`0x0262`+`0x019B`+`0x0061` with a `0x0845` keepalive — the character renders as a **full Aurin-female body** in the arkship Medbay, all from the client + our DB | ✅ Done |
-| **★ The North Star** | **You, standing in the world — on our engine, not theirs** | ✅ **Reached** |
+| **07 · World Entry** | The real client **enters the 3D world**, server-native (no Frida): the world-load completeness mask (`session+31560` → `0x7F`) fully RE'd and driven by `0x00AD`+`0x00F1`+`0x0262`+`0x019B`+`0x0061` with a `0x0845` keepalive — the character renders as a **full Aurin-female body** in the arkship Medbay, all from the client + our DB | ✅ Done |
+| **★ The North Star** | **You, standing in the world — on our engine, not theirs** | ◑ **In the world; standing-pose polish underway** |
 | **08 · World-entry polish** | Standing pose · exact floor Y · per-character appearance from the DB · then the living world (movement, entities, combat, quests) | 🔶 **In progress** |
 
 > Not the engine reading the protocol. Not a green test. A real client rendering a

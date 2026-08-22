@@ -1,5 +1,18 @@
 # NexusUnleashed Engine — State of the Build
 
+> **⚠ CORRECTION (2026-08-22) — READ `CONTINUE.md` FIRST. The banner below overclaims.**
+> World ENTRY is real and server-native (she loads into the arkship as a full clothed body), BUT she
+> does NOT actually stand — she renders **LYING DOWN and is movement-locked**, in every world (measured
+> live, so it is NOT the intro). Corrected findings (old pose notes were WRONG): HP is full 250/250 at
+> unit+444/+464 (NOT +440, which is stand-state); +4896 is a velocity-blend not the pose; the spline node
+> is a red herring; the camera WORKS (only the character is locked); an unbound copy of the entity ALSO
+> lies → lying is the default idle for any 0x0262-created entity, and her model animation controller
+> appears FROZEN (emotes flip the flag but don't move her body). Entity data verified correct via the
+> client's own reader sub_140096FA0. NEXT: `%TEMP%/claude/anim_tick.py` to confirm the per-frame anim
+> update isn't ticking for her unit. Full detail: SESSION-2026-08-21-world-entry.md "2026-08-22 STANDING
+> POSE DEEP DIVE". Everything below this line predates that and treats "stands in the world" as done —
+> it is NOT; treat it as history.
+
 > **🌟 ▶ RESUME (2026-08-21) — THE NORTH STAR IS REACHED: THE CHARACTER STANDS IN THE 3D WORLD.**
 > Read **`SESSION-2026-08-21-world-entry.md`** (its "FINAL STATE" section) — the current authority.
 > The real 16042 client goes login → realm → char-select → Enter Game → **stands in the arkship

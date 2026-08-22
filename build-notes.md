@@ -1,12 +1,15 @@
 # NexusUnleashed — BUILD NOTES (the go-to record)
 
-> **⚠️ PARTIALLY BEHIND (as of 2026-08-21).** §0a below (2026-08-20) says the account-retrieval barrier
+> **⚠️ PARTIALLY BEHIND (as of 2026-08-22).** §0a below (2026-08-20) says the account-retrieval barrier
 > is "awaiting one live test" — but later sessions got PAST it: the client reaches character-select, the
-> **character creator, and character CREATION works** (persists + renders). The **active frontier is now
-> WORLD ENTRY** (port 24000), and the NF-lineage world-entry replay was **removed** (commit `cdc62fc`) —
-> world entry is built by hand, NF-free. Current authority: `Claude/Context/CONTINUE.md`, `ROADMAP.md`,
-> `spec/protocol/world-entry.md`. Also: the whole project now lives under `Desktop\realm-portable\` (the
-> umbrella) — read `..\PROJECT-MAP.md` + `..\INDEX.md`.
+> **character creator, and character CREATION works** (persists + renders). **WORLD ENTRY is now DONE
+> too** — server-native on the SAME realm connection (the old "port 24000 / separate world server" idea
+> was WRONG), NF-free (NF-lineage replay removed, commit `cdc62fc`); the character loads into the arkship
+> as a full clothed body. **The active frontier is now the STANDING POSE** — she renders lying down and
+> is movement-locked; her model animation controller appears frozen (deep client-RE, measured live).
+> Current authority: `Claude/Context/CONTINUE.md` (+ SESSION-2026-08-21-world-entry.md "2026-08-22
+> STANDING POSE DEEP DIVE"), `ROADMAP.md`, `spec/protocol/world-entry.md`. Also: the whole project now
+> lives under `Desktop\realm-portable\` (the umbrella) — read `..\PROJECT-MAP.md` + `..\INDEX.md`.
 
 _Last updated 2026-08-19 (see the banner above for what's since changed). Claude's continuation docs
 (`Claude/Context/CONTINUE.md`, `STATE.md`, `CPP-PORT-PLAN.md`) point here._

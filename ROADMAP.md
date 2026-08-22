@@ -5,7 +5,7 @@ derived only from the client + our own data. Public: github.com/chaosfox26/Nexus
 _Deeper: `build-notes.md` (state), `Claude\Context\CONTINUE.md` (resume), `Claude\Context\CPP-PORT-PLAN.md` (full vision)._
 
 ## Where we are
-A real 16042 client goes **all the way from login to standing in the 3D world** against this engine:
+A real 16042 client goes **all the way from login into the 3D world** against this engine:
 login → realm → character list → the full creator → create → **enter the world** — the character
 renders as a full body (Aurin female) in the arkship Medbay. The crypto/login gate AND the world-entry
 gate that stop every emulator are both cracked. **All by hand from the client — zero NF, zero captures.**
@@ -16,7 +16,7 @@ gate that stop every emulator are both cracked. **All by hand from the client �
 - Packet cipher (qword-CFB), containers, framing — all client-derived, byte-verified live
 
 ## Phase 2 — WORLD ENTRY  ✅ DONE (server-native, no Frida)
-The character **stands in the world**, driven entirely by server messages on the realm connection
+The character **enters the world** as a full body, driven entirely by server messages on the realm connection
 (the old "separate world server on 24000 / new keying" plan was wrong — it's the same connection).
 The completion mechanism was fully reverse-engineered: the client tracks world-load readiness as a
 **7-bit mask at `session+31560` that must reach `0x7F`**; its per-frame update only drops the loading
@@ -28,7 +28,7 @@ screen at exactly `0x7F`. The recipe that drives it (all client-derived, generat
 - [x] `0x019B` set-player → binds the player (`PlayerChanged`), installs the unit component
 - [x] `0x0061` PlayerEnteredWorld → sets mask bits `0x20|0x40` → mask hits `0x7F`, load screen fades
 - [x] `0x0845` loading-progress **keepalive** (timer, movement-independent) → kills the ~30s watchdog drop
-- **Milestone reached:** the character stands in the arkship Medbay, server-native.
+- **Milestone:** the character enters the arkship Medbay as a full body, server-native (standing-pose polish is the active item — see 2.5).
 
 ### Phase 2.5 — WORLD-ENTRY POLISH  ⏳ ACTIVE (small, well-scoped)
 - [ ] Standing pose — she renders lying down; needs the stand-state / unit-alive flag on the spawn
