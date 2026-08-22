@@ -346,6 +346,18 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
             auto bUnit = proto::WorldEntryMessages::BuildSetPlayerUnit(guid, true);
             co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpSetPlayerUnit, bUnit);
             std::printf("realm-conn: -> 0x0636 SET-PLAYER-UNIT guid=0x%X (control activation)\n", guid);
+            // Push char-data + path AS EARLY AS POSSIBLE (right after the player binds), well before
+            // 0x0061 drops the loading screen, so the path is set before PathTracker's very first
+            // ResizeAll timer tick -> the addon loads with ZERO errors -> fully GREEN (not yellow).
+            if (!s.chardata_sent) {
+                s.chardata_sent = true;
+                auto cd = proto::WorldEntryMessages::BuildCharacterDataMinimal();
+                co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpCharacterData, cd);
+                std::printf("realm-conn: -> 0x025E character-data (%zuB) -> fires CharacterCreated\n", cd.size());
+                auto pp = proto::WorldEntryMessages::BuildSetPlayerPath(1);
+                co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpSetPlayerPath, pp);
+                std::printf("realm-conn: -> 0x06BC SetPlayerPath (Soldier, early) -> PathTracker green\n");
+            }
         } else if (!s.loadscreen_sent && s.player_set_sent && s.world_move_count >= 6) {
             // *** THE COMPLETION TRIGGER: world opcode 0x0061 -> sub_1403C74D0 = "PlayerEnteredWorld".
             // The client's world-load completeness mask (session+31560) needs 0x7F(127): the local
@@ -354,30 +366,13 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
             // completion block, so the load screen never fades. sub_1403C74D0 takes only the session
             // (ignores the body), so 0x61 is an empty message. This is the message we never sent.
             s.loadscreen_sent = true;
+            // Char-data + path were already pushed at move#4 (above), before this completes the load.
+            // 0x0061 -> load-mask 0x7F -> loading screen fades, addons load with char/path already set.
             co_await s.SendGameMessageVia(0x03DC, 0x0061, std::vector<uint8_t>{});
             std::printf("realm-conn: -> 0x0061 PlayerEnteredWorld (sets load-mask 0x20|0x40) via 0x03DC\n");
-            // Hold the connection with the movement-independent 0x845 keepalive.
             auto ka = proto::WorldEntryMessages::BuildLoadProgress(20, 0, 20);
             s.StartKeepalive(0x03DC, proto::WorldEntryMessages::OpLoadProgress, ka, 2000);
             std::printf("realm-conn: -> started movement-independent 0x845 keepalive (2s)\n");
-            // THE UI MASTER UNLOCK - WORKING (Frida-confirmed 2026-08-21): 0x025E character-data ->
-            // sub_1403B5F80 -> fires "CharacterCreated" (26 addons; the ActionBarFrame ART BAR now
-            // draws, operator-confirmed on screen). BuildCharacterDataMinimal is byte-exact to the
-            // client reader sub_14008CEE0 (all arrays empty = an "empty" character), so the read
-            // succeeds -> W-DISP 0x25e -> handler -> CharacterCreated. Populating the panels fully
-            // (ability icons, stats, items) is the next layer of state messages.
-            if (!s.chardata_sent) {
-                s.chardata_sent = true;
-                auto cd = proto::WorldEntryMessages::BuildCharacterDataMinimal();
-                co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpCharacterData, cd);
-                std::printf("realm-conn: -> 0x025E character-data (%zuB) -> fires CharacterCreated (UI init)\n", cd.size());
-                // 0x06BC SetPlayerPath -> fires "SetPlayerPath" so PathTracker (+ path objective UI)
-                // BUILD their windows; without it PathTracker errors forever (wndActiveHeader nil).
-                // pathType 1 = Soldier (1-based). TODO: per-character from DB character.activePath+1.
-                auto pp = proto::WorldEntryMessages::BuildSetPlayerPath(1);
-                co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpSetPlayerPath, pp);
-                std::printf("realm-conn: -> 0x06BC SetPlayerPath (Soldier) -> fixes PathTracker\n");
-            }
         } else if (WorldChangeDoneEnabled && !s.worldchange_sent && s.loadscreen_sent && s.world_move_count >= 10) {
             // RE-TEST (Phase 08): 0x036A world-change-complete -> sub_1403B6D10 shows the GAME screen
             // (not just the load-art). Gameplay keybinds (C/W) are SUPPRESSED until the game-screen UI
