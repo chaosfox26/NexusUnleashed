@@ -360,20 +360,17 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
             auto ka = proto::WorldEntryMessages::BuildLoadProgress(20, 0, 20);
             s.StartKeepalive(0x03DC, proto::WorldEntryMessages::OpLoadProgress, ka, 2000);
             std::printf("realm-conn: -> started movement-independent 0x845 keepalive (2s)\n");
-            // THE UI MASTER UNLOCK: 0x025E character-data -> sub_1403B5F80 -> fires "CharacterCreated"
-            // (26 addons incl. the ActionBarFrame art bar; PathTracker gets its path).
-            // STATUS: SCAFFOLDING - the zeroed blob is DROPPED. Verified via Frida (hook_cc.py): the
-            // client's msg pump sub_140331990 looks up the read descriptor, calls its read fn
-            // (desc+32); if the read returns <0 the message is dropped BEFORE dispatch (line 273), so
-            // it never reaches sub_1403EC6A0 / sub_1403B5F80. A 512-zero body FAILS the 0x025E read.
-            // (Not a size limit: the per-opcode size table qword_140C65828 is all-zero => no limits.)
-            // TODO: reconstruct the real 0x025E wire format from its read fn (desc = msgMgr vtable+304
-            // lookup for 0x25E; read fn at desc+32) so the read succeeds -> CharacterCreated fires.
+            // THE UI MASTER UNLOCK - WORKING (Frida-confirmed 2026-08-21): 0x025E character-data ->
+            // sub_1403B5F80 -> fires "CharacterCreated" (26 addons; the ActionBarFrame ART BAR now
+            // draws, operator-confirmed on screen). BuildCharacterDataMinimal is byte-exact to the
+            // client reader sub_14008CEE0 (all arrays empty = an "empty" character), so the read
+            // succeeds -> W-DISP 0x25e -> handler -> CharacterCreated. Populating the panels fully
+            // (ability icons, stats, items) is the next layer of state messages.
             if (!s.chardata_sent) {
                 s.chardata_sent = true;
                 auto cd = proto::WorldEntryMessages::BuildCharacterDataMinimal();
                 co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpCharacterData, cd);
-                std::printf("realm-conn: -> 0x025E character-data (%zuB) [SCAFFOLD - read fails, dropped]\n", cd.size());
+                std::printf("realm-conn: -> 0x025E character-data (%zuB) -> fires CharacterCreated (UI init)\n", cd.size());
             }
         } else if (WorldChangeDoneEnabled && !s.worldchange_sent && s.loadscreen_sent && s.world_move_count >= 10) {
             // RE-TEST (Phase 08): 0x036A world-change-complete -> sub_1403B6D10 shows the GAME screen

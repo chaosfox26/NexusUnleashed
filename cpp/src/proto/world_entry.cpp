@@ -199,11 +199,38 @@ std::vector<uint8_t> WorldEntryMessages::BuildLoadScreenState(uint8_t state) {
 }
 
 std::vector<uint8_t> WorldEntryMessages::BuildCharacterDataMinimal() {
-    // Minimal 0x025E: a zeroed body. The client's bit-packed reader takes all fixed fields as 0 and
-    // every count-prefixed array as empty, i.e. a valid "empty" character, then sub_1403B5F80 fires
-    // "CharacterCreated" -> the action bar art + 26 addons initialize. 512 zero bytes generously
-    // covers the fixed-field region; the reader consumes what it needs and ignores the remainder.
-    return std::vector<uint8_t>(512, 0x00);
+    // Minimal-but-VALID 0x025E, byte-for-byte matching the client reader sub_14008CEE0 (bit-packed).
+    // All count-prefixed arrays are empty (count 0) and all fixed fields 0 -> an "empty" character
+    // that the reader accepts, so sub_1403B5F80 runs and fires "CharacterCreated" (action bar art +
+    // 26 addons + PathTracker). Field order EXACTLY as the reader consumes it:
+    PacketWriter w;
+    w.WriteBits(0, 32);                 // count1 (176B-elem array) = 0  -> no elements
+    for (int i = 0; i < 120; ++i) w.WriteBits(0, 8); // 120 raw bytes (the 15 QWORD block @+16)
+    w.WriteUInt64(0);                   // u64 @+136
+    w.WriteBits(0, 32);                 // u32 @+144
+    w.WriteBits(0, 32);                 // u32 @+148
+    w.WriteBits(0, 32);                 // u32 @+152
+    w.WriteBits(0, 32);                 // u32 @+156
+    w.WriteBits(0, 32);                 // u32 @+160
+    w.WriteBits(0, 3);                  // 3 bits @+164
+    w.WriteBits(0, 16);                 // word @+166 (sub_14006BFF0 = 16 bits)
+    w.WriteBits(0, 32);                 // u32 @+168
+    // sub_1400AB910 sub-struct @+176: [14 bits][16-bit count][count x 8B]; count 0 = empty
+    w.WriteBits(0, 14);
+    w.WriteBits(0, 16);                 // sub-array count = 0
+    w.WriteBits(0, 32);                 // count2 (16B-elem array) = 0 -> no elements
+    w.WriteBits(0, 32);                 // u32 @+208
+    w.WriteBits(0, 16);                 // u16 @+212
+    w.WriteBits(0, 32);                 // u32 @+216
+    w.WriteBits(0, 32);                 // u32 @+220
+    w.WriteBits(0, 32);                 // u32 @+224
+    w.WriteBits(0, 6);                  // count3 (2B-elem array) = 0 -> no bytes read
+    for (int i = 0; i < 1024; ++i) w.WriteBits(0, 8); // 1024 raw bytes @+240 (fixed block)
+    w.WriteSingle(0.0f);               // float @+1264
+    w.WriteBits(0, 1);                  // 1 bit @+1268
+    w.WriteBits(0, 32);                 // u32 @+1272
+    w.WriteBits(0, 32);                 // count4 ([14b+u32] elems) = 0 -> no elements
+    return w.ToArray();
 }
 
 std::vector<uint8_t> WorldEntryMessages::BuildEntityHeartbeat(uint32_t guid) {
