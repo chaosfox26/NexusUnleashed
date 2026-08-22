@@ -762,3 +762,215 @@ the path; Frida was diagnosis only). Zero NF, zero captures - all derived from t
   force-pushed). privacy-guard.py HARDENED to catch X:\Users\<name> local paths going forward.
 - ROADMAP.md / README.md / docs/roadmap.svg all updated: Phase 07 World Entry = DONE, North Star = REACHED.
 - Everything committed + pushed to github.com/chaosfox26/NexusUnleashed (tip 0490995 at write time).
+
+---
+
+## PHASE 08 — later 2026-08-21 (post-compact continuation): character-data completeness + UI persistence
+
+**Goal (operator):** make the UI actually work — panels open/close, settings SAVE. Punt "store not
+loading". Full autonomy, no NF, client-derived only.
+
+### Committed fixes (all live-verified, measured)
+1. **Per-character appearance from DB** (commit 0fab307). `BuildPlayerEntity` now takes a
+   `PlayerAppearance` loaded from characterdb via `WorldEntryAppearanceProvider` (keyed on the
+   entering charId in the 0x07DD handler, stashed on the GameSession `we_*` fields). Race/class/sex/
+   name + item visuals (character_appearance slot->displayId) render per-character. Server log
+   confirmed: `world-entry appearance: char 32 race=4 class=7 sex=1 visuals=7`. NOTE: entity
+   construction faction stays 166 (Exiles Player, installs +272) — NOT the DB factionId (167, which
+   is a display value).
+2. **Health/vitals** (commit 0fab307). The 0x0262 entity's UNIT-PROPERTY array (client reader
+   sub_140096230, applied by **sub_140458140**) was sent with count 0 -> no health -> client
+   rendered her DEAD (DeathPose = lying). Property **id 12 = Health, type 2 = {current u32, max u32}**
+   (sets unit +440/+444 current, +460/+464 max). Added it (250/250). **Measured live via Frida:
+   unit+440=+444=250, +460=+464=250. She IS alive.** (Element wire = [5b id][2b type][value]; type
+   readers: 0=u32, 1=float, 2=two u32.) Full id map in sub_140458140: case 0=+64, 1-9=+536..568
+   (floats), 10=+56, 11=+60, **12=Health**, 13=(+444/+464 no base), 14=(+452=1,+456), 15=flag
+   (+5160/5164=63), 19=+68, 20=+72, 21=+1200, 22=+76, 23-25=floats.
+3. **0x0636 set-player-unit -> physics** (commit 3c1523d). After 0x019B, also send 0x0636
+   (BuildSetPlayerUnit, sub_14057A630). **Measured effect: player now settles to floor under gravity
+   (Y 86.10 -> 85.53 at unit+4576)** — physics/pawn activation on. Never happened before.
+
+### The REMAINING blocker — "player activation" (stand + input control)
+She is: alive (250 HP), physics-on (falls to floor), the bound current-player (session+120, id
+0x97998a0), and fully rendered — **BUT still lying down and CANNOT MOVE**. Measured decisively:
+16 position samples (unit+4576) over a 2.4s W-hold are **byte-identical** — she never moves even
+momentarily, so it is NOT server snap-back; the client simply hasn't attached the movement
+controller / input to her, and holds her in a lying stand-state.
+
+**Ruled OUT (all measured):**
+- NOT the arkship tutorial: spawned her in world 990 (Everstar Grove, `-241.583,-906.534,-3417.53`
+  from Content/spawns.tsv) — **identical lying + immovable**. Reverted to 1537.
+- NOT death: health measured 250/250.
+- NOT health/property: adding Health changed nothing about the pose.
+- NOT the entity tail fields: a2+280/+284 (sub_14047C210/sub_14047C320) just load model assets by
+  id (0 = none).
+- Input DOES reach the game: Escape opens Options (with SCANCODE — keybd_event needs the hardware
+  scancode via MapVirtualKey; without it gameplay/movement input is ignored). But W with scancode
+  still doesn't move her.
+- The GetStandState-looking reader sub_140656560 reads entity+440, but for the PLAYER that offset is
+  health (250) — so +440 is NOT the player's stand-state; the real stand-state field is still
+  unlocated. The pose is likely tied to the animation/activity system or a missing "player fully
+  active / stand" server signal that is part of the fuller entry message set we don't send
+  (0x0111 stats, 0x0355 updates, 0x0981/0x0988/0x098B world-init blobs — see spec/observed-opcodes).
+- **0x0111** (100B, sent 115x in the oracle capture) is the client's stat/vitals update channel
+  (handler sub_1403B8380) — a candidate for the fuller activation, format not yet RE'd.
+
+### UI PERSISTENCE findings (operator's core concern)
+- WildStar stores addon SavedVariables **LOCALLY** in `%APPDATA%\NCSOFT\WildStar\AddonSaveData\`,
+  keyed by an obfuscated **account name** folder (e.g. `<acct>bbbbbbb/` per account). NOT a
+  server datastore. Save levels: **Account** + **Character** (Apollo OnSave/OnRestore).
+- **NO AddonSaveData file has been written on ANY of today's logins** (newest writes Aug 11-15).
+  The client only saves on a CLEAN logout / periodic autosave, and our testing kills the client
+  (abnormal disconnect) so OnSave never fires. It DID save for the bot account on Aug 11 (clean
+  logout then). So "settings don't persist" = no clean-logout save trigger + broken player state,
+  NOT a missing server feature.
+- The missing bottom HUD/action bar is gated on BOTH: a valid live controllable player (character
+  data) AND `hud.skillsBarDisplay` console var + an equipped weapon (ActionBarFrame:IsWeaponEquipped).
+- PathTracker addon error (`PathTracker.lua:726 wndActiveHeader nil`) fires because Path/character
+  data isn't populated — a symptom of the incomplete-player state, present in BOTH 1537 and 990.
+
+### Client-drive tooling (in %TEMP%\claude)
+wslaunch.ps1 (CreateProcessW, cmdline must BEGIN with /auth), wslogin.ps1 (local test bot
+account), wsclick.ps1 x y, **wsvk.ps1 <vk> <ms>** (SCANCODE key — the one that works for gameplay),
+ws-shot.ps1 (client-window-only capture, privacy-safe). Frida diag: ppos.py (player=session+120,
+pos+4576), hpread.py (health offsets), ssread.py (entity lookup), possample.py (position sampler).
+
+### 0x36A game-screen RE-TEST — CONFIRMED DEAD END (Phase 08, later)
+Hypothesis: gameplay keybinds (C/W) are suppressed until the client's GAME-SCREEN UI state is active
+(Escape/system input works; gameplay input does not - verified: pressing C does NOT open the char
+panel). 0x36A -> sub_1403B6D10 shows the game screen. RE-tested sending 0x36A LATE (move>=10, fully
+in-world: alive + physics + keepalive). **Result: STILL disconnects to the login screen.**
+- sub_1403B6D10 itself does NOT disconnect: if a1+25592==0 it calls sub_1400481B0 (show game screen);
+  else it fills an ErrorMessageText widget. The drop is DOWNSTREAM: once the client is on the game
+  screen it expects gameplay-rate traffic, and our 0x0845 loading-progress keepalive is not valid
+  gameplay traffic, so the in-world/gameplay watchdog times out and drops.
+- CONCLUSION: full player activation (game screen + gameplay input + movement control + stand) cannot
+  be shortcut with a single message. It requires reconstructing the server's real POST-ENTRY GAMEPLAY
+  message stream (0x0111 stats burst, 0x0355 per-unit updates, 0x0935/0x0938 position broadcasts,
+  0x0981/0x0988/0x098B world-init blobs) so the client transitions to the game screen NATURALLY and
+  the gameplay watchdog stays fed. This is a substantial feature, not a quick experiment.
+- WorldChangeDoneEnabled reverted to false; realm left stable + up, character re-entered to the good
+  in-world state (alive/physics/lying). Committed wins this session: 0fab307 (appearance + health),
+  3c1523d (0x0636 physics). The 0x36A revert is uncommitted (a one-line safety flag).
+
+### ACTIVATION GATE FULLY PINNED (Phase 08, continuous) — the keystone is obj+436340
+Gameplay input is suppressed until the client's GAME-SCREEN transition fires. That transition is in
+the session per-frame update sub_1403E85D0, mask==0x7F block (line ~216):
+`if ((inputObj->vtable+184)(inputObj)) (inputObj->vtable+408)(inputObj);` where inputObj =
+session+30088 (the input/control object created by sub_1404D6E30, 437264 bytes, loads
+UI\InputMap_Base.xml). Measured live via Frida:
+- mask session+31560 = 0x7F (world loaded), session+25592 (error obj) = 0 (no error).
+- inputObj readiness fn = **sub_1407A9550**: `return *(obj+88) && *(obj+436340);`
+- **obj+88 = 1, obj+436340 = 0** -> readiness returns 0 -> game screen never shows -> gameplay
+  keybinds (C/W) suppressed (Escape/system input still works). CONFIRMED by patching sub_1407A9550
+  to `return 1`: it fired (vtable+408) every frame -> repeated game-screen churn -> PathTracker
+  ResizeAll error-spam. So the gate is real and this IS the keystone.
+- **obj+436340 has NO explicit non-zero setter anywhere in the decompile** (6 refs total: one `=0`
+  init in ctor sub_1407A7780, the rest reads/guards in sub_1407A9630/96A0/AAF60/AB070). So it is set
+  as a DOWNSTREAM effect of the client fully processing the server's real post-entry data (the client
+  activates fine on a complete server). => Activation requires the fuller entry message burst, which
+  is the same work as reconciling everything the client expects. NOT a client patch (clean engine is
+  server-side); the fix is server messages that lead the client to set obj+436340.
+- Client patch (Frida) is DIAGNOSIS ONLY and left the client churning; relaunch clean before testing.
+
+### CORRECTION (Phase 08, hardware-watchpoint) — sub_1407A9550/obj+436340 is MOUSELOOK, NOT the game-screen gate
+The prior "activation gate = obj+436340" conclusion is WRONG. A hardware write-watchpoint on
+obj+436340 (input obj = session+30088) fired: it went 0->1->0 driven by my RIGHT-MOUSE DRAG. So
+**obj+436340 = mouselook / right-button-held state** (setter at module+0x7ac1c8, in the input
+object's mouse handler sub_1407ACxxx). Therefore sub_1407A9550 (`return obj+88 && obj+436340`) =
+"window-foreground AND mouselook-active", and the per-frame sub_1403E85D0 mask==0x7F block line ~216
+`if((vtable+184)(inputObj)) (vtable+408)(inputObj)` is a **camera/mouselook per-frame update**, NOT
+the game-screen transition. Patching sub_1407A9550->return 1 caused game-screen CHURN only because it
+forced the camera-update path every frame (misread as activation). obj+88=1 (window was foreground at
+ctor, `*(a1+88)=ForegroundWindow==gameWindow`).
+**So the real gameplay-input gate is still the GAME-SCREEN state (sub_1403B6D10 via 0x366/0x36A),
+which disconnects when forced because post-game-screen the client expects valid gameplay traffic and
+our 0x0845 loading-progress keepalive is not valid there.** The genuinely-open problem: reconstruct
+the client's post-game-screen gameplay message expectations so 0x36A/0x366 can fire without the
+watchdog drop. That is the remaining large build. (Hardware watchpoints via Thread.setHardwareWatchpoint
+WORK here — hwwatch340.py is the template; use them to find transient setters.)
+
+### PHASE 08 CAPSTONE — where the activation stands (2026-08-21, continuous session)
+COMMITTED THIS SESSION (all live-verified where testable; local only, not pushed):
+- 0fab307  per-character appearance from DB + Health property (she is ALIVE, 250 HP measured).
+- 3c1523d  0x0636 set-player-unit -> player PHYSICS activates (settles to floor).
+- d55a0b1  keepalive-stop mechanism; pinpointed the true activation requirement.
+- b01fb22  switchable keepalive (GameSession.ka_container/ka_op/ka_body, re-read each tick) +
+           BuildEntityHeartbeat(0x0935); the GAME SCREEN now TRANSITIONS.
+
+THE ACTIVATION FRONTIER (the one thing gating standing/movement/HUD/in-game-UI):
+1. World entry works: she renders in the arkship, alive, physics on, bound as current player.
+2. Gameplay input is SUPPRESSED until the client's GAME-SCREEN state is active (Escape/system input
+   works; C/W gameplay keybinds do nothing - proven).
+3. The game screen is shown by 0x36A/0x366 -> sub_1403B6D10. With the loading keepalive stopped at
+   0x36A, the game screen now TRANSITIONS (client stays on the in-world view instead of being kicked
+   to login) - PROGRESS.
+4. But the connection then drops "You've lost connection. Reason 0" post-game-screen, regardless of
+   the keepalive message (0x0845 errors post-screen; 0x0935 as built is 12B-raw vs 11B-bit-packed so
+   rejected; valid 0x0636 also fails to hold it).
+5. CONCLUSION: the game-screen/gameplay state needs the real GAMEPLAY PROTOCOL, not a keepalive -
+   most likely the server must RESPOND to the client's movement (0x0637/0x038C) with position
+   broadcasts (0x0935/0x0938) and world-state updates, i.e. build the living-world gameplay message
+   stream (and possibly a world-server handshake). This is a MAJOR subsystem, the scoped next build.
+
+IMMEDIATE NEXT STEPS for that build:
+- RE the exact bit layout of 0x0935 / 0x0938 (position broadcast) via their message-descriptor / Read
+  fns (WorldPaketHandler is table-dispatched; find the read table). Handler: case 0x935 ->
+  sub_1403D9A60 (327-line movement/spline processor); reads a4[0]=guid, a4[1], (float)a4[2].
+- Respond to client 0x0637/0x038C movement with a valid broadcast so the receive watchdog is fed with
+  gameplay-category traffic; then re-enable 0x36A and confirm the game screen HOLDS -> gameplay input
+  -> standing/movement -> then test all UI + reconcile all client->server opcodes (task #10).
+
+REALM LEFT STABLE: 0x36A disabled, she sits in-world (alive, connected, no disconnect). Client up.
+Task #10 (reconcile all client->server opcodes) is unstarted - most of those are gameplay-time and
+need this activation first. Persistence (task #9): addon SVs save LOCALLY on clean logout; nothing
+saves on our realm yet because no clean logout + incomplete player state (both gated on activation).
+
+### ★ UI MASTER UNLOCK FOUND (Phase 08, continuous) — 0x025E fires "CharacterCreated"
+THE UI IS HEALTHY. In-world (0x36A off, stable, connected) the client's UI works: pressing M opens
+the full zone map ("The Gambler's Ruin" arkship), I opens the Inventory panel (empty), Escape opens
+Options. The Addon Settings list shows ALL addons GREEN (loaded) except **PathTracker (RED)** - so the
+addons aren't broken, the panels are just EMPTY because the server never PUSHES character state.
+- The client does NOT request data (it only sends 0x038C movement); character state is server-PUSH.
+- **THE MASTER UNLOCK: opcode 0x025E** (the ~2046-2437B character-data blob, sent 3x on entry in the
+  oracle capture) -> WorldPaketHandler case 0x25E -> **sub_1403B5F80** -> at its end fires the client
+  event **"CharacterCreated"** (WildStar64.exe.c:898434, `sub_1400EA3E0(session+29504,
+  "CharacterCreated",...)`). **26 stock addons listen to "CharacterCreated"** - including
+  ActionBarFrame (its InitializeBars() shows wndArt+wndMain UNCONDITIONALLY, lines 176-177, on that
+  event / if GetPlayerUnit exists). So 0x025E is the one message that lights up the action-bar ART +
+  25 other panels, and PathTracker (which needs path/character data) should go green too.
+- sub_1403B5F80 is straight-line (copies a2 fields into the world-state a1, no early-return guards
+  before the CharacterCreated fire), so a 0x025E that merely PARSES reaches the fire. a2 layout:
+  QWORDs at +16..+128 (15), fields +136/+144/+148/+152/+156/+160/+164(u8)/+166(u16)/+168, a
+  count at +192 with a 16-byte-element array ptr at +200 (elem: dword@0, dword@8, u8@12), +212/+216.
+- NEXT: reconstruct 0x025E from its client READ (bit-packed). Message pump = sub_140331990 (opcode @
+  r8+8); world dispatch/read = sub_1403EC6A0 (== WorldPaketHandler switch). Build a MINIMAL valid
+  0x025E (fixed fields + zero array counts) -> fires CharacterCreated -> action bar + 26 addons +
+  PathTracker fix. Then layer in real data (stats/items/abilities) for full population. THIS is the
+  path to "all UI functional" (operator's goal) - one master message + the char-state protocol.
+- Operator priorities this stretch: fix PathTracker (red, 2263 calls/spam); action-bar art; ALL menus
+  functional; don't get stuck on one panel. All converge on 0x025E + char-state push.
+
+### UI DATA DELIVERY — the exact blocker (Phase 08, continuous, definitive)
+Confirmed via Frida (hook_cc.py hooking the world dispatch sub_1403EC6A0, realm dispatch sub_140020EA0,
+the 0x25E handler sub_1403B5F80, and the CharacterCreated event fire sub_1400EA3E0):
+- Every world message we send DISPATCHES fine: 0xad, 0xf1, 0x262, 0x19b, 0x636, 0x61, 0x845 all
+  appear in W-DISP. **0x025E does NOT** - even though the server sends it. It's dropped BEFORE dispatch.
+- WHY (from the client msg pump sub_140331990): pump reads opcode -> looks up the read descriptor
+  (msgMgr vtable+304) -> allocates the struct (desc+8 size) -> calls the READ fn (desc+32). **If the
+  read returns <0, the message is dropped at line 273** (never reaches sub_1403EC6A0 / the handler /
+  CharacterCreated). Our 512-ZERO 0x025E body FAILS that read -> dropped silently (no disconnect
+  because a dropped message isn't fatal; cipher stays in sync so later msgs still work).
+- NOT a size limit: sub_140335EC0 indexes the per-opcode size table qword_140C65828 (16-byte
+  entries, dword0=maxsize) but it read ALL-ZERO in-process => size 0 => returns 131070 (no limit).
+- SO: the client-derived READ FORMAT of each message must be correct. To fire CharacterCreated,
+  reconstruct the real 0x025E wire format from its read fn (desc = vtable+304 lookup for 0x25E; read
+  fn @ desc+32) - it produces the struct sub_1403B5F80 consumes (QWORDs +16..+128, fields
+  +136..+168, count +192 / 16-byte-elem array +200, +212/+216). This is the master unlock; then the
+  rest of the char-state messages (stats/items/abilities) populate the panels. This is the scoped
+  build for "all UI functional".
+- UI STATE PROVEN THIS SESSION: in-world (stable), M=map opens, I=inventory opens (empty), Escape=
+  Options opens; Addon Settings shows ALL addons GREEN except PathTracker RED. So the UI works; it's
+  purely waiting on server-pushed character data (CharacterCreated + the state behind it).
+- Tooling added: hook_cc.py (dispatch/handler/event hooks), descread.py (per-opcode size table),
+  gatecheck.py/hwwatch340.py (the mouselook-flag detour, now understood). All client-side diagnosis.
