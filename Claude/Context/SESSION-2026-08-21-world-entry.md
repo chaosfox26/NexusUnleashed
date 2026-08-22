@@ -1184,3 +1184,31 @@ POSE (lying down): it's a StandState (client enum GetStandState: Stand/Sit/Lying
   or a unit property. This is the arkship "wake up unconscious" intro state.
 DONE + committed this session: appearance BOTH screens (388fdf6), action bar (670a7a6), persistent
 gear (b7536bc), opcode reconcile + server-side save (f3e2d95), tools client_tbl+loadout (388fdf6).
+
+### ★★ RESOLUTION (2026-08-22, later) — PathTracker FIXED; deep frontier scoped. See CONTINUE.md.
+The "structural wall" above was BROKEN. A probe proved the client DOES accept timer-sent world
+messages during loading (before the first 0x038C). So entry is now SERVER-DRIVEN:
+- **ProactiveEntry** (world_handshake.cpp): on 0x07DD, after the first 0x00AD, `SpawnDelayed(1500ms)`
+  runs the whole entry during loading with a SERVER-CHOSEN guid (0x0A000000|charId; send 0x0636
+  expectedPlayer BEFORE 0x0262 -> auto-bind): 0x00AD-2nd, 0x00F1, 0x0636, 0x0262, 0x019B, 0x06BC,
+  items, 0x025E; then +2500ms 0x0061 + keepalive. The 0x038C handler early-returns when ProactiveEntry.
+  `game_server.SpawnDelayed` is the timer helper. This binds the player during loading, so
+  GetPlayerPathType is valid when PathTracker's setup runs -> **PathTracker error GONE** (verified on
+  repeated relogs; entry complete, dressed, action bar up).
+- Char-list path (0x0117 3-bit) wired from DB activePath -> char-select PATH ICON shows.
+- Straight-code scrub done (world_entry/world_handshake); 8 dead builders + BuildWorldChangeDone/
+  worldchange_sent removed; RE notes moved to cpp/docs/CODE-NOTES.md.
+- Privacy: operator name was in PUBLIC git history (SESSION-2026-08-20 blob) -> git_filter_repo
+  replace + force-push, verified 0 occurrences. Standing authorization for privacy-fix pushes.
+
+DEEP FRONTIER (each a dedicated dive; trailheads in CONTINUE.md):
+- ABILITIES/LAS: 0x111 loc-type-4 adds to the ability BOOK (sub_140608C60, fires AbilityBookChange)
+  but NOT the bar. 0x025E count2 ability-collection [32b spell/18b base/5b slot/5b tier] also does NOT
+  feed the bar (tested spell 5872, blob parses, bar empty). sub_140608C60 links spell->the item that
+  grants it (item cache session+2704). The bar = LAS/ActionSetLib, a separate subsystem; find its
+  server-assign message + correct class-7 spell ids (spell4Base has no class column).
+- POSE: unit+4896 (unit=session+120) = render stand-state = 2 (LyingDown), re-applied per tick by the
+  ANIM system (HW-watchpoint: writer +0x5b81fb in sub_1405B5070, from unit update +0x1c8add/+0x1c8991).
+  COMPUTED from an upstream authoritative pose -> trace that input; set Stand(0).
+- HUD stats: HP is gameFormula-derived (250 ok for lvl1); other stats via unit-property ids
+  (sub_140458140: id12=Health; ids 1-25 = others).
