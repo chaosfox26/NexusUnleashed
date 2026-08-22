@@ -32,6 +32,8 @@ public:
     // intervalMs so the client's world-entry watchdog keeps getting world-channel traffic even
     // after it stops sending movement (e.g. after a game-screen transition). Starts once.
     void StartKeepalive(uint16_t containerOpcode, uint16_t opcode, std::vector<uint8_t> body, int intervalMs);
+    // One-shot delayed coroutine: co_spawns a timer that runs fn() once after delayMs.
+    void SpawnDelayed(int delayMs, std::function<asio::awaitable<void>()> fn);
 
     std::optional<crypto::PacketCrypt> crypt;
     long account_id = 0;

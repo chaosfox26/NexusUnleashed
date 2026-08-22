@@ -25,6 +25,9 @@ static bool WorldChangeDoneEnabled = false; // 0x36A RETEST v4 result (Phase 08)
                                             // (retail hands world entry to a separate world server).
                                             // That handshake is the true remaining work. Off = stable.
 static bool LoadProgressEnabled = true;   // 0x845 progress/keepalive each tick after set-player
+static bool ProactiveEntry = true;        // server-driven entry on a timer during loading (before the
+                                          // addon UI loads), so the player is bound + path set in time
+                                          // for PathTracker. false = movement-gated entry (fallback).
 // TARGET WORLD — EXPERIMENT: 990 (Map\Eastern / Everstar Grove, a normal open zone) at a REAL valid
 // spawn (realm world-DB entity), to test whether a plain entry completes in a non-tutorial world
 // (1537 = ExileArkShipTutorial is scripted). Revert to 1537 / (1437.82,85.53,-106.82) after.
@@ -313,6 +316,42 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
         co_await s.SendGameMessageVia(0x03DC, WorldEntryMessages::OpWorldEnter, bAD);
         std::printf("realm-conn: -> 0x00AD WORLD-ENTER world=%u pos(%.1f,%.1f,%.1f) (%zuB) via 0x03DC\n",
                     worldId, wx, wy, wz, bAD.size());
+        if (ProactiveEntry) {
+            auto self = s.shared_from_this();
+            uint32_t pguid = 0x0A000000u | (uint32_t)(s.we_charid & 0xFFFFFFu);
+            s.SpawnDelayed(1500, [self, pguid]() -> awaitable<void> {
+                proto::PlayerAppearance ap;
+                if (self->we_loaded) {
+                    ap.Race = self->we_race; ap.Class = self->we_class; ap.Sex = self->we_sex;
+                    ap.Faction = self->we_faction; ap.Name = self->we_name; ap.Visuals = self->we_visuals;
+                }
+                co_await self->SendGameMessageVia(0x03DC, WorldEntryMessages::OpWorldEnter,
+                    WorldEntryMessages::BuildWorldEnter(TWID, TWX, TWY, TWZ));
+                co_await self->SendGameMessageVia(0x03DC, 0x00F1, std::vector<uint8_t>(16, 0));
+                co_await self->SendGameMessageVia(0x03DC, WorldEntryMessages::OpSetPlayerUnit,
+                    WorldEntryMessages::BuildSetPlayerUnit(pguid, true));
+                co_await self->SendGameMessageVia(0x03DC, WorldEntryMessages::OpEntityCreate,
+                    WorldEntryMessages::BuildPlayerEntity(pguid, TWX, TWY, TWZ, ap));
+                co_await self->SendGameMessageVia(0x03DC, WorldEntryMessages::OpSetPlayer,
+                    WorldEntryMessages::BuildSetPlayer(pguid));
+                co_await self->SendGameMessageVia(0x03DC, WorldEntryMessages::OpSetPlayerPath,
+                    WorldEntryMessages::BuildSetPlayerPath(1));
+                for (const auto& ia : self->we_item_msgs)
+                    co_await self->SendGameMessageVia(0x03DC, WorldEntryMessages::OpItemAdd, ia);
+                co_await self->SendGameMessageVia(0x03DC, WorldEntryMessages::OpCharacterData,
+                    WorldEntryMessages::BuildCharacterDataMinimal());
+                std::printf("realm-conn: [PROACTIVE] server-driven entry sent (guid=0x%X) during loading\n", pguid);
+                self->SpawnDelayed(2500, [self]() -> awaitable<void> {
+                    co_await self->SendGameMessageVia(0x03DC, 0x0061, std::vector<uint8_t>{});
+                    self->StartKeepalive(0x03DC, WorldEntryMessages::OpLoadProgress,
+                        WorldEntryMessages::BuildLoadProgress(20, 0, 20), 2000);
+                    std::printf("realm-conn: [PROACTIVE] 0x0061 + keepalive (load complete)\n");
+                    co_return;
+                });
+                co_return;
+            });
+            std::printf("realm-conn: [PROACTIVE] entry scheduled at +1500ms (server-driven, pre-addon)\n");
+        }
 
         // NOTE: world-init (0x0988/0x098B/0x0981) is NOT sent here — at this point the client is
         // still on the char-select/realm side and drops them. They are sent in the 0x038C handler
@@ -326,6 +365,7 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
     server.On(0x038C, [](net::GameSession& s, const std::vector<uint8_t>& body) -> awaitable<void> {
         if (body.size() < 43) co_return;   // only 43-byte position-bearing movement
         s.world_move_count++;
+        if (ProactiveEntry) co_return;     // server-driven entry runs on a timer; skip the move-gated path
         uint64_t guid64 = 0;
         for (int i = 0; i < 8; ++i) guid64 |= (uint64_t)body[7 + i] << (8 * i);
         uint32_t guid = (uint32_t)guid64;

@@ -33,25 +33,19 @@ good as NF and better, without them."
 - Opcode reconcile (#10 done) + server-side character save on disconnect (lastOnline/worldId). (f3e2d95)
 - Tools: client_tbl.py (validated 7/8 vs engine dumps) + loadout.py. (388fdf6)
 
-## ACTIVE TASK — FIX PATHTRACKER (operator: "I want that add-on back up and running fully without errors")
-ROOT CAUSE (fully proven): PathTracker.lua ResizeAll (line 726) NREs on nil `wndActiveHeader`.
-PathTrackerSetup builds that header only if `PlayerPathLib.GetPlayerPathType()` != nil, and that getter
-needs the BOUND PLAYER (path natives read session+120 = player unit; see client sub_140398470 line 12).
-Our movement-gated entry binds the player at move#4 (needs the client's 0x038C guid), but the addon's
-OnObjectiveTrackerLoaded -> PathTrackerSetup runs during the black LOADING screen, BEFORE the client
-sends its first 0x038C (move#1). The client DROPS all world messages until move#1 (0x07DD-time sends are
-dropped). So no message-timing or bind-reorder fixes it — TESTED: reorder, early-bind@move#1, char-list
-path, 0x07DD-early-send all still error. It's a structural ordering wall.
-THE FIX (in progress): SERVER-DRIVEN ENTRY — don't wait for client movement. After 0x07DD's first
-0x00AD, on an asio steady_timer delay (copy StartKeepalive's timer pattern, game_server.cpp:54), send
-the whole sequence with a SERVER-CHOSEN guid (the 0x0636 expectedPlayer fallback lets us pick the guid:
-send 0x0636(guid) so the client stores expectedPlayer, then 0x0262(guid) auto-binds): 0x00AD-2nd +
-0x00F1 + 0x0636 + 0x0262 + 0x019B + 0x06BC(path) + items + 0x025E + 0x0061 + keepalive — all during
-loading, before the addon loads. Put it behind a flag (like WorldChangeDoneEnabled) = ProactiveEntry so
-it's A/B testable and reversible; keep the movement path as fallback. RISK: reorders the WORKING entry
-(dressed/action-bar/gear all currently work off the movement path) — test incrementally, git revert if
-it breaks. If the client drops the timer-sent messages too (like 0x07DD), this avenue is dead and the
-fallback is: accept the one-time error OR find how retail delivers path in the pre-addon player state.
+## PATHTRACKER — FIXED (2026-08-22) via SERVER-DRIVEN (PROACTIVE) ENTRY
+The stock addon's PathTrackerSetup runs during the black loading screen (before the client's first
+0x038C) and needs GetPlayerPathType() != nil, which needs the BOUND PLAYER (path natives read
+session+120). The movement-gated entry bound the player too late (move#4), so setup bailed and the
+resize timer NRE'd. FIX: `ProactiveEntry` flag (world_handshake.cpp) — on 0x07DD, after the first
+0x00AD, a `SpawnDelayed(1500ms)` coroutine sends the WHOLE entry during loading with a SERVER-CHOSEN
+guid (0x0A000000|charId; 0x0636 expectedPlayer sent before 0x0262 so it auto-binds): 0x00AD-2nd +
+0x00F1 + 0x0636 + 0x0262 + 0x019B + 0x06BC + items + 0x025E, then +2500ms 0x0061 + keepalive. The
+0x038C handler early-returns when ProactiveEntry. VERIFIED: no PathTracker error, entry complete,
+dressed, action bar up. (Proven the client accepts timer-sent world msgs pre-move#1 via a probe:
+W-DISP 0xad at +1.5s before the movement sequence.) game_server.SpawnDelayed is the timer helper.
+
+## ACTIVE TASK — remaining proving-ground polish (continuous)
 
 ## OTHER OPEN POLISH (after PathTracker)
 - POSE: she renders lying down = a StandState (client enum Stand/Sit/LyingDown/DeathPose/... via

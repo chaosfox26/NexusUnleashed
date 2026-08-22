@@ -462,9 +462,11 @@ char-select path icon.
 **Persistence**: on_disconnect (game_server) -> DbCharacterStore::UpdateCharacterState saves
 lastOnline + worldId. Live position NOT saved yet (0x038C carries no plain-float world position).
 
-**PathTracker addon error (OPEN)**: PathTracker.lua ResizeAll (726) NREs on nil wndActiveHeader.
-PathTrackerSetup builds it only if GetPlayerPathType() != nil, and path natives read session+120
-(the bound player). The addon's setup runs during loading BEFORE the client accepts any world message
-(first accepted at move#1), so the player can't be bound in time. Fix avenue: server-driven entry
-(bind via a timer during loading using a server-chosen guid via the 0x0636 expectedPlayer fallback),
-behind the `ProactiveEntry` flag. See Claude/Context/CONTINUE.md.
+**PathTracker addon error (FIXED, ProactiveEntry)**: PathTracker.lua ResizeAll (726) NRE'd on nil
+wndActiveHeader because PathTrackerSetup (which builds it) runs during loading and needs
+GetPlayerPathType() != nil, which needs the bound player (path natives read session+120). The
+movement-gated entry bound the player too late. FIX: the `ProactiveEntry` flag drives the ENTIRE entry
+on a `SpawnDelayed(1500ms)` timer during loading (before the addon UI loads), with a server-chosen guid
+(0x0A000000|charId) using the 0x0636 expectedPlayer fallback (0x0636 before 0x0262 -> auto-bind). The
+0x038C handler early-returns when ProactiveEntry. Client accepts timer-sent world messages pre-move#1
+(probe-confirmed). Verified: no error, entry complete, dressed, action bar.

@@ -72,6 +72,19 @@ void GameSession::StartKeepalive(uint16_t containerOpcode, uint16_t opcode, std:
         }, detached);
 }
 
+void GameSession::SpawnDelayed(int delayMs, std::function<awaitable<void>()> fn) {
+    auto self = shared_from_this();
+    co_spawn(sock_.get_executor(),
+        [self, delayMs, fn = std::move(fn)]() -> awaitable<void> {
+            asio::steady_timer t(self->sock_.get_executor());
+            t.expires_after(std::chrono::milliseconds(delayMs));
+            asio::error_code ec;
+            co_await t.async_wait(asio::redirect_error(use_awaitable, ec));
+            if (ec) co_return;
+            try { co_await fn(); } catch (const std::exception&) {}
+        }, detached);
+}
+
 awaitable<void> GameSession::Dispatch(uint16_t opcode, std::vector<uint8_t> payload) {
     auto it = server_.handlers_.find(opcode);
     if (it != server_.handlers_.end())
