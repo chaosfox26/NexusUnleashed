@@ -974,3 +974,83 @@ the 0x25E handler sub_1403B5F80, and the CharacterCreated event fire sub_1400EA3
   purely waiting on server-pushed character data (CharacterCreated + the state behind it).
 - Tooling added: hook_cc.py (dispatch/handler/event hooks), descread.py (per-opcode size table),
   gatecheck.py/hwwatch340.py (the mouselook-flag detour, now understood). All client-side diagnosis.
+
+### ★ UI COMING ALIVE — the message-reconstruction PIPELINE + wins (Phase 08, continuous)
+THE PIPELINE (proven, repeatable, all client-derived):
+1. getdesc.py: hook the msg pump (sub_140331990), read a1=msgMgr (rcx), call (msgMgr vtable+304)
+   (msgMgr, opcode) -> descriptor; descriptor+8 = struct size, descriptor+32 = READ FN address.
+2. Read the read fn in the decompile -> reconstruct the bit-packed wire format byte-exact.
+3. Send it (SendGameMessageVia 0x03DC); confirm on uimon.py (events + W-DISP + handler) + screenshot.
+Read primitives: sub_14006C090(N bits) / sub_140337160(N bytes) / sub_14006C120(u64) /
+sub_14006C1C0(f32) / sub_14006BE30(small bits->byte) / sub_14006BFF0(16-bit word) /
+sub_14006BF60(16-bit) / arrays are count-prefixed then sub_1403374E0 allocates.
+
+WINS (committed 636887a, 441ab45; all live-confirmed):
+- **0x025E char-data (read fn sub_14008CEE0, 1288B struct) -> fires "CharacterCreated"** which 26
+  addons listen to -> the ActionBarFrame ART BAR draws (operator-confirmed). Minimal valid body =
+  all counts 0. Format: u32 count1(176B elems) + 120B + u64 + 5xu32 + 3b + 16b + u32 +
+  [14b+16b-count] + u32 count2(16B elems) + u32+u16+3xu32 + 6b count3 + 1024B + f32 + 1b + u32 +
+  u32 count4. Field @+164 (3b) = PATH TYPE -> session+28140 (1-based: 1 Soldier..4 Explorer).
+- **0x06BC SetPlayerPath (read fn sub_14008D480: [3b type][16B][4b][f32]) -> handler sub_1404927D0
+  builds the path object (qword_140C65970) + fires PlayerPathRefresh & SetPlayerPath -> PathTracker
+  rebuilds -> RED PATHTRACKER FIXED** (error dialog no longer re-pops; path indicator renders).
+  GetPlayerPathType reads the path object, not session+28140 directly; 0x06BC is what populates it.
+
+STATE: UI is broadly functional (map/inventory/options open, action-bar art shows, PathTracker
+green, path indicator by minimap). REMAINING to fully populate: ability icons (LAS/spells msg),
+unit-frame + character-sheet STATS (0x0111, read fn sub_14008CDA0 = sub_14008C0D0 + 6b; the same
+stats element 0x025E array1 carries), inventory/equipped items. Per-character wiring (path from DB
+activePath+1, real stats) is a follow-up; empty-but-valid unlocks the UI first.
+MONITOR: uimon.py / uimon2.py (persistent event+dispatch watcher, operator-requested) - grep
+uimon2.log for EVENT/W-DISP to see what fires. Timestamps wrap (Date.now()%100000).
+
+### ★★ PHASE 08 UI STATE-OF-PLAY (2026-08-21, marathon continuous session) — RESUME HERE ★★
+COMMITTED (local only, NOT pushed; cpp/): 0fab307 appearance+health, 3c1523d 0x0636 physics,
+d55a0b1 keepalive-stop, b01fb22 switchable-keepalive+heartbeat, 0fba956 0x025E scaffold,
+636887a 0x025E WORKING (CharacterCreated fires), 441ab45 PathTracker fix (0x06BC), d7ca442
+char-data+path at move#4. Session log commit e05d72e. REALM STABLE, she's in-world, UI panels work.
+
+WHAT WORKS NOW (operator-confirmed): world entry (in-game); action-bar ART draws; PathTracker
+red->YELLOW (errors gone, functional; still yellow = "errored >=1 this load" from a load-timing
+race the movement-triggered path msg can't fully beat); Map(M)/Inventory(I)/Options(Esc) open;
+path indicator by minimap. All addons GREEN except PathTracker YELLOW.
+
+THE PROVEN PIPELINE (repeatable, client-derived, no NF): getdesc.py hooks msg pump sub_140331990,
+reads a1=msgMgr(rcx), calls (msgMgr vtable+304)(mgr,opcode)->descriptor; desc+8=structSize,
+desc+32=READ FN addr. Read the read fn -> reconstruct bit-packed wire byte-exact -> send via
+SendGameMessageVia(0x03DC,...) -> confirm on uimon.py (EVENT/W-DISP/handler) + ws-shot.ps1.
+Read prims: sub_14006C090(Nbits) sub_140337160(Nbytes) sub_14006C120(u64) sub_14006C1C0(f32)
+sub_14006BE30(smallbits->byte) sub_14006BFF0(16b word). Arrays: count-prefixed then sub_1403374E0 alloc.
+
+KEY MESSAGES DONE: 0x025E (read fn sub_14008CEE0, 1288B struct) fires CharacterCreated (26 addons +
+action-bar art); format in earlier log; field @+164(3b)=PATH TYPE(1-based:1 Soldier)->session+28140.
+0x06BC SetPlayerPath (read fn sub_14008D480: [3b type][16B][4b][f32]) -> handler sub_1404927D0 builds
+path obj qword_140C65970 + fires PlayerPathRefresh/SetPlayerPath -> PathTracker builds. BOTH sent at
+move#4 (right after 0x0636 bind), BEFORE 0x0061 (which drops loading screen + loads addons).
+
+THE ACTION-BAR GATE (operator's current ask "bring the action bar back"): ActionBarFrame.lua
+RedrawBarVisibility shows wndMain ONLY if console var hud.skillsBarDisplay==1. InitializeBars auto-sets
+it to 1 ONLY when a weapon is equipped (IsWeaponEquipped/GetEquippedItems). Fresh char = no weapon =
+var nil = bar hidden. SERVER-NATIVE FIX = equip a starter weapon.
+
+NEXT STEP (IN PROGRESS at pause) — the ITEM/EQUIP subsystem:
+- 0x0569 equips an item (read fn sub_1400A47F0 = [u64 itemGuid][u64 slotinfo]; handler sub_1403B7300)
+  but ONLY if the item is ALREADY in the client item cache (a1+160, lookup sub_1403ACBB0(a1+160,guid)).
+  So an ITEM-ADD message must come FIRST.
+- ITEM-ADD: "ItemAdded" event fires from **sub_1403B8060** (WildStar64.exe.c:899602). sub_1403B8060
+  is CALLED from the 0x025E handler sub_1403B5F80 (line 51: sub_1403B8060(a1, v12, *(a2+28), *(a2+168)))
+  -> so items may ride 0x025E, OR find the opcode that calls sub_1403B8060 with real item data.
+  RESUME: get sub_1403B8060's caller/opcode + the item read fn (getdesc), reconstruct an item-add for
+  a class-7 (Peryanna) starter WEAPON (item id from Knowledge/client-tables/item2.tsv or DB
+  character_ table), then 0x0569 to equip -> game sets hud.skillsBarDisplay=1 -> ACTION BAR BACK +
+  char-sheet equipment populates.
+- Ability icons: 0x01A0 (read fn sub_1403B92A0 area) fires AbilityBookChange -> action-bar icons
+  (needs real spell ids). Stats: 0x0111 (sub_14008CDA0=sub_14008C0D0+6b) -> unit frame/char sheet
+  (CAUTION: carries health; set >0 to avoid regressing to dead).
+
+TOOLING (%TEMP%/claude): wslaunch.ps1 (cmdline BEGINS /auth), wslogin.ps1 (<test-account>), wsclick.ps1
+x y, wsvk.ps1 <vk> <ms> (SCANCODE-based, needed for gameplay input), ws-shot.ps1 (client-window only,
+privacy-safe), getdesc.py (opcode->readfn), uimon.py/uimon2.py (persistent event+dispatch monitor,
+operator-requested; timestamps wrap Date.now()%100000). Build: kill nexus_realm.exe FIRST, VS18 cmake
+--build build --config Release --target nexus_realm; run from cpp/build/Release. NO NF, NO corpus.
+Escape toggling via automation is UNRELIABLE (opens/closes unpredictably).
