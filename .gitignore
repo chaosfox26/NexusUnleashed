@@ -25,3 +25,4 @@ cpp/out/
 *.exe
 *.pdb
 *.ilk
+tools/__pycache__/

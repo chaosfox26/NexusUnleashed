@@ -18,6 +18,7 @@ struct CharacterRecord {
     float LocationY = 0.f;
     float LocationZ = 0.f;
     uint32_t WorldId = 0;
+    uint32_t Path = 0;   // player path (0 Soldier / 1 Settler / 2 Scientist / 3 Explorer) from DB activePath
     std::vector<std::pair<uint32_t, uint32_t>> Appearance;
 };
 

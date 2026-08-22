@@ -121,7 +121,7 @@ std::vector<proto::CharacterRecord> DbCharacterStore::GetCharacters(long account
     Conn c(ci_, ci_.database);
     std::string q =
         "SELECT id, name, sex, race, class, level, factionId, "
-        "locationX, locationY, locationZ, worldId FROM `character` "
+        "locationX, locationY, locationZ, worldId, activePath FROM `character` "
         "WHERE accountId=" + std::to_string(accountId) + " AND deleteTime IS NULL ORDER BY id";
     if (mysql_real_query(c.m, q.c_str(), (unsigned long)q.size()) != 0) return list;
     MYSQL_RES* res = mysql_store_result(c.m);
@@ -139,6 +139,7 @@ std::vector<proto::CharacterRecord> DbCharacterStore::GetCharacters(long account
         r.LocationY = row[8] ? std::stof(row[8]) : 0.f;
         r.LocationZ = row[9] ? std::stof(row[9]) : 0.f;
         r.WorldId   = row[10] ? (uint32_t)std::stoul(row[10]) : 0;
+        r.Path      = row[11] ? (uint32_t)std::stoul(row[11]) : 0;
         list.push_back(std::move(r));
     }
     mysql_free_result(res);
