@@ -40,6 +40,7 @@ public:
     bool player_set_sent = false;      // world entry: 0x019B set-player sent (after entity exists)
     bool loadscreen_sent = false;      // world entry: 0x03D0 loading-screen dismiss sent
     bool worldchange_sent = false;     // world entry: 0x036A world-change-complete (game-screen) sent
+    bool keepalive_stop = false;       // set to halt the 0x0845 keepalive (invalid post game-screen)
 
     // world entry: the entering character's body, loaded from characterdb on 0x07DD and
     // used to build the per-character 0x0262 player entity on the first 0x038C movement.

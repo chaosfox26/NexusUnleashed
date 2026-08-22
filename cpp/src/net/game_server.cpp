@@ -62,7 +62,7 @@ void GameSession::StartKeepalive(uint16_t containerOpcode, uint16_t opcode, std:
                 t.expires_after(std::chrono::milliseconds(intervalMs));
                 asio::error_code ec;
                 co_await t.async_wait(asio::redirect_error(use_awaitable, ec));
-                if (ec) break;
+                if (ec || self->keepalive_stop) break;
                 try { co_await self->SendGameMessageVia(containerOpcode, opcode, body); }
                 catch (const std::exception&) { break; }
             }
