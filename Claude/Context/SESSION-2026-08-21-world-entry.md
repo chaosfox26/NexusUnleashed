@@ -1054,3 +1054,49 @@ privacy-safe), getdesc.py (opcode->readfn), uimon.py/uimon2.py (persistent event
 operator-requested; timestamps wrap Date.now()%100000). Build: kill nexus_realm.exe FIRST, VS18 cmake
 --build build --config Release --target nexus_realm; run from cpp/build/Release. NO NF, NO corpus.
 Escape toggling via automation is UNRELIABLE (opens/closes unpredictably).
+
+### ★ ACTION BAR RESTORED + DB-DRIVEN EQUIPMENT (2026-08-22, continuous session)
+COMMITS: 670a7a6 (0x111 item-add -> action bar), b7536bc (DB-driven equipment loader). Both verified live.
+
+THE 0x111 ITEM-ADD (client-derived, NO NF; read fn sub_14008C0D0 + sub_14008CDA0 tail):
+wire = u64 guid @+0 | u64 @+8 | 18b ITEM-ID @+16 | location{9b type @+20, 32b slot @+24} | 32b @+28
+(stackCount candidate) | 32b @+32 | u64 @+40 | 32b @+48 | u64 @+56 | f32 @+64 (durability candidate) |
+32b @+68 | 8b @+72 | 32b @+76 | 32b @+80 | 32b @+84 | 2x{3b,32b,32b} @+88 | 18b @+112 |
+3b countA @+116 (->countA*4 bytes) | 4b countB @+128 (->countB*4 bytes) | 6b countC @+144
+(->countC*16B elems sub_1400852F0) | 32b @+160 | 6b @+168. Impl: proto/world_entry.cpp BuildItemAdd.
+FIELD MAP (confirmed via handler sub_1403B77D0, a2 as int*): a2[4]=@+16=ITEM-ID, a2[5]=@+20=location
+TYPE, a2[6]=@+24=slot index. location TYPE 4 = ABILITY-BOOK path (fires "AbilityBookChange" +
+sub_140608C60(slot,spellId)) -> SAME message adds abilities! location 0 = EQUIPPED (from OUR
+characterdb.item: slot 16 = weapon, matches ActionBarFrame IsWeaponEquipped GetSlot()==16).
+Handlers: 0x111->sub_1403B8380 (create+ItemAdded), 0x17F->sub_1403C0B20 (STACK update, item must
+already exist else DebugBreak), 0x0569->sub_1403B7300 (equip = move item location; needs item in
+cache a1+160 first).
+
+THE ACTION-BAR MECHANISM: item at equipped weapon slot (loc 0, slot 16) -> IsWeaponEquipped()==true
+-> ActionBarFrame:InitializeBars sets hud.skillsBarDisplay=1 -> RedrawBarVisibility shows the bar.
+Sent BEFORE 0x025E so InitializeBars (fires on CharacterCreated) sees the weapon. LIVE: W-DISP 0x111
+x8 -> ItemAdded x8 -> action bar (art + stances + slots + resource) DRAWS. Operator confirmed.
+
+DB-DRIVEN EQUIPMENT (persistent, addresses "does it save"): DbCharacterStore::GetCharacterItems reads
+characterdb.item; WorldEntryItemsProvider (main.cpp) -> s.we_item_msgs (pre-built 0x111 bodies) built
+at 0x07DD; streamed at move#4 before 0x025E. Peryanna (owner 32) seeded with char-22's light-armor set
+(7 equipped slots 0/1/3/4/5/15/16 + 1 bag loc1) - light armor is valid for Spellslinger. item guid =
+0x5000000000 | (location<<20) | bagIndex.
+
+KEY ARCHITECTURAL FINDING - two separate visual channels:
+1. ITEM CACHE (a1+160), fed by 0x111 -> drives CHARACTER SHEET, INVENTORY, and the weapon->action-bar
+   check. WORKS NOW (8 ItemAdded fired).
+2. BODY RENDER visuals = the 0x0262 entity item-visual array (a3+176), fed from character_appearance.
+   0x111 does NOT dress the body. Confirmed: char 22 renders dressed in the old realm with ZERO
+   character_appearance rows -> old realm derives body armor from equipped-item DISPLAY ids (Item2.tbl
+   ItemDisplayId), NOT character_appearance. Peryanna's appearance rows (slots 24/25/26/27/28/39/70)
+   are FACE/HAIR customization, not armor.
+
+BLOCKER for body-dress + abilities-on-bar: both need the LIVE 16042 Item2.tbl (ItemDisplayId) / Spell4
+(class-7 starter spell ids). Datamine game-tables/item.tsv is a DIFFERENT PATCH (ItemDisplayId=0 for the
+813xx starter items - version mismatch). TableDump has no Item2 model (only Item2Category/Family/Type).
+tbl_reader.py fails Item2 ("cannot close record arithmetic, extra 4"). NEXT = fix tbl_reader for Item2
+OR build a client-derived Item2 reader -> item->displayId (dress body) + item->ClassRequired/Item2TypeId
+(pick correct class-7 starter kit) + Spell4 for abilities (loc-type-4 0x111 -> AbilityBookChange, + LAS
+assignment message TBD for the bar). WEAPON currently = Esper 81351 (bar works; cosmetic until stand pose).
+Input note: keyboard works (P=character panel, Esc=close top window); repeated presses TOGGLE - press once.
