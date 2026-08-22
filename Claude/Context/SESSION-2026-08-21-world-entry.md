@@ -1157,3 +1157,30 @@ did NOT beat it. Can't edit the stock addon (client install). Needs a deeper mec
 pre-addon initial player state, or binding the player before addon doc-ready). commit 388fdf6+.
 STATE OF POLISH: appearance BOTH screens DONE. action bar DONE. gear persistent DONE. OPEN: pose
 stand-state, PathTracker load-race, abilities on bar (LAS), real HUD stats. Realm+client up.
+
+### PATHTRACKER = STRUCTURAL WALL + POSE = STANDSTATE (2026-08-22, deep dig)
+PATHTRACKER error (lua:726) - FULLY root-caused, needs a structural fix (NOT timing):
+  - PathTrackerSetup runs inside OnObjectiveTrackerLoaded, which ALSO registers the path event
+    handlers (SetPlayerPath/PlayerPathRefresh) at lua:333-334 right before setup at lua:362.
+  - The 0x06BC handler sub_1404927D0 sets qword_140C65970 UNCONDITIONALLY (no player needed), and
+    GetPlayerPathType reads that object's type. So the path is available after 0x06BC.
+  - BUT the client DROPS 0x06BC until the world SESSION exists (created by the 2nd 0x00AD/ChangeWorld
+    at move#1). Verified: 0x06BC sent in the 0x07DD handler is DROPPED (dispatch count stays 1 = only
+    the move#1 one lands). And the addon registers its path handlers + runs setup BEFORE move#1
+    (during the black loading screen). So the FIRST 0x06BC that sets the path also fires
+    PlayerPathRefresh->ResizeAll against the still-nil header -> the NRE. No message-timing beats it.
+  - THE FIX AVENUE (next focused pass): create the world session EARLIER by sending the 2nd 0x00AD
+    (ChangeWorld) + 0x00F1 PROACTIVELY right after 0x07DD (not gated on the client's first 0x038C),
+    then 0x06BC - so the path object is set before the ObjectiveTracker handshake registers handlers.
+    The guid-dependent msgs (0x0262/bind/chardata) still wait for move#1. RISK: reorders the working
+    entry; iterate carefully. (The 0x07DD 0x06BC send currently in code is DROPPED/harmless - remove
+    or repurpose when doing the proactive-session refactor.)
+POSE (lying down): it's a StandState (client enum GetStandState: Stand/Sit/LyingDown/DeathPose/
+  StillPose/Burrowed/Chair/Mannequin...). HP is fine (250/250) so NOT death. The setter is
+  name-stripped (no "standstate" string in the decompile) and it's NOT an obvious field in the kind-20
+  Player block (sub_1400962D0: id/realm/name/race/class/sex/arrays - no pose). NEXT: trace GetStandState's
+  native -> the unit-struct offset it reads -> find what writes that offset during entity construction
+  or via a ServerUnit* message; set it to Stand(0). Likely a top-level 0x0262 field (selectors/tail)
+  or a unit property. This is the arkship "wake up unconscious" intro state.
+DONE + committed this session: appearance BOTH screens (388fdf6), action bar (670a7a6), persistent
+gear (b7536bc), opcode reconcile + server-side save (f3e2d95), tools client_tbl+loadout (388fdf6).
