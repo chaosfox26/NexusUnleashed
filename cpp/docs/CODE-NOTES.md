@@ -422,3 +422,49 @@ Implementation notes:
 - The `HitSlider` lambda was named `inTrack` because `near` is a Windows macro.
 - The launcher is the **measurement tool** for the optimization mission (`OPTIMIZATION.md`): dial in
   "all worlds under N GB across M cores" and watch it live.
+
+---
+
+## World entry (realm/world_handshake.cpp + proto/world_entry.cpp) — 2026-08-22
+
+The realm drives the retail client from char-select into the 3D world, client-derived, NF-free.
+
+**Entry state machine** (world connection, all sent via 0x03DC container):
+- `0x07DD` EnterWorld: load per-char appearance + items from DB; send first `0x00AD` (char-select ->
+  loading). World messages sent here are DROPPED (client still realm-side until it processes 0x00AD).
+- First `0x038C` movement (move#1): `0x00AD`(2nd ChangeWorld -> world session) + `0x00F1`(world-entry
+  init, sets session+25632=1 -> unblocks load-mask bit 0x10) + `0x0262` player entity + `0x06BC` path.
+- move#4: `0x019B` set-player + `0x0636` set-player-unit (bind) + 8x `0x111` item-add + `0x025E`
+  char-data (fires CharacterCreated). Items precede 0x025E so IsWeaponEquipped()==true -> action bar.
+- move#6: `0x0061` PlayerEnteredWorld (load-mask session+31560 -> 0x7F, loading screen fades) +
+  movement-independent `0x0845` keepalive (prevents the post-enter watchdog disconnect).
+- Spawn: world 1537 (ExileArkShipTutorial Medbay), (1437.82, 86.10, -106.82).
+
+**Messages** (proto/world_entry.cpp), all reconstructed byte-exact from the client Read fns:
+- `0x0262` BuildPlayerEntity: kind-20 Player block (u64 id + 14b realm + name + 5b race/5b class/2b
+  sex), unit-property array with Health id=12 (current,max) so she's alive (else DeathPose), item-visual
+  array (a3+176: [7b slot][15b displayId][14b][32b]) from character_appearance, Faction1/2 = 166 to
+  install the +272 unit component, a position keyframe in the a3+148 movement array.
+- `0x111` BuildItemAdd (reader sub_14008C0D0): u64 guid, 18b itemId, location {9b type,32b slot}, ...
+  location type 0 = equipped (slot 16 = weapon); type 4 = ability-book path (fires AbilityBookChange).
+- `0x06BC` BuildSetPlayerPath (reader sub_14008D480): [3b pathType][16 bytes][4b][f32].
+- `0x025E` BuildCharacterDataMinimal (reader sub_14008CEE0): fires CharacterCreated.
+
+**Appearance** (both char-select AND in-world render from characterdb.character_appearance):
+starter items have Item2.itemDisplayId=0; resolve via Item2(itemSourceId,item2TypeId) +
+ItemDisplaySourceEntry(src,type,levelrange) -> itemDisplayId; visual slot = Item2Type.itemSlotId
+(ItemSlot enum: Chest1 Legs2 Head3 Shoulder4 Feet5 Hands6 WeaponPrimary20). tools/loadout.py resolves
+it; equipment rows added to character_appearance dress the body in both screens.
+
+**Char-list `0x0117`**: 3-bit path field (before FactionId) = player path from DB activePath -> the
+char-select path icon.
+
+**Persistence**: on_disconnect (game_server) -> DbCharacterStore::UpdateCharacterState saves
+lastOnline + worldId. Live position NOT saved yet (0x038C carries no plain-float world position).
+
+**PathTracker addon error (OPEN)**: PathTracker.lua ResizeAll (726) NREs on nil wndActiveHeader.
+PathTrackerSetup builds it only if GetPlayerPathType() != nil, and path natives read session+120
+(the bound player). The addon's setup runs during loading BEFORE the client accepts any world message
+(first accepted at move#1), so the player can't be bound in time. Fix avenue: server-driven entry
+(bind via a timer during loading using a server-chosen guid via the 0x0636 expectedPlayer fallback),
+behind the `ProactiveEntry` flag. See Claude/Context/CONTINUE.md.
