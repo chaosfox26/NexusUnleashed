@@ -52,18 +52,21 @@ awaitable<void> GameSession::SendGameMessageVia(uint16_t containerOpcode, uint16
 }
 
 void GameSession::StartKeepalive(uint16_t containerOpcode, uint16_t opcode, std::vector<uint8_t> body, int intervalMs) {
+    // Seed the switchable keepalive message; the loop below re-reads ka_* each tick so callers can
+    // swap the message live (loading-progress -> gameplay heartbeat) by assigning ka_op/ka_body.
+    ka_container = containerOpcode; ka_op = opcode; ka_body = std::move(body);
     if (ka_started_) return;
     ka_started_ = true;
     auto self = shared_from_this();
     co_spawn(sock_.get_executor(),
-        [self, containerOpcode, opcode, body, intervalMs]() -> awaitable<void> {
+        [self, intervalMs]() -> awaitable<void> {
             asio::steady_timer t(self->sock_.get_executor());
             for (;;) {
                 t.expires_after(std::chrono::milliseconds(intervalMs));
                 asio::error_code ec;
                 co_await t.async_wait(asio::redirect_error(use_awaitable, ec));
                 if (ec || self->keepalive_stop) break;
-                try { co_await self->SendGameMessageVia(containerOpcode, opcode, body); }
+                try { co_await self->SendGameMessageVia(self->ka_container, self->ka_op, self->ka_body); }
                 catch (const std::exception&) { break; }
             }
         }, detached);

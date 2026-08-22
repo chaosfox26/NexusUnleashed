@@ -91,6 +91,14 @@ public:
     static constexpr uint16_t OpLoadProgress = 0x0845;
     static std::vector<uint8_t> BuildLoadProgress(uint32_t current, uint32_t field1, uint32_t max);
 
+    // 0x0935 — per-entity position/movement update (client dispatch case 0x935 -> entity lookup by
+    // guid, then sub_1403D9A60). Requires the entity to exist. Used as a GAMEPLAY-valid keepalive
+    // after the game screen (0x0845 loading-progress errors once the loading screen is torn down;
+    // 0x0935 targets the live player entity so it processes cleanly and feeds the receive watchdog).
+    // Wire (handler reads a4 as dwords): [u32 guid][u32 field1][f32 value].
+    static constexpr uint16_t OpEntityMove = 0x0935;
+    static std::vector<uint8_t> BuildEntityHeartbeat(uint32_t guid);
+
     // 0x636 — THE world-channel SET PLAYER UNIT (client dispatch case 0x636 -> sub_14057A630).
     // Unlike 0x019B it has the expectedPlayer FALLBACK: if entity[guid] exists it binds it now;
     // if not, it stores guid at expectedPlayer(+25728) so the next 0x0262 entity-create with that

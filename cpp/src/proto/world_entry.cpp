@@ -198,6 +198,18 @@ std::vector<uint8_t> WorldEntryMessages::BuildLoadScreenState(uint8_t state) {
     return w.ToArray();
 }
 
+std::vector<uint8_t> WorldEntryMessages::BuildEntityHeartbeat(uint32_t guid) {
+    // 0x0935 keepalive for the player entity. Handler (WorldPaketHandler case 0x935) reads a4[0]=guid,
+    // a4[1]=field1, (float)a4[2]=value, looks up the entity, and calls sub_1403D9A60. Sending it for
+    // the live player guid with zeroed movement fields is a benign, cleanly-processed message that
+    // resets the client's receive watchdog after the game screen (where 0x0845 would error).
+    PacketWriter w;
+    w.WriteUInt32(guid);   // a4[0] entity guid (must exist)
+    w.WriteUInt32(0);      // a4[1] field1
+    w.WriteSingle(0.0f);   // a4[2] value (float)
+    return w.ToArray();
+}
+
 std::vector<uint8_t> WorldEntryMessages::BuildSetPlayerUnit(uint32_t guid, bool flag) {
     // 0x636 wire (client Read sub_1400B09D0): [32b unitId][1b flag][32b playerGuid].
     PacketWriter w;

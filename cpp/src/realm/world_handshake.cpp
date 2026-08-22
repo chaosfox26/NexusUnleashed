@@ -15,14 +15,14 @@
 namespace {
 // Toggle for the premature 0x36A world-change-done experiment. OFF: stay in the client's
 // loading state (keeps sending 0x038C, connection stable) so we can find the true completion.
-static bool WorldChangeDoneEnabled = false; // 0x36A RETEST v2 result (Phase 08): stopping the loading
-                                            // keepalive DID let the connection survive 0x36A (movement
-                                            // kept flowing ~8-13s vs immediate drop before) -> the game
-                                            // screen showed. But then the RECEIVE WATCHDOG dropped it:
-                                            // the client's own movement is not enough; post-game-screen
-                                            // the server must send valid GAMEPLAY traffic (e.g. 0x0935
-                                            // position broadcasts). That gameplay world-update stream is
-                                            // the true remaining requirement. Kept off until it exists.
+static bool WorldChangeDoneEnabled = false; // 0x36A RETEST v4 result (Phase 08): the game screen
+                                            // transitions (client stays on the in-world view) but STILL
+                                            // drops "Reason 0" post-screen regardless of keepalive
+                                            // message (0x0845 / 0x0935 / valid 0x0636 all fail). So the
+                                            // game-screen state has a deeper requirement than a valid
+                                            // keepalive -- most likely the WORLD-SERVER gameplay protocol
+                                            // (retail hands world entry to a separate world server).
+                                            // That handshake is the true remaining work. Off = stable.
 static bool LoadProgressEnabled = true;   // 0x845 progress/keepalive each tick after set-player
 // TARGET WORLD — EXPERIMENT: 990 (Map\Eastern / Everstar Grove, a normal open zone) at a REAL valid
 // spawn (realm world-DB entity), to test whether a plain entry completes in a non-tutorial world
@@ -368,10 +368,14 @@ void WorldHandshake::RegisterRealmConnection(net::GameServer& server) {
             // (alive, physics, keepalive running), so this may finally enable gameplay control without
             // the watchdog disconnect. Sent LATE (move>=10), well after 0x0061 + keepalive.
             s.worldchange_sent = true;
-            s.keepalive_stop = true;   // stop the loading keepalive BEFORE the game screen tears it down
+            // Switch the keepalive from loading-progress (0x0845, which errors once the loading screen
+            // is gone) to a gameplay-valid 0x0935 entity heartbeat for the live player, so the receive
+            // watchdog keeps being fed after the game screen shows.
+            s.ka_op = proto::WorldEntryMessages::OpSetPlayerUnit;         // 0x0636, known-correct format
+            s.ka_body = proto::WorldEntryMessages::BuildSetPlayerUnit(guid, true);
             auto bwc = proto::WorldEntryMessages::BuildWorldChangeDone(0);
             co_await s.SendGameMessageVia(0x03DC, proto::WorldEntryMessages::OpWorldChangeDone, bwc);
-            std::printf("realm-conn: -> 0x036A WORLD-CHANGE-DONE (game screen); loading keepalive STOPPED\n");
+            std::printf("realm-conn: -> 0x036A WORLD-CHANGE-DONE (game screen); keepalive -> 0x0636\n");
         }
 
         // KEEPALIVE / PROGRESS EXPERIMENT: once the player is set, send 0x845 loading progress on

@@ -40,7 +40,11 @@ public:
     bool player_set_sent = false;      // world entry: 0x019B set-player sent (after entity exists)
     bool loadscreen_sent = false;      // world entry: 0x03D0 loading-screen dismiss sent
     bool worldchange_sent = false;     // world entry: 0x036A world-change-complete (game-screen) sent
-    bool keepalive_stop = false;       // set to halt the 0x0845 keepalive (invalid post game-screen)
+    bool keepalive_stop = false;       // set to halt the keepalive entirely
+    // The keepalive loop re-reads these each tick, so the keepalive MESSAGE can be switched live
+    // (loading-progress 0x0845 before the game screen -> a gameplay-valid heartbeat 0x0935 after).
+    uint16_t ka_container = 0, ka_op = 0;
+    std::vector<uint8_t> ka_body;
 
     // world entry: the entering character's body, loaded from characterdb on 0x07DD and
     // used to build the per-character 0x0262 player entity on the first 0x038C movement.
